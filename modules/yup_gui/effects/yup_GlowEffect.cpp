@@ -33,7 +33,10 @@ GlowEffect::~GlowEffect() = default;
 
 void GlowEffect::setRadius (float radiusPoints) noexcept
 {
-    radius.store (jmax (0.0f, radiusPoints), std::memory_order_relaxed);
+    const auto newRadius = jmax (0.0f, radiusPoints);
+
+    if (radius.exchange (newRadius, std::memory_order_relaxed) != newRadius)
+        invalidate();
 }
 
 float GlowEffect::getRadius() const noexcept
@@ -43,7 +46,10 @@ float GlowEffect::getRadius() const noexcept
 
 void GlowEffect::setIntensity (float glowIntensity) noexcept
 {
-    intensity.store (jlimit (0.0f, 1.0f, glowIntensity), std::memory_order_relaxed);
+    const auto newIntensity = jlimit (0.0f, 1.0f, glowIntensity);
+
+    if (intensity.exchange (newIntensity, std::memory_order_relaxed) != newIntensity)
+        invalidate();
 }
 
 float GlowEffect::getIntensity() const noexcept
@@ -53,12 +59,24 @@ float GlowEffect::getIntensity() const noexcept
 
 void GlowEffect::setColor (Color tintColor) noexcept
 {
-    colorArgb.store (tintColor.getARGB(), std::memory_order_relaxed);
+    const auto newColor = tintColor.getARGB();
+
+    if (colorArgb.exchange (newColor, std::memory_order_relaxed) != newColor)
+        invalidate();
 }
 
 Color GlowEffect::getColor() const noexcept
 {
     return Color (colorArgb.load (std::memory_order_relaxed));
+}
+
+void GlowEffect::releaseResources()
+{
+    pipeline = nullptr;
+    targetA = nullptr;
+    targetB = nullptr;
+    pipelineDevice = nullptr;
+    compileAttempted = false;
 }
 
 void GlowEffect::apply (Graphics& g, GpuTexture::Ptr inputTexture, Rectangle<float> bounds)

@@ -63,9 +63,11 @@ class YUP_API AnimationNode : public Node
 {
 public:
     //==============================================================================
-    /** Creates a paused node, with the first clip selected.
+    /** Creates a paused node, with its first clip selected.
 
-        @param clipsToPlay     The clips, shared with the other instances of the model.
+        @param clipsToPlay     The clips, shared with the other instances of the model. An index
+                               can have no clip, nullptr, as the one of an animation of a model
+                               that can't be played: it is never selected.
         @param targetEntities  The entities the clips animate: a track whose target is N animates
                                the entity at index N. A track whose target is out of range or
                                not valid is skipped.
@@ -73,10 +75,10 @@ public:
     AnimationNode (std::vector<AnimationClip::Ptr> clipsToPlay, std::vector<Entity> targetEntities);
 
     //==============================================================================
-    /** Returns the number of clips. */
+    /** Returns the number of clips, the indices without a clip included. */
     int getNumClips() const noexcept { return static_cast<int> (clips.size()); }
 
-    /** Returns a clip, or nullptr if the index is out of range. */
+    /** Returns a clip, or nullptr if the index is out of range or has no clip. */
     AnimationClip::Ptr getClip (int index) const noexcept;
 
     /** Returns the index of the first clip with a name, or -1 if there is none. */
@@ -87,8 +89,9 @@ public:
 
         A node that is playing carries on with the new clip.
 
-        @param index The index of the clip. Out of range, -1 for example, no clip is selected:
-                     nothing plays and the targets keep the pose they have.
+        @param index The index of the clip. Out of range, -1 for example, or without a clip, no
+                     clip is selected: nothing plays, isPlaying() turns false and the targets
+                     keep the pose they have.
     */
     void setCurrentClip (int index);
 
@@ -101,7 +104,8 @@ public:
     //==============================================================================
     /** Moves to a time of the selected clip and poses the targets there at once, playing or not.
 
-        @param newTime The time in seconds, limited to the range from 0 to getDuration().
+        @param newTime The time in seconds, limited to the range from 0 to getDuration(). A time
+                       that is not a number asserts and is ignored.
     */
     void setTime (double newTime);
 
@@ -110,9 +114,10 @@ public:
 
     //==============================================================================
     /** Changes how fast the clip plays: 1, the default, is the speed it was made for, 2 is twice
-        as fast and a negative speed plays backwards.
+        as fast and a negative speed plays backwards. A speed that is not finite asserts and is
+        ignored.
     */
-    void setSpeed (float newSpeed) noexcept { speed = newSpeed; }
+    void setSpeed (float newSpeed) noexcept;
 
     /** Returns how fast the clip plays. */
     float getSpeed() const noexcept { return speed; }
@@ -138,10 +143,14 @@ public:
         The speed that counts is the one set when this is called, so set it before: a clip at
         its start that is turned backwards once it plays stops there at the next update, while
         a node that never played, given a negative speed first, plays its clip from the end.
+
+        Without a selected clip there is nothing to play: isPlaying() stays false.
     */
     void setPlaying (bool shouldPlay);
 
-    /** Returns true while the clip plays: false once paused, or stopped at an end. */
+    /** Returns true while the clip plays: false once paused, stopped at an end, or without a
+        selected clip.
+    */
     bool isPlaying() const noexcept { return playing; }
 
     //==============================================================================
@@ -171,7 +180,8 @@ public:
     //==============================================================================
     /** Advances the time while playing and poses the targets, called by Scene::update().
 
-        @param deltaSeconds The time elapsed since the previous update. With 0 nothing is posed.
+        @param deltaSeconds The time elapsed since the previous update. With 0 nothing is posed,
+                            and a time that is not finite asserts and is ignored.
     */
     void update (double deltaSeconds) override;
 

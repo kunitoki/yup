@@ -117,6 +117,29 @@ TEST_F (YuiViewTests, ClearingTheDocumentUnmountsTheRootComponent)
     EXPECT_EQ (view.getNumChildComponents(), 0);
 }
 
+TEST_F (YuiViewTests, LeavesTheChildrenTheApplicationAddsAlone)
+{
+    YuiView view;
+    view.setSize (200, 100);
+
+    Component overlay;
+    view.addAndMakeVisible (overlay);
+
+    ASSERT_TRUE (view.getDocument().loadFromString ("Column { Slider { id: knob; } }").wasOk());
+    EXPECT_EQ (overlay.getParentComponent(), &view);
+    EXPECT_EQ (view.getNumChildComponents(), 2);
+
+    // Another root takes the place of the one before, the only child to go
+    ASSERT_TRUE (view.getDocument().loadFromString ("Row { Slider { id: knob; } }").wasOk());
+    EXPECT_EQ (overlay.getParentComponent(), &view);
+    EXPECT_EQ (view.getNumChildComponents(), 2);
+    EXPECT_EQ (view.getDocument().getRoot()->getParentComponent(), &view);
+
+    view.getDocument().clear();
+    EXPECT_EQ (overlay.getParentComponent(), &view);
+    EXPECT_EQ (view.getNumChildComponents(), 1);
+}
+
 TEST_F (YuiViewTests, HostsTheRootALiveTreeEditReplaces)
 {
     YuiView view;
@@ -131,6 +154,9 @@ TEST_F (YuiViewTests, HostsTheRootALiveTreeEditReplaces)
         transaction.removeChild (0);
         transaction.addChild (DataTree ("Row"));
     }
+
+    // The change is applied from the message loop, which a test stands for
+    view.getDocument().applyPendingChanges();
 
     auto* root = view.getDocument().getRoot();
     ASSERT_NE (root, nullptr);

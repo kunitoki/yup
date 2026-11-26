@@ -169,17 +169,27 @@ Mesh::Ptr SceneSurface::findMesh() const
 
 //==============================================================================
 
-String SceneSurface::update()
+String SceneSurface::update (DataTreeDiagnostic::Severity& severity)
 {
     auto* view = SceneComponent::findFor (node);
     auto entity = node.getEntity();
     const auto isShowable = updateMesh();
     const auto mesh = mappedMesh;
 
+    // The material of the node shows the components, or else one of the surface's own, a copy of the one the mesh is drawn
+    // with. On the entity it takes the place of the material of every primitive of the mesh: one made of several, drawn
+    // with their own materials, does not look as it did
+    const auto* materialNode = isShowable ? entity.get<MaterialNode>() : nullptr;
+    auto material = materialNode != nullptr ? materialNode->material : Material::Ptr();
+    const auto isOwn = material == nullptr || material == ownMaterial;
+    const auto* source = isShowable ? findSceneSurfaceSource (entity, *mesh) : nullptr;
+    const auto replacesSeveral = isShowable && isOwn && mesh->getNumPrimitives() > 1 && source == mesh->getPrimitive (0).material.get();
+
     // Told by the scene, last and once: who hears about a problem may destroy the node
     const auto found = view == nullptr || ! entity.isValid() ? Problem::none
                      : mesh == nullptr                       ? Problem::noMesh
                      : ! isShowable                          ? Problem::noTextureArea
+                     : replacesSeveral                       ? Problem::severalPrimitives
                                                              : Problem::none;
 
     const auto reported = std::exchange (reportedProblem, found);
@@ -189,6 +199,11 @@ String SceneSurface::update()
         problem = "the components inside a node are shown on the mesh its own entity draws, and this one draws none: write them in a Mesh3D, or in a Node3D bound to the part of a model that shows them";
     else if (found == Problem::noTextureArea && found != reported)
         problem = "the components inside a node are shown over the texture coordinates of its mesh, and the ones of this mesh span no area: give the Mesh3D its uvs, or the part of the model its texture coordinates";
+    else if (found == Problem::severalPrimitives && found != reported)
+        problem = "the components inside a node are shown by one material, which takes the place of the ones of the " + String (mesh->getNumPrimitives()) + " primitives of its mesh: give the node a Material3D to choose that material, or bind it to a part drawn with one";
+
+    if (found == Problem::severalPrimitives)
+        severity = DataTreeDiagnostic::Severity::warning;
 
     if (reported != Problem::none && reported != found && view != nullptr)
         view->clearProblems (node, {});
@@ -213,16 +228,13 @@ String SceneSurface::update()
         return problem;
     }
 
-    const auto* materialNode = entity.get<MaterialNode>();
-    auto material = materialNode != nullptr ? materialNode->material : Material::Ptr();
-
-    if (material == nullptr || material == ownMaterial)
+    if (isOwn)
     {
         // The node has no material: the surface gives its entity one of its own, which looks as the mesh would without it
         if (ownMaterial == nullptr)
             ownMaterial = new Material();
 
-        if (const auto* source = findSceneSurfaceSource (entity, *mesh))
+        if (source != nullptr)
         {
             copySceneMaterialLook (*source, *ownMaterial);
         }
@@ -273,9 +285,7 @@ void SceneSurface::render (GraphicsContext& context, float scale)
         return;
 
     // What was rendered with another device is of no use to this one. The components let go of theirs at the next update
-    const auto* current = context.getGpuDevice().get();
-
-    if (const auto* previous = std::exchange (device, current); previous != nullptr && previous != current)
+    if (const auto previous = std::exchange (device, context.getGpuDevice()); previous != nullptr && previous != device)
     {
         releaseTexture();
         areCanvasesOutdated = true;

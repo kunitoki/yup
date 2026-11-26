@@ -76,12 +76,12 @@ view.repaint();
 | `AnimationNode` | What it does |
 | --- | --- |
 | `getNumClips()`, `getClip (index)`, `findClip (name)` | The clips of the model, and the index of the first one with a name, or -1. |
-| `setCurrentClip (index)` | Selects a clip at its start and poses the entities there. Out of range selects none. |
+| `setCurrentClip (index)` | Selects a clip at its start and poses the entities there. Out of range, or an index without a clip, selects none and stops playing. |
 | `getDuration()` | The length of the selected clip, in seconds. |
 | `setTime (seconds)`, `getTime()` | Moves to a time, limited to the clip, and poses the entities there. |
 | `setSpeed (speed)` | 1 by default, 2 twice as fast, negative to play backwards. |
 | `setLooping (bool)` | Carries on from the other end instead of stopping. Off by default. |
-| `setPlaying (bool)`, `isPlaying()` | Plays or pauses. Off by default. |
+| `setPlaying (bool)`, `isPlaying()` | Plays or pauses. Off by default, and while no clip is selected. |
 | `onClipEnded()` | A `Signal<>` emitted once when a clip that does not loop stops. |
 | `getWeights (target)` | The morph weights the last clip left for a target entity. |
 
@@ -115,7 +115,10 @@ model. Each track animates one path of one target:
 
 ```cpp
 for (const auto& clip : model.getAnimations())
-    YUP_DBG (clip->getName() << ": " << clip->getDuration() << " s");
+{
+    if (clip != nullptr)                                    // an animation that can't be played has no clip
+        YUP_DBG (clip->getName() << ": " << clip->getDuration() << " s");
+}
 
 auto clip = yup::AnimationClip::Ptr (new yup::AnimationClip ("rise"));
 
@@ -139,12 +142,14 @@ entity.attach<yup::AnimationNode> (std::vector<yup::AnimationClip::Ptr> { clip }
   one per morph target for weights.
 - The interpolation of a track is `step`, `linear` or `cubicSpline`, which
   stores an in-tangent, a value and an out-tangent for each key. Rotations
-  always come out as unit quaternions, and linear ones turn the shorter way.
+  always come out as unit quaternions, and turn the shorter way from a key to
+  the next.
 - Before its first key a track gives its first value, and from its last key on
   its last one. The duration of a clip is the time of the last key of its
   tracks.
-- `addTrack()` refuses a track with no key, with times that go back, or with a
-  number of values that does not fit its keys.
+- `addTrack()` refuses a track with a negative target, with no key, with times
+  that are negative, not finite or go back, with a number of values that does
+  not fit its keys, or with a value that is not finite.
 
 ## Skins
 
@@ -183,11 +188,12 @@ entity.attach<yup::DeformNode> (mesh, skin, std::vector<yup::Entity> { shoulder,
 - A `DeformNode` draws a copy of the mesh it is given, and deforms that copy:
   the instances of a model deform apart, and the meshes of
   `GltfModel::getMeshes()` stay in the pose they were modeled in. The mesh an
-  entity really draws is `entity.get<yup::MeshNode>()->mesh`.
+  entity really draws is `entity.get<yup::MeshNode>()->mesh`: a `MeshNode`
+  given the shared mesh again takes the copy back at the next update.
 - **A skinned mesh is placed by its joints alone**, as in glTF. Moving the
   entity that draws it changes nothing: move the joints, or a parent of both.
-- A vertex whose weights are all zero is not skinned, and stays where the mesh
-  has it.
+- `addPrimitive()` makes the weights of a vertex add up to 1. A vertex whose
+  weights are all zero is not skinned, and stays where the mesh has it.
 - A joint that is destroyed keeps the place it last had, so its vertices do
   not jump.
 - A `Skin` names its joints as indices into the nodes of its model, and holds
@@ -224,7 +230,15 @@ view.repaint();
 - A mesh from code takes its targets in `addPrimitive()`, as
   `Mesh::MorphTarget` values holding one delta per vertex, and gets a
   `DeformNode` without a skin: `entity.attach<yup::DeformNode> (mesh)`.
-- glTF has no names for targets: they are told apart by their index.
+- Targets are told apart by their index. glTF has no place for their names:
+  the ones exporters write to `extras.targetNames` of a mesh are kept, and
+  `Mesh::findMorphTarget (name)` gives the index of a target, or -1.
+
+```cpp
+// The index of a target is the index of its weight, in the weights of the snippet above
+if (const auto smile = deform->getSourceMesh()->findMorphTarget ("Smile"); smile >= 0)
+    weights[static_cast<size_t> (smile)] = 1.0f;
+```
 
 ## The order of an update
 
@@ -254,14 +268,18 @@ joint, a weight or the time of a clip, after `scene->update (0.0)`, or
   to 1;
 - **morph targets**, as the `POSITION`, `NORMAL` and `TANGENT` deltas of the
   primitives, dense or sparse, with the weights of the mesh and the ones a node
-  replaces them with.
+  replaces them with, and the names of `extras.targetNames`.
+
+Clips and skins have the index of their animation and of their skin in the
+file: one that is left out keeps its place, as a `nullptr`.
 
 What it leaves out, each with a warning in `getWarnings()`:
 
 - `JOINTS_1` and the sets after it: a vertex follows four joints at most;
 - morph targets of texture coordinates and colors;
 - a channel that can't be played (no target node, an unknown path, keys that
-  do not fit their values), and an animation left without any channel;
+  do not fit their values, values that are not finite, weights for a node
+  that draws no mesh), and an animation left without any channel;
 - a skin that can't move its mesh, by a joint it does not have for example:
   the mesh is then drawn as it is.
 
@@ -330,9 +348,9 @@ from a [prefab link](entities-and-nodes.md#prefabs).
 
 - Four joints for each vertex.
 - One clip at a time for each instance, no blending between clips.
-- A `SceneComponent` that updates continuously keeps updating its scene while
-  it is hidden: the clips play on unseen, and `onClipEnded()` is emitted.
-  Pause them, or turn the continuous updates off, with what hides the view.
+- A `SceneComponent` that is not showing takes no display frame, so its scene
+  is not updated: the clips of a hidden view stand still, `onClipEnded()` waits
+  with them, and they carry on from where they were once the view shows again.
 - A `Scene` is meant to be shown by one `SceneComponent` at a time: two of
   them updating it at every frame play its clips twice as fast.
 - A mesh that deforms has no motion of its own: the temporal anti-aliasing

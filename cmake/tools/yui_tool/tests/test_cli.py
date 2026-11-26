@@ -41,6 +41,10 @@ HALVES = ("drawing Fill {\n    property tone: color = #ff0000;\n    rect { bound
           "Component { width: 40; height: 20;\n"
           "    Component { id: left; x: 0; y: 0; width: 20; height: 20; }\n"
           "    Component { id: right; x: 20; y: 0; width: 20; height: 20; }\n}\n")
+# A red component a rule only shows in an interface wider than 4, which the interface is not while it has no size
+SIZED = ("drawing Fill {\n    rect { bounds: bounds; fill: #ff0000; }\n}\n\n"
+         "style {\n    #mark { drawing: Fill; opacity: parent.width > 4 ? 1 : 0; }\n}\n\n"
+         "Component {\n    Component { id: mark; x: 0; y: 0; width: 4; height: 4; }\n}\n")
 INTERACTIVE = ('Column { width: 200; height: 120;\n'
                '    ToggleButton { id: power; preferredHeight: 30; checked <=> model.power; }\n'
                '    Slider { id: gain; preferredHeight: 30; value <=> model.gain; }\n'
@@ -212,10 +216,23 @@ class YuiToolCliTests(unittest.TestCase):
     # Usage
 
     def test_help_and_usage_errors(self):
-        self.assertEqual(self.invoke("--help").returncode, 0)
+        # The usage that is asked for is printed on the standard output, by the tool and by each of its commands
+        for args in (("--help",), ("-h",), ("render", "--help"), ("lint", "ui.yui", "-h"), ("mcp", "--help")):
+            with self.subTest(args=args):
+                result = self.invoke(*args)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("yup_yui_tool render <file.yui>", result.stdout)
+                self.assertNotIn("yup_yui_tool", result.stderr)
+
+        # The one a mistake is answered with is an error
+        result = self.invoke()
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("yup_yui_tool render <file.yui>", result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(self.invoke("format", "--help").returncode, 2)
+
         self.assertEqual(self.invoke("--version").returncode, 0)
         self.assertTrue(self.invoke("--version").stdout.startswith("yup_yui_tool "))
-        self.assertEqual(self.invoke().returncode, 2)
         self.assertEqual(self.invoke("format", "ui.yui").returncode, 2)
         self.assertEqual(self.invoke("verify").returncode, 2)
         self.assertEqual(self.invoke("verify", "--unknown", "ui.yui").returncode, 2)
@@ -800,6 +817,9 @@ class YuiToolCliTests(unittest.TestCase):
         """Renders into out.png and returns its size in pixels, skipping where nothing can draw."""
         result = self.invoke("render", *args, "--output", "out.png")
         if result.returncode == 3:
+            # Where nothing can draw, the tool says so and tells of no image
+            self.assertIn("no graphics device to render with", result.stderr)
+            self.assertEqual(result.stdout, "")
             self.skipTest("no graphics device to render with")
         self.assertEqual(result.returncode, code, result.stderr)
         if code != 0:
@@ -926,17 +946,55 @@ class YuiToolCliTests(unittest.TestCase):
         self.assertIn("nobody", self.render("used.yui", "--guides", "first,nobody", code=1).stderr)
         self.assertIn("nothing of the interface", self.render("used.yui", "--region", "500,500,10,10", code=1).stderr)
 
+    def test_render_styles_the_interface_at_the_size_it_is_drawn_at(self):
+        self.write("ui.yui", SIZED)
+
+        # The rules are applied when the file is loaded, before the interface has its size: those reading it follow it
+        self.render("ui.yui", "--size", "8x8", "--scale", "1")
+        self.assertEqual(self.first_pixel(), (255, 0, 0))
+        self.render("ui.yui", "--size", "4x4", "--scale", "1")
+        self.assertNotEqual(self.first_pixel(), (255, 0, 0))
+
+    def test_render_reports_the_warnings_of_a_document(self):
+        path = self.write("ui.yui", UNDECLARED_PROPERTY)
+        result = self.invoke("render", "ui.yui", "--output", "out.png")
+
+        # They are told once the file is loaded, so where nothing can draw too, and they fail nothing
+        self.assertIn(result.returncode, (0, 3), result.stderr)
+        self.assertIn(f"{path}:2:", result.stderr)
+        self.assertIn(": warning: ", result.stderr)
+        self.assertIn("mysterySetting", result.stderr)
+
+    def test_render_replaces_the_image_that_was_there(self):
+        self.write("ui.yui", VALID)
+        self.write("out.png", "not an image")
+        self.assertEqual(self.render("ui.yui", "--size", "8x8", "--scale", "1"), (8, 8))
+
+        # The image is written beside the file it replaces, then takes its place: none is left beside it
+        self.assertEqual(sorted(path.name for path in self.root.iterdir() if path.suffix == ".png"), ["out.png"])
+
+        # One that can't be written is told
+        self.write("taken", "a file, not a folder")
+        result = self.invoke("render", "ui.yui", "--output", "taken/out.png", "--size", "8x8")
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("can't write", result.stderr)
+
     def test_render_usage_errors(self):
         self.write("ui.yui", VALID)
         self.assertEqual(self.invoke("render", "ui.yui").returncode, 2)
         self.assertEqual(self.invoke("render", "--output", "out.png").returncode, 2)
         self.assertEqual(self.invoke("render", "missing.yui", "--output", "out.png").returncode, 2)
         self.assertEqual(self.invoke("render", "ui.yui", "--output", "out.png", "--size", "big").returncode, 2)
+        for size in ("640x400abc", "640x400x2", "x400", "-640x400", "4097x10"):
+            with self.subTest(size=size):
+                self.assertEqual(self.invoke("render", "ui.yui", "--output", "out.png", "--size", size).returncode, 2)
+        self.assertEqual(self.invoke("render", "ui.yui", "--output", "out.png", "--default-size", "10x4097").returncode, 2)
         self.assertEqual(self.invoke("render", "ui.yui", "--output", "out.png", "--scale", "0").returncode, 2)
         self.assertEqual(self.invoke("render", "ui.yui", "--output", "out.png", "--theme", "sepia").returncode, 2)
         self.assertEqual(self.invoke("render", "ui.yui", "--output", "out.png", "--drawing", "A", "--palette", "B").returncode, 2)
         self.assertEqual(self.invoke("render", "ui.yui", "--output", "out.png", "--as", "}").returncode, 2)
         self.assertEqual(self.invoke("render", "ui.yui", "--output", "out.png", "--region", "1,2,3").returncode, 2)
+        self.assertEqual(self.invoke("render", "ui.yui", "--output", "out.png", "--region", ".,0,4,4").returncode, 2)
         self.assertEqual(self.invoke("render", "ui.yui", "--output", "out.png", "--margin", "wide").returncode, 2)
         self.assertEqual(self.invoke("render", "ui.yui", "--output", "out.png", "--element", "knob", "--region", "0,0,4,4").returncode, 2)
 
@@ -1035,6 +1093,9 @@ class YuiToolCliTests(unittest.TestCase):
         self.assertEqual(self.invoke("inspect").returncode, 2)
         self.assertEqual(self.invoke("inspect", "missing.yui").returncode, 2)
         self.assertEqual(self.invoke("inspect", "ui.yui", "--size", "big").returncode, 2)
+        self.assertEqual(self.invoke("inspect", "ui.yui", "--size", "640x400abc").returncode, 2)
+        self.assertEqual(self.invoke("inspect", "ui.yui", "--size", "4097x10").returncode, 2)
+        self.assertEqual(self.inspect("ui.yui", "--size", "4096x10")["width"], 4096)
         self.assertEqual(self.invoke("inspect", "ui.yui", "--scale", "2").returncode, 2)
         self.assertEqual(self.invoke("inspect", "ui.yui", "--drawing", "A", "--palette", "B").returncode, 2)
 
@@ -1238,6 +1299,9 @@ class YuiToolCliTests(unittest.TestCase):
         self.assertEqual(self.invoke("outline", "missing.yui").returncode, 2)
         self.assertEqual(self.invoke("complete", "ui.yui").returncode, 2)
         self.assertEqual(self.invoke("complete", "ui.yui", "--at", "3").returncode, 2)
+        for place in ("3:4x", "3x:4", "1:1:1", " 1:1", "-1:1", "1:"):
+            with self.subTest(place=place):
+                self.assertEqual(self.invoke("complete", "ui.yui", "--at", place).returncode, 2)
         self.assertEqual(self.invoke("definition", "ui.yui", "--at", "0:1").returncode, 2)
         self.assertEqual(self.invoke("hover", "ui.yui", "--unknown").returncode, 2)
         # A place past the end of the file is its end
@@ -1702,6 +1766,39 @@ class YuiToolCliTests(unittest.TestCase):
         failed, text, _ = self.call("yui_render", file="ui.yui", output="link/shot.png")
         self.assertTrue(failed and "'output'" in text, text)
         self.assertFalse((outside / "shot.png").exists())
+
+    def test_mcp_reads_documents_and_models_inside_its_folder_only(self):
+        document = "Slider { id: gain; value <=> model.gain; }\n"
+        models = json.dumps({"model": {"gain": 0.5}})
+        self.write("ui.yui", document)
+        self.write("models.json", models)
+
+        # A path is relative to the folder or absolute, as long as it leads inside it
+        for file, given in (("ui.yui", "models.json"), (str(self.root / "ui.yui"), str(self.root / "models.json"))):
+            failed, text, _ = self.call("yui_check", file=file, models=given)
+            self.assertFalse(failed, text)
+            self.assertEqual(json.loads(text)["errors"], 0)
+
+        elsewhere = tempfile.TemporaryDirectory()
+        self.addCleanup(elsewhere.cleanup)
+        outside = Path(elsewhere.name).resolve()
+        (outside / "ui.yui").write_text(document)
+        (outside / "models.json").write_text(models)
+        (self.root / "link").symlink_to(outside, target_is_directory=True)
+
+        for file in (str(outside / "ui.yui"), "link/ui.yui"):
+            for tool in ("yui_check", "yui_inspect"):
+                failed, text, _ = self.call(tool, file=file)
+                self.assertTrue(failed and "'file'" in text and "can't read" not in text, text)
+
+        for given in (str(outside / "models.json"), "link/models.json"):
+            failed, text, _ = self.call("yui_check", file="ui.yui", models=given)
+            self.assertTrue(failed and "'models'" in text and "can't read" not in text, text)
+
+        # Nor are the models next to a file read through a link
+        (self.root / "ui.models.json").symlink_to(outside / "models.json")
+        failed, text, _ = self.call("yui_check", file="ui.yui")
+        self.assertTrue(failed and "'models'" in text, text)
 
     def test_mcp_refuses_what_is_not_a_number(self):
         self.write("ui.yui", HALVES.replace("TONE", "#0000ff"))

@@ -3227,11 +3227,20 @@ protected:
 
         void cancelCurrentMouseGesture() override {}
 
+        using ComponentNative::callFrameListeners;
+        using ComponentNative::hasFrameListeners;
+
     private:
         Component* focusedComponent = nullptr;
         GpuTriangulationThresholds thresholds;
         RectangleList<float> repaintAreas;
     };
+
+    /** The window the artboard is in, which sends its frames. */
+    FocusRecordingNative& window() const
+    {
+        return static_cast<FocusRecordingNative&> (*artboard->getNativeComponent());
+    }
 
     void SetUp() override
     {
@@ -3281,6 +3290,46 @@ TEST_F (ArtboardInputFocusTests, ClearGivesUpKeyboardFocus)
     artboard->setFile (artboardFile);
     ASSERT_TRUE (artboard->getWantsKeyboardFocus());
     EXPECT_FALSE (artboard->hasKeyboardFocus());
+}
+
+TEST_F (ArtboardInputFocusTests, AsksForFramesOnlyWhileItCanAdvance)
+{
+    auto& native = window();
+
+    // Not showing, it pauses, unless it is told to go on out of sight
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    artboard->shouldPauseWhenHidden (false);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    artboard->shouldPauseWhenHidden (true);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    artboard->setVisible (true);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    // The frames advance it: a click is followed without anything else advancing the artboard
+    artboard->mouseMove (mouseAt (buttonA));
+    artboard->mouseDown (mouseAt (buttonA, MouseEvent::leftButton));
+    artboard->mouseUp (mouseAt (buttonA));
+    native.callFrameListeners (1.0 / 60.0);
+    EXPECT_EQ (1.0, clickedA());
+
+    artboard->setPaused (true);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    artboard->setPaused (false);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    // An artboard with no scene has nothing to advance
+    artboard->clear();
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    artboard->setFile (artboardFile);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    artboard->setVisible (false);
+    EXPECT_FALSE (native.hasFrameListeners());
 }
 
 //==============================================================================

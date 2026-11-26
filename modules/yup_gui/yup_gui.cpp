@@ -211,6 +211,7 @@
 #include "component/yup_Component.cpp"
 #include "component/yup_FrameAttachment.cpp"
 #include "mouse/yup_PointerSimulator.cpp"
+#include "effects/yup_ComponentEffect.cpp"
 #include "effects/yup_BlurEffect.cpp"
 #include "effects/yup_DropShadowEffect.cpp"
 #include "effects/yup_GlowEffect.cpp"

@@ -67,10 +67,8 @@ const ComponentTypeInfo& ModWheelComponent::getClassTypeInfo()
 
 //==============================================================================
 ModWheelComponent::ModWheelComponent (StringRef componentID)
-    : Component (componentID)
+    : MidiWheelComponent (componentID, Source::modulationWheel, false)
 {
-    setOpaque (true); // paint() always fully covers its bounds
-    setMouseCursor (MouseCursor::Hand);
 }
 
 ModWheelComponent::ModWheelComponent (MidiKeyboardState& stateToUse, StringRef componentID)
@@ -79,163 +77,12 @@ ModWheelComponent::ModWheelComponent (MidiKeyboardState& stateToUse, StringRef c
     setState (&stateToUse);
 }
 
-ModWheelComponent::~ModWheelComponent()
-{
-    if (state != nullptr)
-        state->removeListener (this);
-}
-
-//==============================================================================
-void ModWheelComponent::setState (MidiKeyboardState* newState)
-{
-    if (state == newState)
-        return;
-
-    if (state != nullptr)
-        state->removeListener (this);
-
-    // What the previous state reported and isn't shown yet is not read from the new one
-    cancelPendingUpdate();
-
-    state = newState;
-
-    if (state != nullptr)
-        state->addListener (this);
-}
-
-//==============================================================================
-void ModWheelComponent::setValue (double newValue, NotificationType notification)
-{
-    newValue = constrainValue (newValue);
-
-    if (! approximatelyEqual (value, newValue))
-    {
-        value = newValue;
-
-        const BailOutChecker bailOutChecker (this);
-
-        notifyPropertyChanged (ModWheelComponentIds::value);
-        if (bailOutChecker.shouldBailOut())
-            return;
-
-        sendChangeNotification (notification, [this]
-        {
-            if (onValueChanged)
-                onValueChanged (value);
-        });
-
-        repaint();
-    }
-}
-
-void ModWheelComponent::setDefaultValue (double newDefaultValue)
-{
-    defaultValue = constrainValue (newDefaultValue);
-}
-
-void ModWheelComponent::setMidiChannel (int midiChannelNumber)
-{
-    jassert (midiChannelNumber > 0 && midiChannelNumber <= 16);
-
-    midiChannel.store (jlimit (1, 16, midiChannelNumber));
-}
-
-void ModWheelComponent::setMouseDragSensitivity (double sensitivity)
-{
-    mouseDragSensitivity = std::max (0.001, sensitivity);
-}
-
 //==============================================================================
 void ModWheelComponent::paint (Graphics& g)
 {
+    // Stays in the class: a subclass is painted with the style of the wheel type named here
     if (auto style = ApplicationTheme::findComponentStyle (*this))
         style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
-}
-
-void ModWheelComponent::mouseDown (const MouseEvent& event)
-{
-    if (! isEnabled())
-        return;
-
-    isDragging = true;
-    mouseDragStartY = event.getPosition().getY();
-    valueOnMouseDown = value;
-
-    if (onDragStart)
-        onDragStart (event);
-
-    repaint();
-}
-
-void ModWheelComponent::mouseDrag (const MouseEvent& event)
-{
-    if (! isEnabled() || ! isDragging)
-        return;
-
-    const auto height = getLocalBounds().getHeight();
-    if (height <= 0.0f)
-        return;
-
-    const auto normalizedDelta = ((static_cast<double> (mouseDragStartY) - event.getPosition().getY()) / height) * mouseDragSensitivity;
-    setValue (valueOnMouseDown + normalizedDelta);
-}
-
-void ModWheelComponent::mouseUp (const MouseEvent& event)
-{
-    if (! isEnabled() || ! isDragging)
-        return;
-
-    isDragging = false;
-
-    if (onDragEnd)
-        onDragEnd (event);
-
-    repaint();
-}
-
-void ModWheelComponent::mouseDoubleClick (const MouseEvent&)
-{
-    if (isEnabled())
-        setValue (defaultValue);
-}
-
-void ModWheelComponent::mouseEnter (const MouseEvent&)
-{
-    isMouseOverWheel = true;
-    repaint();
-}
-
-void ModWheelComponent::mouseExit (const MouseEvent&)
-{
-    isMouseOverWheel = false;
-    repaint();
-}
-
-//==============================================================================
-double ModWheelComponent::constrainValue (double newValue) const noexcept
-{
-    return std::clamp (newValue, 0.0, 1.0);
-}
-
-//==============================================================================
-void ModWheelComponent::handleNoteOn (MidiKeyboardState*, int, int, float)
-{
-}
-
-void ModWheelComponent::handleNoteOff (MidiKeyboardState*, int, int, float)
-{
-}
-
-void ModWheelComponent::handleControllerMoved (MidiKeyboardState*, int midiChannelNumber, int controllerNumber, int)
-{
-    if (controllerNumber == 1 && midiChannelNumber == midiChannel.load())
-        triggerAsyncUpdate();
-}
-
-void ModWheelComponent::handleAsyncUpdate()
-{
-    if (state != nullptr)
-        setValue (state->getControllerValue (midiChannel.load(), 1) / 127.0, dontSendNotification);
 }
 
 } // namespace yup

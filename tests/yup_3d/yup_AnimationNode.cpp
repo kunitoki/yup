@@ -129,11 +129,88 @@ TEST_F (AnimationNodeTests, NodeWithoutClipsPlaysNothing)
     EXPECT_DOUBLE_EQ (player.getDuration(), 0.0);
 
     player.setPlaying (true);
+    EXPECT_FALSE (player.isPlaying());
+
     player.setTime (1.0);
     scene.update (1.0);
 
     EXPECT_DOUBLE_EQ (player.getTime(), 0.0);
+    EXPECT_FALSE (player.isPlaying());
     EXPECT_EQ (ended, 0);
+}
+
+TEST_F (AnimationNodeTests, SelectingNoClipStopsPlaying)
+{
+    auto& player = attachPlayer ({ makeSlide() }, { target });
+
+    player.setPlaying (true);
+    ASSERT_TRUE (player.isPlaying());
+
+    player.setCurrentClip (-1);
+    EXPECT_FALSE (player.isPlaying());
+
+    // Nothing plays until a clip is selected and asked to play
+    player.setPlaying (true);
+    EXPECT_FALSE (player.isPlaying());
+
+    player.setCurrentClip (0);
+    EXPECT_FALSE (player.isPlaying());
+
+    player.setPlaying (true);
+    EXPECT_TRUE (player.isPlaying());
+}
+
+TEST_F (AnimationNodeTests, AnIndexWithoutAClipIsNeverSelected)
+{
+    // The first index has no clip, as the one of an animation of a model that can't be played
+    const auto slide = makeSlide();
+    auto& player = attachPlayer ({ AnimationClip::Ptr(), slide }, { target });
+
+    EXPECT_EQ (player.getNumClips(), 2);
+    EXPECT_EQ (player.getClip (0), nullptr);
+    EXPECT_EQ (player.getClip (1), slide);
+    EXPECT_EQ (player.findClip ("slide"), 1);
+
+    // The node starts on the first clip there is
+    EXPECT_EQ (player.getCurrentClip(), 1);
+    EXPECT_DOUBLE_EQ (player.getDuration(), 2.0);
+
+    player.setCurrentClip (0);
+    EXPECT_EQ (player.getCurrentClip(), -1);
+
+    player.setPlaying (true);
+    EXPECT_FALSE (player.isPlaying());
+}
+
+TEST_F (AnimationNodeTests, TimesAndSpeedsThatAreNotFiniteAreIgnored)
+{
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
+    GTEST_SKIP() << "A time, a speed or a delta that is not finite triggers an assertion when assertions are enabled or logged";
+#endif
+
+    auto& player = attachPlayer ({ makeSlide() }, { target });
+
+    player.setTime (0.5);
+    player.setTime (std::numeric_limits<double>::quiet_NaN());
+    EXPECT_DOUBLE_EQ (player.getTime(), 0.5);
+
+    player.setSpeed (std::numeric_limits<float>::infinity());
+    player.setSpeed (std::numeric_limits<float>::quiet_NaN());
+    EXPECT_FLOAT_EQ (player.getSpeed(), 1.0f);
+
+    // A looping clip has no end to stop at: such a delta would leave it without a time for good
+    player.setLooping (true);
+    player.setPlaying (true);
+    scene.update (std::numeric_limits<double>::infinity());
+    scene.update (std::numeric_limits<double>::quiet_NaN());
+
+    EXPECT_DOUBLE_EQ (player.getTime(), 0.5);
+    expectNear (transform->getPosition(), { 2.5f, 0.0f, 0.0f });
+
+    // It plays on from where it is
+    scene.update (0.5);
+    EXPECT_DOUBLE_EQ (player.getTime(), 1.0);
+    EXPECT_TRUE (player.isPlaying());
 }
 
 //==============================================================================

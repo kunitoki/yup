@@ -24,6 +24,7 @@
 #include <gtest/gtest.h>
 
 #include <thread>
+#include <vector>
 
 using namespace yup;
 
@@ -40,6 +41,11 @@ protected:
         state = std::make_unique<MidiKeyboardState>();
         wheel = std::make_unique<ModWheelComponent> (*state, "testModWheel");
         wheel->setBounds (0, 0, 30, 120);
+    }
+
+    static MouseEvent makeButtonEvent (float y)
+    {
+        return MouseEvent (MouseEvent::Buttons::leftButton, {}, Point<float> (15.0f, y));
     }
 
     std::unique_ptr<MidiKeyboardState> state;
@@ -162,6 +168,50 @@ TEST_F (ModWheelComponentTest, DragEndCallback)
 }
 
 //==============================================================================
+TEST_F (ModWheelComponentTest, DisablingWhileDraggedEndsTheDragAndHoldsTheValue)
+{
+    int dragEnds = 0;
+    wheel->onDragEnd = [&dragEnds] (const MouseEvent&)
+    {
+        ++dragEnds;
+    };
+
+    wheel->mouseDown (makeButtonEvent (90.0f));
+    wheel->mouseDrag (makeButtonEvent (30.0f));
+    ASSERT_DOUBLE_EQ (0.5, wheel->getValue());
+
+    wheel->setEnabled (false);
+
+    EXPECT_FALSE (wheel->isCurrentlyBeingDragged());
+    EXPECT_DOUBLE_EQ (0.5, wheel->getValue());
+    EXPECT_EQ (1, dragEnds);
+
+    // The release that comes later ends nothing
+    wheel->mouseUp (makeButtonEvent (30.0f));
+    EXPECT_EQ (1, dragEnds);
+}
+
+TEST_F (ModWheelComponentTest, HidingWhileDraggedEndsTheDrag)
+{
+    int dragEnds = 0;
+    wheel->onDragEnd = [&dragEnds] (const MouseEvent&)
+    {
+        ++dragEnds;
+    };
+
+    wheel->setVisible (true);
+    wheel->mouseDown (makeButtonEvent (90.0f));
+
+    wheel->setVisible (false);
+
+    EXPECT_FALSE (wheel->isCurrentlyBeingDragged());
+    EXPECT_EQ (1, dragEnds);
+
+    wheel->mouseUp (makeButtonEvent (90.0f));
+    EXPECT_EQ (1, dragEnds);
+}
+
+//==============================================================================
 TEST_F (ModWheelComponentTest, PaintWithThemeDoesNotCrash)
 {
     auto context = yup_constructHeadlessGraphicsContext ({}, {});
@@ -222,6 +272,12 @@ protected:
     MouseEvent makeButtonEvent (float y) const
     {
         return MouseEvent (MouseEvent::Buttons::leftButton, {}, Point<float> (15.0f, y));
+    }
+
+    /** Applies what the state reported, as the message thread does when it gets to the update of the wheel. */
+    void deliverStateUpdate()
+    {
+        static_cast<ModWheelComponent&> (*wheel).handleAsyncUpdate();
     }
 
     MessageManager* messageManager = nullptr;
@@ -335,4 +391,57 @@ TEST_F (ModWheelComponentAsyncTests, MidiChannelSelection)
 
     EXPECT_NEAR (1.0, wheel->getValue(), 1e-9);
     EXPECT_EQ (2, wheel->getMidiChannel());
+}
+
+TEST_F (ModWheelComponentAsyncTests, TheValueReportedDuringADragIsAppliedWhenItEnds)
+{
+    wheel->setBounds (0, 0, 30, 120);
+
+    int numChanges = 0;
+    wheel->onValueChanged = [&numChanges] (double)
+    {
+        ++numChanges;
+    };
+
+    wheel->mouseDown (makeButtonEvent (90.0f));
+    wheel->mouseDrag (makeButtonEvent (30.0f));
+    ASSERT_DOUBLE_EQ (0.5, wheel->getValue());
+
+    // Only the latest of the values held back is applied
+    state->processNextMidiEvent (MidiMessage::controllerEvent (1, 1, 32));
+    deliverStateUpdate();
+    state->processNextMidiEvent (MidiMessage::controllerEvent (1, 1, 127));
+    deliverStateUpdate();
+
+    EXPECT_DOUBLE_EQ (0.5, wheel->getValue());
+
+    wheel->mouseUp (makeButtonEvent (30.0f));
+
+    // The drag is a change of the user, following the state is not
+    EXPECT_DOUBLE_EQ (1.0, wheel->getValue());
+    EXPECT_EQ (1, numChanges);
+}
+
+TEST_F (ModWheelComponentAsyncTests, FollowsTheStateItIsGivenAfterItsConstruction)
+{
+    ModWheelComponent mod;
+
+    EXPECT_EQ (mod.getState(), nullptr);
+
+    // Without a state a wheel is moved by the user alone
+    mod.setValue (0.5);
+    mod.handleAsyncUpdate();
+    EXPECT_DOUBLE_EQ (mod.getValue(), 0.5);
+
+    // A wheel keeps its value until its state reports another one
+    mod.setState (state.get());
+    EXPECT_EQ (mod.getState(), state.get());
+    EXPECT_DOUBLE_EQ (mod.getValue(), 0.5);
+
+    state->processNextMidiEvent (MidiMessage::controllerEvent (1, 1, 127));
+    mod.handleAsyncUpdate();
+    EXPECT_DOUBLE_EQ (mod.getValue(), 1.0);
+
+    mod.setState (nullptr);
+    EXPECT_EQ (mod.getState(), nullptr);
 }

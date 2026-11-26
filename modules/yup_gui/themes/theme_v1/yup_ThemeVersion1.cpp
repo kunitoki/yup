@@ -118,7 +118,7 @@ SliderColors getSliderColors (const ApplicationTheme& theme, const Slider& slide
     return colors;
 }
 
-void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider& slider, Rectangle<float> sliderBounds, float rotaryStartAngle, float rotaryEndAngle, float sliderValue, bool isMouseOver, bool isMouseDown)
+void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider& slider, Rectangle<float> sliderBounds, float rotaryStartAngle, float rotaryEndAngle, float sliderValue)
 {
     const auto colors = getSliderColors (theme, slider);
 
@@ -187,7 +187,7 @@ void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider
                                   toCurrentRadians,
                                   true);
 
-    auto thumbColor = slider.isMouseOver() ? colors.thumbOver : colors.thumb;
+    auto thumbColor = slider.isCurrentlyBeingDragged() ? colors.thumbDown : (slider.isMouseOver() ? colors.thumbOver : colors.thumb);
     if (! slider.isEnabled())
         thumbColor = thumbColor.withAlpha (0.3f);
 
@@ -281,12 +281,16 @@ void paintTwoValueSlider (Graphics& g, const ApplicationTheme& theme, const Slid
         g.fillRoundedRect (sliderBounds.getCenterX() - trackRadius, endY, trackWidth, startY - endY, trackRadius);
     }
 
-    // Draw min thumb
-    g.setFillColor (isMouseDown ? colors.thumbDown : (isMouseOverMinThumb ? colors.thumbOver : colors.thumb));
+    // Draw the thumbs: the one under the pointer is told from the other, and from itself while it is dragged
+    const auto thumbColor = [&] (bool isMouseOverThumb)
+    {
+        return ! isMouseOverThumb ? colors.thumb : (isMouseDown ? colors.thumbDown : colors.thumbOver);
+    };
+
+    g.setFillColor (thumbColor (isMouseOverMinThumb));
     g.fillEllipse (minThumbBounds);
 
-    // Draw max thumb
-    g.setFillColor (isMouseDown ? colors.thumbDown : (isMouseOverMaxThumb ? colors.thumbOver : colors.thumb));
+    g.setFillColor (thumbColor (isMouseOverMaxThumb));
     g.fillEllipse (maxThumbBounds);
 
     /*
@@ -351,9 +355,7 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
     auto sliderBounds = s.getSliderBounds();
     const auto sliderType = s.getSliderType();
     const bool isMouseOver = s.isMouseOver();
-    const bool isMouseDown = false; // s.isMouseButtonDown();
-    const auto thumbSize = s.findPropertyAs<float> (CuratedGeometry::thumbSize);
-    const auto thumbRadius = thumbSize * 0.5f;
+    const bool isMouseDown = s.isCurrentlyBeingDragged();
 
     switch (sliderType)
     {
@@ -368,7 +370,7 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
         {
             constexpr float rotaryStartAngle = degreesToRadians (135.0f);
             constexpr float rotaryEndAngle = rotaryStartAngle + degreesToRadians (270.0f);
-            paintRotarySlider (g, theme, s, sliderBounds, rotaryStartAngle, rotaryEndAngle, static_cast<float> (s.getValueNormalised()), isMouseOver, isMouseDown);
+            paintRotarySlider (g, theme, s, sliderBounds, rotaryStartAngle, rotaryEndAngle, static_cast<float> (s.getValueNormalised()));
             break;
         }
 
@@ -377,60 +379,22 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
         case Slider::LinearBarHorizontal:
         case Slider::LinearBarVertical:
         {
-            Rectangle<float> thumbBounds;
             const bool isHorizontal = (sliderType == Slider::LinearHorizontal || sliderType == Slider::LinearBarHorizontal);
             const float sliderValue = static_cast<float> (s.getValueNormalised());
 
-            if (isHorizontal)
-            {
-                const float thumbX = sliderBounds.getX() + (sliderValue * sliderBounds.getWidth()) - thumbRadius;
-                thumbBounds = Rectangle<float> (thumbX, sliderBounds.getCenterY() - thumbRadius, thumbSize, thumbSize);
-            }
-            else
-            {
-                const float thumbY = sliderBounds.getBottom() - (sliderValue * sliderBounds.getHeight()) - thumbRadius;
-                thumbBounds = Rectangle<float> (sliderBounds.getCenterX() - thumbRadius, thumbY, thumbSize, thumbSize);
-            }
-
-            paintLinearSlider (g, theme, s, sliderBounds, thumbBounds, isHorizontal, sliderValue, isMouseOver, isMouseDown);
+            paintLinearSlider (g, theme, s, sliderBounds, s.getThumbBounds(), isHorizontal, sliderValue, isMouseOver, isMouseDown);
             break;
         }
 
         case Slider::TwoValueHorizontal:
         case Slider::TwoValueVertical:
         {
-            Rectangle<float> minThumbBounds, maxThumbBounds;
             const bool isHorizontal = (sliderType == Slider::TwoValueHorizontal);
             const float minNorm = static_cast<float> (s.getMinValueNormalised());
             const float maxNorm = static_cast<float> (s.getMaxValueNormalised());
+            const auto hoveredThumb = s.getHoveredThumb();
 
-            if (isHorizontal)
-            {
-                const float minThumbX = sliderBounds.getX() + (minNorm * sliderBounds.getWidth()) - thumbRadius;
-                const float maxThumbX = sliderBounds.getX() + (maxNorm * sliderBounds.getWidth()) - thumbRadius;
-                minThumbBounds = Rectangle<float> (minThumbX, sliderBounds.getCenterY() - thumbRadius, thumbSize, thumbSize);
-                maxThumbBounds = Rectangle<float> (maxThumbX, sliderBounds.getCenterY() - thumbRadius, thumbSize, thumbSize);
-            }
-            else
-            {
-                const float minThumbY = sliderBounds.getBottom() - (minNorm * sliderBounds.getHeight()) - thumbRadius;
-                const float maxThumbY = sliderBounds.getBottom() - (maxNorm * sliderBounds.getHeight()) - thumbRadius;
-                minThumbBounds = Rectangle<float> (sliderBounds.getCenterX() - thumbRadius, minThumbY, thumbSize, thumbSize);
-                maxThumbBounds = Rectangle<float> (sliderBounds.getCenterX() - thumbRadius, maxThumbY, thumbSize, thumbSize);
-            }
-
-            // For two-value sliders, check which thumb the mouse is over
-            bool isMouseOverMinThumb = false;
-            bool isMouseOverMaxThumb = false;
-            if (isMouseOver)
-            {
-                const auto mousePos = Point<float>(); // s.getMousePosition();
-                const Point<float> mousePosFloat (static_cast<float> (mousePos.getX()), static_cast<float> (mousePos.getY()));
-                isMouseOverMinThumb = minThumbBounds.contains (mousePosFloat);
-                isMouseOverMaxThumb = maxThumbBounds.contains (mousePosFloat);
-            }
-
-            paintTwoValueSlider (g, theme, s, sliderBounds, minThumbBounds, maxThumbBounds, isHorizontal, minNorm, maxNorm, isMouseOverMinThumb, isMouseOverMaxThumb, isMouseDown);
+            paintTwoValueSlider (g, theme, s, sliderBounds, s.getMinThumbBounds(), s.getMaxThumbBounds(), isHorizontal, minNorm, maxNorm, hoveredThumb == Slider::Thumb::minValue, hoveredThumb == Slider::Thumb::maxValue, isMouseDown);
             break;
         }
     }
@@ -805,7 +769,13 @@ void paintToggleButton (Graphics& g, const ApplicationTheme& theme, const Toggle
 
 void paintSwitchButton (Graphics& g, const ApplicationTheme& theme, const SwitchButton& s)
 {
-    auto bounds = s.getSwitchBounds().reduced (4);
+    const auto switchBounds = s.getSwitchBounds();
+
+    // The slot and the handle have their whole inset in a switch as thick as it is by default, and less of it in a thinner one
+    constexpr float thicknessOfWholeInset = 28.0f;
+    const auto insetScale = jmin (1.0f, (s.isVertical() ? switchBounds.getWidth() : switchBounds.getHeight()) / thicknessOfWholeInset);
+
+    auto bounds = switchBounds.reduced (4.0f * insetScale);
     auto cornerSize = CuratedGeometry::getCornerRadius (s, s.isVertical() ? bounds.getWidth() : bounds.getHeight());
 
     // Draw shadow/outline
@@ -823,7 +793,8 @@ void paintSwitchButton (Graphics& g, const ApplicationTheme& theme, const Switch
     g.fillRoundedRect (bounds, cornerSize);
 
     // Draw handle
-    auto circleBounds = s.getSwitchCircleBounds().reduced (s.findPropertyAs<float> (CuratedGeometry::thumbInset));
+    auto circleBounds = s.getSwitchCircleBounds();
+    circleBounds = circleBounds.reduced (jmin (s.findPropertyAs<float> (CuratedGeometry::thumbInset) * insetScale, circleBounds.getWidth() * 0.5f));
     auto circleColor = theme.findColor (s, SwitchButton::Style::switchColorId).value_or (palette.getColor (PaletteRole::text));
 
     g.setFillColor (circleColor);
@@ -864,25 +835,17 @@ void paintComboBox (Graphics& g, const ApplicationTheme& theme, const ComboBox& 
     g.setStrokeWidth (CuratedGeometry::getOutlineWidth (c, hasFocus));
     g.strokeRoundedRect (bounds.reduced (0.5f), cornerRadius);
 
-    // Calculate text and arrow areas
-    auto arrowWidth = 20.0f;
-    auto arrowSize = 4.0f;
-    auto textBounds = bounds.reduced (8.0f, 4.0f);
-    textBounds.removeFromRight (arrowWidth);
-
-    auto arrowBounds = bounds.reduced (4.0f);
-    arrowBounds.removeFromLeft (bounds.getWidth() - arrowWidth);
-
     // Draw text
     auto textColor = theme.findColor (c, ComboBox::Style::textColorId).value_or (palette.getColor (PaletteRole::text));
     g.setFillColor (textColor);
-    paintComboBoxText (g, theme, c, textBounds);
+    paintComboBoxText (g, theme, c, c.getTextBounds());
 
     // Draw arrow
     auto arrowColor = theme.findColor (c, ComboBox::Style::arrowColorId).value_or (palette.getColor (PaletteRole::textMuted));
     g.setFillColor (arrowColor);
 
-    auto center = arrowBounds.getCenter();
+    const auto arrowSize = 4.0f;
+    const auto center = c.getArrowBounds().getCenter();
 
     // Draw simple triangle using lines instead of Path
     g.setStrokeColor (arrowColor);
@@ -1410,11 +1373,15 @@ void paintProgressBar (Graphics& g, const ApplicationTheme& theme, const Progres
 
     if (progressBar.isIndeterminate())
     {
-        // Indeterminate mode - draw animated diagonal stripes
+        // The stripes are as wide as the bar is high: lower than a pixel it has none to draw
+        if (bounds.getHeight() < 1.0f)
+            return;
+
+        // Indeterminate mode - draw animated diagonal stripes, moved by a pair of them in a cycle of the animation
         const auto stripeWidth = bounds.getHeight() * 2.0f;
         const auto halfStripeWidth = stripeWidth * 0.5f;
         // Reverse animation direction (right to left becomes left to right)
-        const auto position = static_cast<float> (static_cast<int> (stripeWidth) - (static_cast<int> (Time::getCurrentTime().toMilliseconds() / 15) % static_cast<int> (stripeWidth)));
+        const auto position = stripeWidth * (1.0f - static_cast<float> (progressBar.getAnimationPhase()));
 
         auto state = g.saveState();
 
@@ -2153,23 +2120,23 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
     const auto keysArea = isHorizontal ? Rectangle<float> (keyRange.getStart(), 0.0f, keyRange.getLength(), bounds.getHeight())
                                        : Rectangle<float> (0.0f, keyRange.getStart(), bounds.getWidth(), keyRange.getLength());
 
+    // Base colors from theme
+    const auto whiteKeyColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::whiteKeyColorId).value_or (Color());
+    const auto pressedColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::whiteKeyPressedColorId).value_or (Color());
+    const auto outlineColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::keyOutlineColorId).value_or (Color());
+
+    const auto font = theme.getDefaultFont().withHeight (11.0f);
+
     // Paint white keys first
     for (int note = keyboard.getLowestVisibleKey(); note <= keyboard.getHighestVisibleKey(); ++note)
     {
         if (keyboard.isBlackKey (note))
             continue;
 
-        bool isBlack;
-        Rectangle<float> keyArea;
-        keyboard.getKeyPosition (note, keyWidth, keyArea, isBlack);
+        const auto keyArea = keyboard.getRectangleForKey (note);
 
         auto isPressed = keyboard.isNoteOn (note);
         auto isOver = keyboard.isMouseOverNote (note);
-
-        // Base colors from theme
-        auto whiteKeyColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::whiteKeyColorId).value_or (Color());
-        auto pressedColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::whiteKeyPressedColorId).value_or (Color());
-        auto outlineColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::keyOutlineColorId).value_or (Color());
 
         // Determine fill color based on state
         Color fillColor = whiteKeyColor;
@@ -2205,8 +2172,6 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
 
                 g.setFillColor (textColor);
 
-                const auto font = theme.getDefaultFont().withHeight (11.0f);
-
                 if (isHorizontal)
                     g.fillFittedText (noteText, font, keyArea.reduced (2.0f).removeFromBottom (16.0f), Justification::center);
                 else
@@ -2231,12 +2196,14 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
     }
 
     // Draw separator line along the front edge
-    auto lineColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::keyOutlineColorId).value_or (Color());
-    if (! lineColor.isTransparent())
+    if (! outlineColor.isTransparent())
     {
-        g.setFillColor (lineColor);
+        g.setFillColor (outlineColor);
         g.fillRect (slice (keysArea, edges.front, 1.0f));
     }
+
+    const auto blackKeyColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::blackKeyColorId).value_or (Color());
+    const auto blackPressedColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::blackKeyPressedColorId).value_or (Color());
 
     // Paint black keys on top
     for (int note = keyboard.getLowestVisibleKey(); note <= keyboard.getHighestVisibleKey(); ++note)
@@ -2244,16 +2211,10 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
         if (! keyboard.isBlackKey (note))
             continue;
 
-        bool isBlack;
-        Rectangle<float> keyArea;
-        keyboard.getKeyPosition (note, keyWidth, keyArea, isBlack);
+        const auto keyArea = keyboard.getRectangleForKey (note);
 
         auto isPressed = keyboard.isNoteOn (note);
         auto isOver = keyboard.isMouseOverNote (note);
-
-        // Base colors from theme
-        auto blackKeyColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::blackKeyColorId).value_or (Color());
-        auto blackPressedColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::blackKeyPressedColorId).value_or (Color());
 
         // Determine fill color based on state
         Color fillColor = blackKeyColor;
@@ -2446,151 +2407,21 @@ void paintKMeter (Graphics& g, const ApplicationTheme& theme, const KMeterCompon
     }
 
     // Get K-System scale range for the meter state, the one of K-20 without a state
-    const auto* meterState = meter.getState();
-    const auto scale = meterState != nullptr ? meterState->getScale() : KMeterState::Scale::k20;
+    const auto scale = meter.getScale();
     const float rangeMin = KMeterState::rangeMinForScale (scale);
     const float rangeMax = KMeterState::rangeMaxForScale (scale);
-    const float rangeSpan = rangeMax - rangeMin;
 
-    auto linearDbToY = [&] (float db) -> float
+    // The meter lays its scale out, linear or with the segments of the K-System
+    const auto dbToY = [&meter] (float db)
     {
-        const float clampedDb = jlimit (rangeMin, rangeMax, db);
-        const float normalized = (clampedDb - rangeMin) / rangeSpan;
-        return bounds.getY() + height * (1.0f - normalized);
+        return meter.getPositionForLevel (db);
     };
 
-    std::function<float (float)> dbToY = linearDbToY;
-
-    if (meter.getScaleMapping() == KMeterComponent::ScaleMapping::segmented)
-    {
-        struct MeterSegment
-        {
-            float topDb = 0.0f;
-            float bottomDb = 0.0f;
-            float topY = 0.0f;
-            float bottomY = 0.0f;
-            float heightUnits = 1.0f;
-            Color color;
-        };
-
-        const float limitRedBars = 4.0f;
-        const float limitAmberBars = 0.0f;
-        float limitTopBars = 18.0f;
-        float limitGreenBars = -24.0f;
-        float limitLinearArea = -30.0f;
-        bool useFiveUnitBottom = false;
-
-        switch (scale)
-        {
-            case KMeterState::Scale::k20:
-                limitTopBars = 18.0f;
-                limitGreenBars = -24.0f;
-                limitLinearArea = -30.0f;
-                useFiveUnitBottom = false;
-                break;
-            case KMeterState::Scale::k14:
-                limitTopBars = 12.0f;
-                limitGreenBars = -30.0f;
-                limitLinearArea = -30.0f;
-                useFiveUnitBottom = false;
-                break;
-            case KMeterState::Scale::k12:
-                limitTopBars = 10.0f;
-                limitGreenBars = -30.0f;
-                limitLinearArea = -30.0f;
-                useFiveUnitBottom = true;
-                break;
-            default:
-                break;
-        }
-
-        const Color nonLinearColor = greenColor.darker (0.35f);
-        std::vector<MeterSegment> segments;
-        segments.reserve (64);
-
-        float currentDb = rangeMax;
-        while (currentDb > rangeMin)
-        {
-            float segmentRange = 1.0f;
-
-            if (currentDb > limitTopBars)
-                segmentRange = 0.5f;
-            else if (currentDb > limitGreenBars)
-                segmentRange = 1.0f;
-            else if (currentDb > limitLinearArea)
-                segmentRange = 6.0f;
-            else
-                segmentRange = 10.0f;
-
-            float bottomDb = currentDb - segmentRange;
-            if (bottomDb < rangeMin)
-                bottomDb = rangeMin;
-
-            float heightUnits = 1.0f;
-            if (currentDb > limitTopBars)
-                heightUnits = 1.0f;
-            else if (currentDb > limitGreenBars)
-                heightUnits = 2.0f;
-            else if (currentDb > limitLinearArea)
-                heightUnits = 3.0f;
-            else if (bottomDb <= rangeMin)
-                heightUnits = useFiveUnitBottom ? 5.0f : 4.0f;
-            else
-                heightUnits = 3.0f;
-
-            Color segmentColor = nonLinearColor;
-            if (currentDb > limitRedBars)
-                segmentColor = redColor;
-            else if (currentDb > limitAmberBars)
-                segmentColor = amberColor;
-            else if (currentDb > limitGreenBars)
-                segmentColor = greenColor;
-
-            segments.push_back ({ currentDb, bottomDb, 0.0f, 0.0f, heightUnits, segmentColor });
-            currentDb = bottomDb;
-        }
-
-        float totalUnits = 0.0f;
-        for (const auto& segment : segments)
-            totalUnits += segment.heightUnits;
-
-        const float unitHeight = totalUnits > 0.0f ? height / totalUnits : height;
-        float currentY = bounds.getY();
-
-        for (size_t index = 0; index < segments.size(); ++index)
-        {
-            auto& segment = segments[index];
-            const bool isLast = (index + 1 == segments.size());
-            const float segmentHeight = isLast ? (bounds.getBottom() - currentY) : (segment.heightUnits * unitHeight);
-
-            segment.topY = currentY;
-            segment.bottomY = currentY + segmentHeight;
-            currentY = segment.bottomY;
-        }
-
-        dbToY = [segments, rangeMin, rangeMax, bounds] (float db) -> float
-        {
-            const float clampedDb = jlimit (rangeMin, rangeMax, db);
-
-            for (const auto& segment : segments)
-            {
-                if (clampedDb <= segment.topDb && clampedDb >= segment.bottomDb)
-                {
-                    const float range = segment.topDb - segment.bottomDb;
-                    const float normalized = range > 0.0f ? (clampedDb - segment.bottomDb) / range : 0.0f;
-                    return segment.bottomY - (segment.bottomY - segment.topY) * normalized;
-                }
-            }
-
-            return bounds.getBottom();
-        };
-    }
-
-    // Get current levels (thread-safe)
-    const float averageDb = meter.currentAverageDb.get();
-    const float peakDb = meter.currentPeakDb.get();
-    const float peakHoldDb = meter.currentPeakHoldDb.get();
-    const bool isClipping = meter.currentClipping.get();
+    // Get current levels
+    const float averageDb = meter.getAverageLevel();
+    const float peakDb = meter.getPeakLevel();
+    const float peakHoldDb = meter.getPeakHoldLevel();
+    const bool isClipping = meter.isClipping();
 
     // Draw average level (filled bar from bottom with gradient)
     if (averageDb > rangeMin)
@@ -2668,55 +2499,12 @@ void paintKMeter (Graphics& g, const ApplicationTheme& theme, const KMeterCompon
         const auto font = theme.getDefaultFont().withHeight (12.0f);
         g.setFillColor (palette.getColor (PaletteRole::text).withAlpha (0.7f));
 
-        // Determine tick interval based on meter height and range
-        const float dbPerPixel = rangeSpan / height;
-        int tickInterval = 5; // Default: 5dB ticks
-
-        // Adjust tick interval for better visibility
-        if (height < 200)
-            tickInterval = 10; // Fewer ticks for small meters
-
-        // Draw tick marks and collect the fully visible labels from the top
-        const int startDb = static_cast<int> (std::ceil (rangeMin / tickInterval)) * tickInterval;
-        const int endDb = static_cast<int> (std::floor (rangeMax / tickInterval)) * tickInterval;
-        std::vector<std::pair<int, Rectangle<float>>> labels;
-
-        for (int db = endDb; db >= startDb; db -= tickInterval)
+        for (const auto& tick : meter.getScaleTicks())
         {
-            const float y = dbToY (static_cast<float> (db));
+            g.fillRect (bounds.getX(), tick.y - 0.5f, 4.0f, 1.0f);
 
-            // Skip if outside visible area
-            if (y < bounds.getY() || y > bounds.getBottom())
-                continue;
-
-            // Draw tick mark
-            g.fillRect (bounds.getX(), y - 0.5f, 4.0f, 1.0f);
-
-            // Label every 10dB, including the 0dB reference
-            if (db % 10 != 0)
-                continue;
-
-            const Rectangle<float> labelRect (bounds.getX() + 5.0f, y - 6.0f, 22.0f, 12.0f);
-            if (labelRect.getY() >= bounds.getY() && labelRect.getBottom() <= bounds.getBottom())
-                labels.emplace_back (db, labelRect);
-        }
-
-        // Always keep the lowest label, and skip the others that would overlap a kept one
-        float previousLabelBottom = bounds.getY();
-
-        for (std::size_t index = 0; index < labels.size(); ++index)
-        {
-            const auto& [db, labelRect] = labels[index];
-            const bool isLowest = index + 1 == labels.size();
-
-            if (labelRect.getY() < previousLabelBottom)
-                continue;
-
-            if (! isLowest && labelRect.getBottom() > labels.back().second.getY())
-                continue;
-
-            g.fillFittedText ((db > 0 ? "+" : "") + String (db), font, labelRect, Justification::left);
-            previousLabelBottom = labelRect.getBottom();
+            if (tick.label.isNotEmpty())
+                g.fillFittedText (tick.label, font, tick.labelBounds, Justification::left);
         }
     }
 

@@ -38,3 +38,14 @@ def test_attachment_can_outlive_its_component():
     gc.collect()
 
     del attachment
+
+
+def test_attachment_can_be_stopped_and_started():
+    component = yup.Component()
+    attachment = yup.FrameAttachment(component, lambda elapsedSeconds: None, False)
+
+    assert not attachment.isActive()
+
+    attachment.setActive(True)
+
+    assert attachment.isActive()

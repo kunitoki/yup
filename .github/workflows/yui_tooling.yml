@@ -1,0 +1,127 @@
+# Tests the tooling of the .yui language, which the platform builds of ci.yml build none of: the command line
+# tool of cmake/tools/yui_tool, natively and built for the web, and the VSCode extension of
+# modules/yup_gui_markup/tools/vscode-yui that runs it.
+#
+# It runs when the tooling changes, or one of the modules whose types, properties and documents it tells about.
+# deploy_vscode.yml calls it to package the extension it publishes, so that what is published was tested.
+
+name: YUI Tooling
+
+on:
+  push:
+    branches-ignore:
+      - gh-pages
+    paths:
+      - .github/workflows/yui_tooling.yml
+      - cmake/tools/yui_tool/**
+      - modules/yup_data_model/**
+      - modules/yup_gui/**
+      - modules/yup_gui_markup/**
+      - modules/yup_audio_gui/**
+      - modules/yup_renderer/**
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      package:
+        description: Whether to package the extension and upload it as the artifact "vscode-yui"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-yui-tooling-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  INSTALL_DEPS: >-
+    libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev libfreetype6-dev
+    libx11-dev libxcomposite-dev libxcursor-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev
+    libxrandr-dev libxrender-dev libglu1-mesa-dev mesa-common-dev
+  EM_VERSION: 4.0.21
+  EMCC_SKIP_SANITY_CHECK: 1
+
+jobs:
+  # On macOS, where the tool has a GPU to render with
+  cli:
+    name: Command line tool
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
+      CMAKE_OBJC_COMPILER_LAUNCHER: ccache
+      CMAKE_OBJCXX_COMPILER_LAUNCHER: ccache
+    defaults:
+      run:
+        working-directory: cmake/tools/yui_tool
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: yui-tool
+          max-size: 1G
+
+      - name: Build the tool
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=
+          cmake --build build --config Release -j4
+
+      - name: Test the tool
+        run: python3 tests/test_cli.py build/yup_yui_tool
+
+  web:
+    name: Web tool and extension
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: modules/yup_gui_markup/tools/vscode-yui
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install dependencies
+        working-directory: ${{ github.workspace }}
+        run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+
+      - name: Setup emsdk
+        uses: mymindstorm/setup-emsdk@v15
+        with:
+          version: ${{ env.EM_VERSION }}
+
+      - name: Build the tool for the web
+        working-directory: cmake/tools/yui_tool
+        run: |
+          emcmake cmake -G Ninja -S . -B build_wasm -DCMAKE_BUILD_TYPE=Release
+          cmake --build build_wasm
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: modules/yup_gui_markup/tools/vscode-yui/package-lock.json
+
+      - name: Test the tool for the web
+        working-directory: cmake/tools/yui_tool
+        run: node --test tests/test_web.js
+
+      - name: Test the extension
+        run: |
+          sh tools/package-tool.sh
+          npm ci
+          npm run check
+          npm test
+
+      # vsce is a dependency of the extension: the version its package-lock.json holds, installed by the step above
+      - name: Package the extension
+        if: inputs.package
+        run: npx --no-install vsce package -o vscode-yui.vsix
+
+      - uses: actions/upload-artifact@v7
+        if: inputs.package
+        with:
+          name: vscode-yui
+          path: modules/yup_gui_markup/tools/vscode-yui/vscode-yui.vsix
+          if-no-files-found: error

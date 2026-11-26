@@ -58,8 +58,12 @@ namespace yup
       both textures.
     - `uv`, a `vec2` input at location 0, goes from (0, 0) at the top left of the
       target to (1, 1) at its bottom right, on every graphics API. Reading an
-      input at `uv` reads it where the pixel is written. Declaring it is optional.
-    - Its `vec4` output at location 0 is the pixel.
+      input at `uv` reads it where the pixel is written. Declaring it is optional,
+      and it is the only input there can be.
+    - Its `vec4` output at location 0 is the pixel, and the only output.
+
+    A draw binds nothing else, so nothing else can be declared: a storage buffer, a
+    storage image, a subpass input or a push constant block, in either stage.
 
     Colors are premultiplied by alpha, both in the textures read and in the color
     written.
@@ -137,7 +141,12 @@ public:
                  stage, or a fragment stage declaring a combined `sampler2D`,
                  several uniform blocks, a block larger than
                  ShaderUniforms::maxSizeInBytes, more than maxInputTextures textures,
-                 or a texture that is not a `texture2D`.
+                 a texture that is not a `texture2D`, an input other than a `vec2` at
+                 location 0, or anything but one `vec4` output at location 0. So does
+                 a stage declaring what no draw binds: a storage buffer, a storage
+                 image, a subpass input or a push constant block, and for the vertex
+                 stage a uniform block or a texture the fragment stage does not
+                 declare at the same set and binding.
     */
     static ResultValue<GpuImageShader::Ptr> createFromBundle (ShaderBundle::Ptr bundle);
 
@@ -189,6 +198,20 @@ public:
     */
     ShaderUniforms createUniforms() const;
 
+    /** Returns true if the shader has a variant of both stages for a graphics API,
+        the one a pipeline is compiled from when the shader is drawn with a device of
+        that API (see GpuDevice::getPlatform).
+
+        A shader compiled from GLSL source has one for every graphics API. A bundle
+        can be built for some of them only: drawing it with another fails, which
+        this tells before any device draws it, such as when the shader is loaded.
+        OpenGL ES takes the GLSL variant when the bundle has no ESSL one, as a draw
+        does.
+
+        @param platform  The graphics API.
+    */
+    bool canDrawWith (GpuPlatform platform) const noexcept;
+
     //==============================================================================
     /** Draws the shader over a whole target, as one render pass of a frame.
 
@@ -223,9 +246,9 @@ public:
 
         @returns Result::ok() once the pass is recorded, or why it was not: the
                  device has no GPU or was lost, an input the shader declares has
-                 no valid texture, the uniforms are not laid out for the shader,
-                 the target cannot be drawn into, or the pipeline could not be
-                 compiled for the device.
+                 no valid texture or is the texture of the target, the uniforms
+                 are not the ones of the shader, the target cannot be drawn into,
+                 or the pipeline could not be compiled for the device.
     */
     Result draw (const GpuDevice::Ptr& device,
                  GpuFrame& frame,

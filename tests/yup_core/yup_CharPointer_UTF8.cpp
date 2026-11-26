@@ -257,7 +257,7 @@ TEST_F (CharPointerUTF8Tests, UnencodableValuesAreWrittenAsReplacementCharacter)
     }
 
     const yup_wchar loneSurrogate[] = { 'a', 0xD800, 'b', 0 };
-    const String s (CharPointer_UTF32 (loneSurrogate));
+    const auto s = String (CharPointer_UTF32 (loneSurrogate));
 
     EXPECT_EQ (s.length(), 3);
     EXPECT_EQ (s[1], replacement);

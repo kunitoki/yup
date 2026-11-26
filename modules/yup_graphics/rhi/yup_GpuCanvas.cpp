@@ -79,6 +79,8 @@ Graphics& GpuCanvas::beginDraw (const GpuFrameDescriptor& frameDesc, float scale
     frameOpen = false;
     committed = false;
 
+    // The texture handed out next is another object: who kept the last one tells by it that the canvas was drawn
+    // into again, as ShaderEffect does to run its pass only over a picture that changed
     target->invalidateCachedTexture();
 
     graphics = std::make_unique<Graphics> (*context, *target->getRenderableTarget(), frameDesc, scale);

@@ -71,6 +71,11 @@ tree.setItems ({ "Sources/main.cpp", "Sources/Editor.cpp", "README.md" });
 TreeView { items: ["Sources/main.cpp", "Sources/Editor.cpp", "README.md"]; }
 ```
 
+A path names one item: the same path given twice is still one item, and two
+items with the same text cannot share a parent. The text of an item cannot
+hold a `/`, which always separates two levels. A tree that needs either is
+made of `TreeViewItem` objects.
+
 ## Opening and closing
 
 The user opens and closes items with the disclosure buttons, with a

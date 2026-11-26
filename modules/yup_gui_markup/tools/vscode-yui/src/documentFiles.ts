@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { isInsideFolders } from "./agentFiles";
 import { toolFilesFolder, YuiToolFile } from "./tool";
 
 /** A document as it is in its editor: its file and its text. */
@@ -18,7 +19,7 @@ export interface DocumentFiles {
 
     files: YuiToolFile[];
 
-    /** Why files the document names were not given, for who looks at it to be told: they are too large. */
+    /** Why files the document names were not given, for who looks at it to be told: they are too large, or not where a document may read. */
     problems: string[];
 
     /** The files the document was given or looked for, which are no reason to run on it again (see noteMissingFiles). */
@@ -42,10 +43,16 @@ const told = new Map<string, Set<string>> ();
 const named = new Map<string, Set<string>> ();
 
 let unsavedText: (file: string) => string | undefined = () => undefined;
+let readableFolders: () => string[] = () => [];
 
 /** Sets who tells the text a file has in an editor while its changes are not saved, which is read in place of the file. */
 export function setUnsavedTexts (find: (file: string) => string | undefined): void {
     unsavedText = find;
+}
+
+/** Sets who tells the folders a document may read the files it names from, beside its own: those of the workspace. */
+export function setReadableFolders (find: () => string[]): void {
+    readableFolders = find;
 }
 
 function folderName (folder: string): string {
@@ -131,9 +138,33 @@ function megabytes (bytes: number): string {
     return `${(bytes / (1024 * 1024)).toFixed (1)} MB`;
 }
 
+/**
+    Tells why a file that is there was not given to the tool: it is larger than a file may be, or
+    the files given before it left no room for it.
+
+    @param name The file, as who looks at the document is told it.
+    @param size Its size in bytes.
+*/
+export function leftOutProblem (name: string, size: number): string {
+    if (size > maximumFileBytes)
+        return `'${name}' (${megabytes (size)}) is too large to be checked and shown here: the tool is given files of ${megabytes (maximumFileBytes)} at most. It is treated as missing`;
+
+    return `'${name}' is left out of what is checked and shown here: the tool is given the files of a document up to ${megabytes (maximumBytes)} together, which those before it take. It is treated as missing`;
+}
+
 function isInside (folder: string, file: string): boolean {
     const relative = path.relative (folder, file);
-    return ! relative.startsWith ("..") && ! path.isAbsolute (relative);
+
+    // Only `..` itself leads out: a name may start with two dots
+    return relative !== ".." && ! relative.startsWith (".." + path.sep) && ! path.isAbsolute (relative);
+}
+
+// What a document may read of what it names, unless who collects it says otherwise: the files of the workspace and
+// those of its own folder, where they really are. A document that is no file has no folder
+function readableBy (main: string): (file: string) => boolean {
+    const readable = path.isAbsolute (main) ? [...readableFolders (), path.dirname (main)] : readableFolders ();
+
+    return file => isInsideFolders (file, readable);
 }
 
 function commonFolder (files: string[]): string {
@@ -155,13 +186,16 @@ function commonFolder (files: string[]): string {
     the paths of a document are resolved from. A file is read as it is on disk, byte for byte,
     unless an editor holds changes of it that are not saved.
 
-    @param isAllowed Tells whether a file a document names may be read, for who must not read them all.
+    @param isAllowed Tells whether a file a document names may be read. Unless given, those of the folders
+                     of the workspace (see setReadableFolders) and of the folder of the document are,
+                     where they really are: a link leading out of them is not followed.
 */
-export async function collectDocumentFiles (document: EditedDocument, modelsPath: string | undefined, isAllowed: (file: string) => boolean = () => true): Promise<DocumentFiles> {
+export async function collectDocumentFiles (document: EditedDocument, modelsPath: string | undefined, isAllowed: (file: string) => boolean = readableBy (document.uri.fsPath)): Promise<DocumentFiles> {
     const main = document.uri.fsPath;
     const contents = new Map<string, Uint8Array> ([[main, Buffer.from (document.getText (), "utf8")]]);
     const pending = [main];
     const missing = new Set<string> ();
+    const refused: string[] = [];
     const problems: string[] = [];
     let total = 0;
 
@@ -170,13 +204,15 @@ export async function collectDocumentFiles (document: EditedDocument, modelsPath
         if (missing.has (file))
             return false;
 
-        const found = isAllowed (file) ? await read (file, Math.min (maximumFileBytes, maximumBytes - total)) : undefined;
+        const allowed = isAllowed (file);
+        const found = allowed ? await read (file, Math.min (maximumFileBytes, maximumBytes - total)) : undefined;
 
         if (found?.data === undefined) {
-            if (found !== undefined) {
-                problems.push (`'${path.relative (path.dirname (main), file)}' (${megabytes (found.size)}) is too large to be checked and shown here: `
-                               + `the tool is given the files of a document that have ${megabytes (maximumFileBytes)} at most, and ${megabytes (maximumBytes)} together. It is treated as missing`);
-            }
+            if (found !== undefined)
+                problems.push (leftOutProblem (path.relative (path.dirname (main), file), found.size));
+
+            if (! allowed)
+                refused.push (file);
 
             missing.add (file);
             return false;
@@ -209,6 +245,12 @@ export async function collectDocumentFiles (document: EditedDocument, modelsPath
         }
     }
 
+    // A file that is there and is left unread for where it is, is told: the tool only finds it missing
+    for (const file of refused) {
+        if (fs.existsSync (file))
+            problems.push (`'${path.relative (path.dirname (main), file)}' is outside the folders of the workspace and of the document, so it is not read. It is treated as missing`);
+    }
+
     // The files keep the places they have relative to each other, under the folder holding them all
     const folder = commonFolder (Array.from (contents.keys ()));
     const toolPath = (file: string) => `${folderName (folder)}/${path.relative (folder, file).split (path.sep).join ("/")}`;
@@ -217,6 +259,8 @@ export async function collectDocumentFiles (document: EditedDocument, modelsPath
     for (const [file, data] of contents) {
         if (isInside (folder, file))
             files.push ({ path: toolPath (file), data });
+        else
+            problems.push (`'${file}' is on another drive than the document, so the tool can't be given it with it. It is treated as missing`);
     }
 
     // The tool keeps the files it was given: one a document names and that is gone is forgotten there too

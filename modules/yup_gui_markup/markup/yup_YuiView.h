@@ -31,7 +31,8 @@ namespace yup
     The view owns a document and a loader filling it. After each load, the root of the
     document is a visible child of the view filling its bounds, so the interface follows the
     size, the visibility and the enabled state of the view, and a root replaced by a reload
-    takes the place of the previous one. The view paints nothing itself and isn't opaque.
+    takes the place of the previous one. The other children the view is given are left alone.
+    The view paints nothing itself and isn't opaque.
 
     @code
     YuiView view;

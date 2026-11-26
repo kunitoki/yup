@@ -108,6 +108,11 @@ changes. The component can also:
 `onLevelChanged (peakDb, averageDb)` and `onClippingChanged (isClipping)` report
 the levels to the rest of the UI.
 
+The meter repaints only when a level moved by a pixel. While it is hidden, or
+once its levels kept still for a second, it stops asking for frames, so its
+window can idle: it then looks at the state ten times a second and follows it
+again as soon as a level moves. A hidden meter reports no level.
+
 ## Waveforms and thumbnails
 
 `AudioViewComponent` draws a zoomable, scrollable multi-channel waveform. Give it
@@ -142,7 +147,9 @@ at several levels (16, 256 and 4096 by default), so any zoom level draws quickly
   and pixels, for drawing markers.
 - **Custom drawing:** override `paintOverlay()`, `paintBackground()`,
   `paintPlaceholder()` or `getChannelLabel()` to draw on top of the waveform or
-  change its look.
+  change its look. To move what `paintOverlay()` draws, such as a playhead,
+  call `repaint (area)` for the strip it left and the strip it entered: the
+  labels, the lanes and the waveform columns outside them are not painted again.
 
 <p align="center">
   <img class="rounded" src="../_static/images/yup_waveform_onsets.jpg" alt="A waveform view with onset markers drawn over it" width="640">
@@ -206,18 +213,38 @@ analyzerState.pushSamples (channelData, numSamples);
 Tell the component the sample rate when the device starts, for example from
 `audioDeviceAboutToStart()` with `analyzer.setSampleRate (device->getCurrentSampleRate())`.
 
-- **FFT:** `setFFTSize()`, `setWindowType()` and `setOverlapFactor()` set up the
-  analysis. `setFFTSize()` resizes the state too; a state starts at 2048 unless
-  you pass another size to its constructor.
+- **FFT:** the FFT size and the overlap belong to the state: set them with
+  `analyzerState.setFftSize()` and `analyzerState.setOverlapFactor()`. A state
+  starts at 2048 with an overlap of 0.75, unless you pass another size to its
+  constructor, and the component follows its state at the next update.
+  `setWindowType()` chooses the window of the component.
 - **Levels:** `setLevelMode()` shows peak, RMS or power decibels, or the power
   spectral density. `setReleaseTimeSeconds()` sets how fast the curve falls.
-- **Refresh:** `setUpdateRate()` sets a fixed refresh rate in Hz, or `0` to follow
-  the display.
+  `setDecibelRange()` keeps the scale between -200 and 60 dB.
+- **Refresh:** `setUpdateRate()` sets a fixed refresh rate in Hz, up to the one of
+  the display, or `0` to follow the display.
 - **Conversions:** `getFrequencyForBin()` and `getBinForFrequency()` convert
   between bins and frequencies.
 
 Give each display its own `SpectrumAnalyzerState`, so that two displays fed by
 the same signal don't consume each other's samples.
+
+A state allocates its FIFO once, when it is created, for the largest FFT size it
+will take: any size up to 65536 unless you say otherwise, which is about 1 MB.
+Pass the largest size you need as the second argument of its constructor to hold
+less, for example `yup::SpectrumAnalyzerState analyzerState { 2048, 4096 }` for
+an analyzer whose FFT size goes up to 4096 (64 KB). The state then ignores a
+larger size, and the displays never go beyond it. `setFftSize()` and
+`setOverlapFactor()` never allocate, so they can be called at any time and from
+any thread, also while the audio thread is pushing samples and the component is
+showing.
+
+The analyzer works only while it has something to show: it repaints when a level
+moved, and once the audio has stopped and the curve has come to rest it stops
+taking the frames of its window, so a window with nothing else to do costs
+nothing. It then looks at its state ten times a second, and is back within a
+tenth of a second of new samples. A hidden analyzer does nothing. The
+spectrogram does the same.
 
 ## Spectrogram
 
@@ -237,8 +264,9 @@ spectrogram.setDecibelRange (-100.0f, 10.0f);
 spectrogram.setColorMap (yup::SpectrogramColorMap::Type::heatmap);
 ```
 
-Besides the analysis settings it shares with the analyzer (`setFFTSize()`,
-`setWindowType()`, `setOverlapFactor()`, `setSampleRate()`), the spectrogram has:
+The spectrogram shares `setWindowType()`, `setSampleRate()`, the ranges and the
+levels of the analyzer's peak mode (a full-scale sine is 0 dBFS in both), and
+takes its FFT size and its overlap from its state the same way. It also has:
 
 - `setScrollSpeed()`: `1` scrolls in real time and `0` pauses.
 - `setColorMap()`: `heatmap`, `grayscale`, `cool`, `warm` or `viridis`.
@@ -268,6 +296,25 @@ for (int point = 0; point < mapping.getNumDisplayPoints(); ++point)
 
 `getRange (point)` returns the center frequency and the fractional bin range of a
 display point. The band levels can be aggregated as their `peak`, `sum` or `mean`.
+
+`SpectrumAnalysis` gives the bin levels to map. It is what the two displays read
+their state with: it follows the FFT size of the state, runs the windowed FFT of
+each frame and tells the amplitude of every bin, where a full-scale sine is 1.0.
+Use it on the message thread:
+
+```cpp
+yup::SpectrumAnalysis analysis (512); // the display points of its mapping
+analysis.setState (&analyzerState);
+analysis.setSampleRate (sampleRate);
+
+// At every update
+analysis.syncWithState();
+analysis.skipStaleFrames (4);
+
+for (int frame = 0; frame < 4 && analysis.processNextFrame(); ++frame)
+    for (int point = 0; point < analysis.getBinMapping().getNumDisplayPoints(); ++point)
+        displayLevels[point] = analysis.getBinMapping().getBandLevel (analysis.getBinAmplitudes(), point, yup::SpectrumBinMapping::BandAggregation::peak);
+```
 
 ## Cartesian plane
 
@@ -325,7 +372,8 @@ yup::MidiKeyboardComponent keyboard { keyboardState, yup::MidiKeyboardComponent:
 keyboardState.processNextMidiBuffer (midiBuffer, 0, numSamples, true);
 ```
 
-`ModWheelComponent` and `PitchWheelComponent` are the wheels next to the keys.
+`ModWheelComponent` and `PitchWheelComponent` are the wheels next to the keys,
+two kinds of `MidiWheelComponent`, which holds what they have in common.
 The mod wheel reports a value from `0` to `1` and stays where it is left. The
 pitch wheel reports `-1` to `1` and springs back to the center on release, unless
 `setResetOnRelease (false)`. Both follow the modulation wheel (CC 1) or pitch
@@ -357,6 +405,11 @@ Here `sendMidi()` stands for your own way of passing messages to the audio
 thread. Double-clicking a wheel restores `setDefaultValue()`,
 `setMouseDragSensitivity()` changes how far a drag moves it, and `onDragStart` /
 `onDragEnd` mark the gesture.
+
+The state doesn't move a wheel while it is dragged: the latest value it reported
+during the drag is applied when the drag ends, after the spring-back of the
+pitch wheel. Disabling or hiding a wheel that is being dragged ends the drag at
+once, with the spring-back and `onDragEnd`, so a gesture never stays open.
 
 ## Graph editor
 
@@ -520,7 +573,10 @@ has it, or remove it first with `setState (nullptr)`.
 What belongs to a state is set on the state in C++, not written in the
 document: the FFT size and the overlap of a `SpectrumAnalyzerState`, which the
 audio thread fills, and the scale and the ballistics of a `KMeterState`, which
-several meters share. The properties a document writes on each type are listed
+several meters share. The FFT size and the overlap can be set at any time and
+from any thread, also while the audio thread fills the state and the document
+shows it: nothing is allocated, and the display follows at its next update. The
+properties a document writes on each type are listed
 by the [schema](../ui/yui/tooling.md#the-schema).
 
 ### Painting them with a drawing
@@ -561,7 +617,7 @@ meter and the keyboard.
 | Object | Audio thread | Message thread |
 |---|---|---|
 | `KMeterState` | `pushSamples()`, `processPendingAudio()` | `KMeterComponent` reads the levels |
-| `SpectrumAnalyzerState` | `pushSample()`, `pushSamples()` | The analyzer and spectrogram run the FFT and draw |
+| `SpectrumAnalyzerState` | `pushSample()`, `pushSamples()` | The analyzer and spectrogram run the FFT and draw; `setFftSize()` and `setOverlapFactor()` are safe from any thread |
 | `MidiKeyboardState` | `processNextMidiBuffer()` | Keyboard and wheels |
 | `AudioPeakProfileCache` | Not used | Requests and listeners; profiles built on its thread pool |
 | Every component | Never | Everything |

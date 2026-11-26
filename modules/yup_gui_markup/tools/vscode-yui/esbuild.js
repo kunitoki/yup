@@ -11,7 +11,7 @@ const tests = process.argv.includes ("--test");
 const outdir = tests ? "out-test" : "out";
 
 const options = {
-    entryPoints: tests ? ["test/agentServer.test.ts", "test/agentFiles.test.ts", "test/documentFiles.test.ts", "test/syntax.test.ts"]
+    entryPoints: tests ? ["test/agentServer.test.ts", "test/agentFiles.test.ts", "test/versionControl.test.ts", "test/documentFiles.test.ts", "test/diagnostics.test.ts", "test/positions.test.ts", "test/syntax.test.ts"]
                        : ["src/extension.ts", "src/toolWorker.ts"],
     outdir,
     bundle: true,

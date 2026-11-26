@@ -24,8 +24,9 @@ namespace yup
 
 //==============================================================================
 
-FrameAttachment::FrameAttachment (Component& component, Callback callbackToUse)
+FrameAttachment::FrameAttachment (Component& component, Callback callbackToUse, bool shouldBeActive)
     : callback (std::make_shared<const Callback> (std::move (callbackToUse)))
+    , active (shouldBeActive)
 {
     jassert (*callback != nullptr); // A frame attachment needs a function to call
 
@@ -45,6 +46,18 @@ FrameAttachment::~FrameAttachment()
 
 //==============================================================================
 
+void FrameAttachment::setActive (bool shouldBeActive)
+{
+    if (active == shouldBeActive)
+        return;
+
+    active = shouldBeActive;
+
+    updateNative();
+}
+
+//==============================================================================
+
 void FrameAttachment::frameStarted (double elapsedSeconds)
 {
     // The function may destroy this attachment, and must outlive its own call
@@ -57,7 +70,7 @@ void FrameAttachment::frameStarted (double elapsedSeconds)
 
 void FrameAttachment::updateNative()
 {
-    auto* newNative = owner != nullptr ? owner->getNativeComponent() : nullptr;
+    auto* newNative = owner != nullptr && active ? owner->getNativeComponent() : nullptr;
     auto* oldNative = native.get();
 
     if (newNative == oldNative)

@@ -115,7 +115,12 @@ public:
     static Ptr opacity (float amount = 1.0f);
 
     //==============================================================================
-    /** Sets the 4x5 color matrix. */
+    /** Sets the 4x5 color matrix.
+
+        Call it on the message thread, or with the message manager locked: a matrix that is not
+        the one the effect has is shown by the components the effect is set on, which are drawn
+        through it again without being painted again.
+    */
     void setMatrix (const Matrix& newMatrix) noexcept;
 
     /** Returns the current 4x5 color matrix. */
@@ -124,6 +129,9 @@ public:
     //==============================================================================
     /** @internal */
     void apply (Graphics& g, GpuTexture::Ptr inputTexture, Rectangle<float> bounds) override;
+
+    /** @internal */
+    void releaseResources() override;
 
 private:
     Matrix matrix;

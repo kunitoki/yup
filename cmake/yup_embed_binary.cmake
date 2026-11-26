@@ -35,7 +35,8 @@
 # at build time by custom commands of the same directory, as the initializer
 # list `yup_shader_bundler --output-inc` writes: the library is built after
 # them. A library can hold both. RESOURCE_NAMES names every one of them, in
-# order: the RESOURCES first, then the INCLUDES.
+# order: the RESOURCES first, then the INCLUDES. Configuring fails when there
+# are more or fewer names than files.
 #
 # After the call, link against <library_name> and include the generated header,
 # which exposes for each name:
@@ -52,11 +53,19 @@ function (yup_add_embedded_binary_resources library_name)
     # ==== RESOURCE_NAMES names the RESOURCES files, then the INCLUDES: byte arrays generated at build time
     set (resource_inputs ${YUP_ARG_RESOURCES} ${YUP_ARG_INCLUDES})
 
+    list (LENGTH YUP_ARG_RESOURCE_NAMES resource_names_count)
+    list (LENGTH resource_inputs resource_inputs_count)
+    if (NOT resource_names_count EQUAL resource_inputs_count)
+        _yup_message (FATAL_ERROR "yup_add_embedded_binary_resources: ${library_name} has ${resource_names_count} RESOURCE_NAMES "
+            "for ${resource_inputs_count} RESOURCES and INCLUDES: each of them needs a name, and no more")
+    endif()
+
     set (binary_output_path "${CMAKE_CURRENT_BINARY_DIR}/${YUP_ARG_OUT_DIR}")
     set (binary_scratch_path "${CMAKE_CURRENT_BINARY_DIR}/${YUP_ARG_OUT_DIR}/scratch")
     set (binary_header_path "${binary_output_path}/${YUP_ARG_HEADER}")
     set (binary_scratch_header_path "${binary_scratch_path}/${YUP_ARG_HEADER}")
     set (binary_sources "")
+    set (resources_hex_files "")
 
     add_library (${library_name} OBJECT)
 

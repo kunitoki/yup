@@ -24,6 +24,7 @@
 namespace yup
 {
 
+class SceneModelComponent;
 class SceneSurface;
 
 //==============================================================================
@@ -34,11 +35,21 @@ class SceneSurface;
     makes its entity under the entity of the node it is in, or under the root of the scene when
     it is directly inside the `Scene3D`. The entity is there as soon as the component is under a
     scene, keeps among its siblings the place the component has among the components, and is
-    destroyed with the component or when it leaves the scene, taking the entities under it
-    along. getEntity() gives it to code. A component moved to another parent leaves its scene
-    on the way: its entity is made again under the entity of the new parent, as are those of
-    the nodes inside it, with all that the components describe. What code attached to the
-    entity is not kept: a subclass attaches it from entityChanged().
+    destroyed with the component, taking the entities under it along. getEntity() gives it to
+    code.
+
+    A component taken out of its scene keeps its entity, out of the tree of the scene with the
+    entities under it, so neither drawn nor updated, until the next display frame of the
+    `Scene3D` it left: that frame destroys them, unless the component is back in the scene by
+    then. So a component moved to another parent of its scene moves its entity under the entity
+    of that parent, with all it holds: the entities of the nodes inside it, the model a
+    `Model3D` instantiated, the mesh a `Mesh3D` built, and what code attached to them or set on
+    their nodes. Until that frame the component still belongs to the scene it left, see
+    SceneComponent::findFor(). A `Scene3D` that is hidden takes no frame: that frame is then the
+    first one after it shows again. The entity is also released when that scene shows another one,
+    when its document loads again, when a file it reads changes and when it is destroyed. In
+    another scene the entities are made again, with all that the components describe. What code
+    attached to them is then not kept: a subclass attaches it from entityChanged().
 
     A node paints nothing and takes no room in a layout: the properties of a 2D component it
     inherits (its bounds, the layout item ones, the 2D transform, the opacity) have no effect.
@@ -89,7 +100,9 @@ class SceneSurface;
     entity, which it does not own: what it does not set is left as the model has it, and reads
     as nothing, and the entity gets back what the model gave it when the node stops setting it
     or goes. The 3D components inside a bound node make their entities under the entity of the
-    model, which is how a light is put on a part of it. Only a `Node3D` can be bound.
+    model, which is how a light is put on a part of it. Only a `Node3D` can be bound. Bind one
+    node to an entity: two both drive it, the last one to write showing, and each gives it back
+    what the model gave it when it goes, whichever goes first.
 
     @code
     Model3D {
@@ -183,7 +196,9 @@ public:
     /** Returns the entity of the node: the one it made, or the one of a model it is bound to.
 
         @returns The entity, or an invalid entity while the node is not in a scene or is bound
-                 to an entity its model does not have.
+                 to an entity its model does not have. A node taken out of its scene keeps the
+                 one it made, out of the tree of the scene, until the next display frame of
+                 that scene.
     */
     Entity getEntity() const noexcept;
 
@@ -281,6 +296,10 @@ public:
     void moved() override;
     /** @internal Gives the node components below a component the entities their place asks for: what a scene or a model instance that changed calls. */
     static void updateEntitiesBelow (Component& parent);
+    /** @internal Returns the scene the node left with an entity it still keeps, or nullptr: the one it belongs to, with the components inside it, until that entity is released. */
+    SceneComponent* getLeftScene() const;
+    /** @internal Destroys the entity the node kept when it left a scene, unless it is in a scene again: what the scene it left calls at its next frame. */
+    void releaseLeftEntity (const SceneComponent& leftScene);
     /** @internal Returns what shows the components inside the node on its mesh, or nullptr when it has none: what its scene updates, renders and lets go of. */
     SceneSurface* getSurface() const noexcept { return surface.get(); }
 
@@ -289,7 +308,8 @@ protected:
     /** Called when the node has another entity than before, or none anymore.
 
         A subclass attaches what it shows to getEntity() from here, when it is valid. Nothing
-        has to be taken away from the entity the node had: it was destroyed with its nodes.
+        has to be taken away from the entity the node had: it was destroyed with its nodes. A
+        node that moves to another parent of its scene keeps its entity, and is not called.
     */
     virtual void entityChanged() {}
 
@@ -297,6 +317,23 @@ protected:
         changing what the entity shows.
     */
     void repaintScene();
+
+    /** Tells whether a value given to a property of the node can be used, and reports it in
+        the diagnostics of the document when it can't.
+
+        What was reported about the property before is withdrawn (SceneComponent::clearProblems),
+        and a value that can't be used is reported (SceneComponent::reportProblem), which does
+        nothing while the node is not in a scene. The setter of a property calls it before it
+        keeps the value, and returns at once when it can't be used: who hears about the problem
+        may destroy the node.
+
+        @param property The property the value is given to.
+        @param isUsable Whether the value can be used.
+        @param expected What is expected of the value, as the problem is worded.
+
+        @returns isUsable.
+    */
+    bool checkValue (const Identifier& property, bool isUsable, const String& expected);
 
 private:
     //==============================================================================
@@ -316,9 +353,10 @@ private:
     };
 
     bool isBound() const;
-    void updateEntity();
+    void updateEntity (bool canKeepEntity = true);
     void releaseEntity();
     Entity findParentEntity();
+    SceneModelComponent* findModel();
     Entity findModelEntity (String& problem);
     void placeEntity (Entity parentEntity);
     void applyTransform();
@@ -333,6 +371,8 @@ private:
     Scene::Ptr scene; // Kept with the entity, which can then be asked at any time whether it is still there
     Entity entity;
     bool isEntityOwned = false;
+    bool isEntityLeaving = false;         // Out of the tree of its scene, which the node left, until that scene releases it or the node is back in it
+    WeakReference<Component> entityScene; // The SceneComponent the entity it made was last placed under: the one that releases it
     std::optional<Transform> boundTransform;
     bool boundVisible = true;
     bool drivesPosition = false;

@@ -34,6 +34,11 @@ namespace yup
     offset, and composites the sharp component subtree on top. Stylesheets apply alpha
     drop shadows through `filter: drop-shadow(...)` (see @ref FilterEffect).
 
+    The components the effect is set on show a change of its color, radius or offset by
+    themselves, with nothing to call on them: they are drawn through the effect again,
+    without being painted again. Set them on the message thread, or with the message
+    manager locked.
+
     @see ComponentEffect, FilterEffect, BlurEffect, GlowEffect
 
     @tags{UI}
@@ -77,6 +82,9 @@ public:
     //==============================================================================
     /** @internal */
     void apply (Graphics& g, GpuTexture::Ptr inputTexture, Rectangle<float> bounds) override;
+
+    /** @internal */
+    void releaseResources() override;
 
 private:
     std::atomic<uint32> colorArgb { 0x80000000u };

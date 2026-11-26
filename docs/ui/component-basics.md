@@ -389,6 +389,13 @@ comp.setOpaque (true);
 YUP will skip painting behind it where possible. Only use this when you paint
 every pixel of the component's bounds with a fully opaque fill.
 
+A component with a style set on it (`Component::setStyle()`, the drawing of a
+`.yui` element, a `drawing:` rule) is not painted as an opaque one, whatever
+`isOpaque()` returns: a style may paint rounded or translucent shapes, so what
+is behind the component is painted too. The opaque state counts again once the
+style is removed, and a style the theme has for the type of the component
+leaves it as it is.
+
 ### Unclipped rendering
 
 By default, child `paint()` is clipped to the component's bounds. To allow
@@ -448,11 +455,11 @@ private:
   component leaves it or is deleted.
 - A frame callback does not paint anything by itself: call `repaint()` when what
   is shown changed.
-- To get frames only for a while, hold a `std::optional<yup::FrameAttachment>`
-  and reset it when the animation ends. The function may reset its own
-  attachment.
-- A window with no attachment and nothing to repaint does no work per frame, so
-  attach only what needs every frame.
+- To get frames only for a while, stop the attachment with `setActive (false)`
+  when the animation ends and start it again with `setActive (true)`. The
+  function may stop its own attachment.
+- A window with no active attachment and nothing to repaint does no work per
+  frame, so keep active only what needs every frame.
 - Any object can own one, not just the component: pass the component whose
   window should drive it.
 

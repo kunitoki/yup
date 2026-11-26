@@ -40,6 +40,14 @@ protected:
         switchButton->setBounds (0, 0, 60, 30);
     }
 
+    /** Puts a component in a window of its own, and returns the native that sends its frames. */
+    static StubComponentNative& makeWindow (Component& component)
+    {
+        auto* native = new StubComponentNative (component, ComponentNative::defaultFlags);
+        yup::ComponentTestHelper<Component>::attachNative (component, native);
+        return *native;
+    }
+
     std::unique_ptr<SwitchButton> switchButton;
 };
 
@@ -295,6 +303,30 @@ TEST_F (SwitchButtonTest, KeepsItsSizeInALargerComponentAndStaysInItsMiddle)
     EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (switchButton->getProperty (Identifier ("thumbBounds"))), switchButton->getSwitchCircleBounds());
 }
 
+TEST_F (SwitchButtonTest, ThePointerHitsTheSwitchAndNotTheRoomAroundIt)
+{
+    Component panel;
+    panel.setVisible (true);
+    panel.setBounds (0.0f, 0.0f, 200.0f, 100.0f);
+
+    SwitchButton button;
+    button.setBounds (0, 0, 200, 100);
+    panel.addAndMakeVisible (button);
+
+    PointerSimulator pointer (panel);
+
+    // The switch keeps its size in the middle of the component: a press beside it is not a press of the switch
+    const auto bounds = button.getSwitchBounds();
+    ASSERT_EQ (bounds, Rectangle<float> (72.0f, 36.0f, 56.0f, 28.0f));
+
+    EXPECT_NE (pointer.click ({ 10.0f, 10.0f }), &button);
+    EXPECT_NE (pointer.click ({ 100.0f, 80.0f }), &button);
+    EXPECT_FALSE (button.getToggleState());
+
+    EXPECT_EQ (pointer.click (bounds.getCenter()), &button);
+    EXPECT_TRUE (button.getToggleState());
+}
+
 TEST_F (SwitchButtonTest, LargeAnimationTime)
 {
     switchButton->setMillisecondsToSpendMoving (5000);
@@ -327,4 +359,77 @@ TEST_F (SwitchButtonTest, SwitchWithVerySmallSize)
     auto circleBounds = switchButton->getSwitchCircleBounds();
     EXPECT_LE (circleBounds.getRight(), 1.0f);
     EXPECT_LE (circleBounds.getBottom(), 1.0f);
+}
+
+TEST_F (SwitchButtonTest, AsksForFramesOnlyWhileTheHandleSlides)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.setBounds (0.0f, 0.0f, 200.0f, 100.0f);
+    window.setVisible (true);
+    window.addAndMakeVisible (*switchButton);
+
+    switchButton->setMillisecondsToSpendMoving (100);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    const auto off = switchButton->getSwitchCircleBounds();
+
+    switchButton->setToggleState (true, dontSendNotification);
+    EXPECT_TRUE (native.hasFrameListeners());
+    EXPECT_EQ (switchButton->getSwitchCircleBounds(), off);
+
+    // The handle moves by the time of the frames, whatever the clock says
+    native.callFrameListeners (0.05);
+    const auto midway = switchButton->getSwitchCircleBounds();
+    EXPECT_GT (midway.getX(), off.getX());
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    native.callFrameListeners (0.06);
+    EXPECT_GT (switchButton->getSwitchCircleBounds().getX(), midway.getX());
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    window.removeChildComponent (*switchButton);
+}
+
+TEST_F (SwitchButtonTest, AHiddenSwitchAsksForNoFrameAndSlidesOnWhenItShowsAgain)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.setBounds (0.0f, 0.0f, 200.0f, 100.0f);
+    window.setVisible (true);
+    window.addAndMakeVisible (*switchButton);
+
+    switchButton->setMillisecondsToSpendMoving (100);
+
+    const auto off = switchButton->getSwitchCircleBounds();
+
+    switchButton->setToggleState (true, dontSendNotification);
+    native.callFrameListeners (0.05);
+    const auto midway = switchButton->getSwitchCircleBounds();
+    ASSERT_TRUE (native.hasFrameListeners());
+
+    // Hiding a parent hides the switch
+    window.setVisible (false);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    window.setVisible (true);
+    EXPECT_TRUE (native.hasFrameListeners());
+    EXPECT_EQ (switchButton->getSwitchCircleBounds(), midway);
+
+    native.callFrameListeners (0.06);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    const auto on = switchButton->getSwitchCircleBounds();
+    EXPECT_GT (on.getX(), midway.getX());
+
+    // Toggled out of sight it has nowhere to slide: the handle is at its end when the switch shows again
+    switchButton->setVisible (false);
+    switchButton->setToggleState (false, dontSendNotification);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    switchButton->setVisible (true);
+    EXPECT_FALSE (native.hasFrameListeners());
+    EXPECT_EQ (switchButton->getSwitchCircleBounds(), off);
+
+    window.removeChildComponent (*switchButton);
 }

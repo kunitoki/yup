@@ -68,7 +68,8 @@ public:
     //==============================================================================
     /** Sets the zoom factor.
 
-        A zoom factor of 1.0 fits the whole buffer in view. Higher values zoom in.
+        A zoom factor of 1.0 fits the whole buffer in view. Higher values zoom in. Set while the view
+        has no audio, the factor is kept and applies to the audio the view is given next.
     */
     void setZoomFactor (double newZoomFactor);
 
@@ -155,7 +156,12 @@ protected:
     /** Paints the placeholder when no waveform data is available. */
     virtual void paintPlaceholder (Graphics& g, const Rectangle<float>& bounds);
 
-    /** Paints overlays (playheads, markers) over the waveform. */
+    /** Paints overlays (playheads, markers) over the waveform.
+
+        It is called at every paint of the view, whatever part of it is repainted. To move what it
+        paints, as a playhead, ask for the strips it leaves and enters with repaint (area) instead
+        of the whole view: the labels and the lanes outside them are not painted again.
+    */
     virtual void paintOverlay (Graphics& g, const Rectangle<float>& waveformBounds);
 
     /** Returns the channel label to show for a given channel index. */

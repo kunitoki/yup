@@ -23,9 +23,12 @@
 
 #include <optional>
 
-/** Returns the exit code of a command line that names no command to run, after printing the usage.
+/** Returns the exit code of a command line that names no command to run, or asks for help, after printing the usage.
 
-    @returns nothing when `argv[1]` names a command, which @ref runYuiToolCommand then runs.
+    The usage asked for with `--help` or `-h`, alone or after a command, goes to the standard output and is no
+    error. The one a command line naming no command is answered with goes to the standard error.
+
+    @returns nothing when `argv[1]` names a command to run, which @ref runYuiToolCommand then runs.
 */
 std::optional<int> checkYuiToolCommand (int argc, char** argv);
 

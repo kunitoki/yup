@@ -10,7 +10,8 @@ const fs = require ("node:fs");
 const path = require ("node:path");
 const { before, test } = require ("node:test");
 
-const createYuiTool = require (process.env.YUI_TOOL_WASM ?? path.join (__dirname, "../build_wasm/yup_yui_tool.js"));
+const script = require.resolve (process.env.YUI_TOOL_WASM ?? path.join (__dirname, "../build_wasm/yup_yui_tool.js"));
+const createYuiTool = require (script);
 const repository = path.join (__dirname, "../../../..");
 
 let tool;
@@ -162,7 +163,10 @@ test ("what is not a command is refused with the usage", () => {
 test ("rendering to an image is left to the native tool", () => {
     write ("render/main.yui", "Column {}\n");
 
-    assert.equal (run ("render", "render/main.yui", "--output", "main.png").code, 3);
+    const result = run ("render", "render/main.yui", "--output", "main.png");
+
+    assert.equal (result.code, 3);
+    assert.match (result.stderr, /no graphics device to render with/);
 });
 
 test ("the tools of an agent are listed, with those only a page can run", () => {
@@ -272,6 +276,8 @@ test ("an agent is told why a tool can't answer", () => {
     write ("agent/plain.yui", "Column {}\n");
 
     assert.equal (agent ("yui_check", { file: "agent/missing.yui" }).isError, true);
+    assert.match (agent ("yui_check", { file: "../outside.yui" }).text, /'file' is a file inside '\/yui'/);
+    assert.match (agent ("yui_check", { file: "agent/plain.yui", models: "/outside.json" }).text, /'models' is a file inside '\/yui'/);
     assert.equal (agent ("yui_bogus").isError, true);
     assert.match (agent ("yui_render", { file: "agent/plain.yui" }).text, /no graphics device/);
     assert.match (agent ("yui_render", { file: "agent/plain.yui", output: "agent/plain.png" }).text, /nowhere to write/);
@@ -482,6 +488,16 @@ test ("a material is compiled from its source, around the template of the render
     assert.match (diagnostics[0].message, /^shader Rim: /);
     assert.match (diagnostics[0].message, /material:3/);
     assert.match (diagnostics[0].message, /missingValue/);
+});
+
+test ("the module tells nothing of where it was built", () => {
+    // What a module embeds or was compiled from is named in its script or in the binary beside it
+    for (const file of [script, script.replace (/[.]js$/, ".wasm")]) {
+        const content = fs.readFileSync (file);
+
+        assert.equal (content.includes ("modules/yup_renderer/shaders/"), false, file);
+        assert.equal (content.includes (repository), false, file);
+    }
 });
 
 test ("a model the host did not give is reported and told as missing, and loads once it is given", () => {

@@ -1,3 +1,4 @@
+import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -44,14 +45,42 @@ export function isInsideFolders (file: string, folders: string[]): boolean {
 
     return found !== undefined && folders.some (folder => {
         const relative = path.relative (realPath (folder) ?? folder, found);
-        return relative.length > 0 && ! relative.startsWith ("..") && ! path.isAbsolute (relative);
+
+        // Only `..` itself leads out: a name may start with two dots
+        return relative.length > 0 && relative !== ".." && ! relative.startsWith (".." + path.sep) && ! path.isAbsolute (relative);
     });
 }
 
-/** Writes an image given in base64 to a file, with the folders it needs, replacing the one there. */
-export async function saveImage (file: string, base64: string): Promise<void> {
+/**
+    Writes an image given in base64 to a file, with the folders it needs, replacing the one there.
+
+    The file is written whole or not at all: it takes the place of the one there once it is complete.
+
+    @param folders The folders the file must be inside of where it really is (see isInsideFolders). What
+                   leads to it may have changed since it was named, so it is looked at again here.
+*/
+export async function saveImage (file: string, base64: string, folders: string[]): Promise<void> {
+    const check = () => {
+        if (! isInsideFolders (file, folders))
+            throw new Error (`'${file}' is not inside the folders it may be written to`);
+    };
+
+    // Neither its folders nor the file are made through a link leading elsewhere
+    check ();
     await fs.promises.mkdir (path.dirname (file), { recursive: true });
-    await fs.promises.writeFile (file, Buffer.from (base64, "base64"));
+    check ();
+
+    const partial = `${file}.${crypto.randomBytes (6).toString ("hex")}.tmp`;
+
+    try {
+        // A file of that name is never there to be written through, and taking the place of a link does not follow it
+        await fs.promises.writeFile (partial, Buffer.from (base64, "base64"), { flag: "wx" });
+        await fs.promises.rename (partial, file);
+    }
+    catch (error) {
+        await fs.promises.rm (partial, { force: true }).catch (() => undefined);
+        throw error;
+    }
 }
 
 /** Adds a member to the answer of a tool, which is left as it is when it is not an object. */

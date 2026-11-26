@@ -182,7 +182,7 @@ public:
         @param link A callable taking the entities of the instance, indexed by Part::getIndex(),
                     so the first one is the entity made by the root part. An entity destroyed
                     while the tree was being built, by an attach callback for example, is
-                    invalid there.
+                    invalid there, and so are the ones of the parts it held.
     */
     void addLink (std::function<void (Span<const Entity>)> link);
 
@@ -191,7 +191,8 @@ public:
 
         Parts become entities in order, parents before children, so attach callbacks and
         signals see the parents already built. Deep hierarchies can't overflow the stack.
-        The links then run, see addLink().
+        An entity that such a callback destroys gets no more nodes, and nothing is made of the
+        parts it held. The links then run, see addLink().
 
         @param scene  The scene to create the entities in.
         @param parent The entity to add the tree to, or an invalid entity for the root of the scene.

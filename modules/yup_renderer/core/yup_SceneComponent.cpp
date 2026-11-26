@@ -42,7 +42,9 @@ SceneCameraComponent* findActiveSceneCamera (const Component& parent, const Scen
     for (int i = 0; i < parent.getNumChildComponents(); ++i)
     {
         auto* node = dynamic_cast<SceneNodeComponent*> (parent.getChildComponent (i));
-        if (node == nullptr)
+
+        // A node that left the tree of the scene shows nothing in it, nor do the nodes inside it
+        if (node == nullptr || node->getLeftScene() != nullptr)
             continue;
 
         if (auto* camera = dynamic_cast<SceneCameraComponent*> (node))
@@ -74,6 +76,14 @@ void findSceneAssetUsers (const Component& parent, std::vector<WeakReference<Com
         if (dynamic_cast<SceneNodeComponent*> (child) != nullptr)
             findSceneAssetUsers (*child, users);
     }
+}
+
+/* Whether a component inside a scene is shown as a component, over the scene it is written directly in or on the mesh of the
+   node it is in: every component that is not part of the scene. */
+bool isSceneSurfaceComponent (const Component& component)
+{
+    return dynamic_cast<const SceneNodeComponent*> (&component) == nullptr
+        && dynamic_cast<const SceneMaterialComponent*> (&component) == nullptr;
 }
 
 /* Calls a function with each node below a component, a node before the ones inside it. The function must not change the components. */
@@ -188,7 +198,10 @@ struct SceneComponent::DocumentLink final : ComponentDocument::Listener
         const BailOutChecker checker (&owner);
 
         owner.lastPick.reset();
-        owner.updateMeshes();
+        owner.releaseLeavingNodes();
+
+        if (! checker.shouldBailOut())
+            owner.updateMeshes();
 
         if (! checker.shouldBailOut())
             owner.updateSurfaces();
@@ -229,12 +242,31 @@ SceneComponent::~SceneComponent()
         if (auto* surface = node.getSurface())
             surface->release();
     });
+
+    // So do the entities kept for the nodes that left, which no frame will release. A node still below the component
+    // is told by its parent that it goes
+    const auto isBelow = [this] (const Component* component)
+    {
+        while (component != nullptr && component != this)
+            component = component->getParentComponent();
+
+        return component == this;
+    };
+
+    for (const auto& leaving : std::exchange (leavingNodes, {}))
+    {
+        if (auto* node = dynamic_cast<SceneNodeComponent*> (leaving.get()); node != nullptr && ! isBelow (node))
+            node->releaseLeftEntity (*this);
+    }
 }
 
 //==============================================================================
 
 void SceneComponent::setScene (Scene::Ptr newScene)
 {
+    // The features read as the scene shown resolves them: another scene may give them other values
+    const auto shown = getSettings();
+
     // The scene shown before stays until the components below have left it
     const auto previous = std::exchange (scene, std::move (newScene));
 
@@ -248,7 +280,25 @@ void SceneComponent::setScene (Scene::Ptr newScene)
         return;
 
     updateOpaqueState();
-    repaint();
+    repaintScene();
+
+    // Told last, as any change of a feature is: who hears about it may destroy the component
+    const auto settings = getSettings();
+
+    const std::pair<const Identifier*, bool> features[] = { { &SceneComponentIds::background, settings.backgroundColor != shown.backgroundColor },
+                                                            { &SceneComponentIds::ambient, settings.ambientColor != shown.ambientColor },
+                                                            { &SceneComponentIds::exposure, settings.exposure != shown.exposure },
+                                                            { &SceneComponentIds::toneMapping, settings.toneMapping != shown.toneMapping },
+                                                            { &SceneComponentIds::defaultLight, settings.useDefaultLight != shown.useDefaultLight } };
+
+    for (const auto& [property, isChanged] : features)
+    {
+        if (isChanged)
+            notifyPropertyChanged (*property);
+
+        if (checker.shouldBailOut())
+            return;
+    }
 }
 
 Scene& SceneComponent::getOrCreateScene()
@@ -268,8 +318,14 @@ void SceneComponent::sceneChanged()
     watchScene();
     lastPick.reset();
 
-    // Their entities are made again in the scene, or in one made for them when it is nullptr
+    // Their entities are made again in the scene, or in one made for them when it is nullptr. The ones kept for the
+    // nodes that left the scene shown before have no scene to come back to
     const BailOutChecker checker (this);
+    releaseLeavingNodes();
+
+    if (checker.shouldBailOut())
+        return;
+
     SceneNodeComponent::updateEntitiesBelow (*this);
 
     if (checker.shouldBailOut())
@@ -319,6 +375,9 @@ void SceneComponent::setContinuousUpdates (bool shouldUpdateContinuously)
         return;
 
     continuousUpdates = shouldUpdateContinuously;
+
+    // Its frames come whether or not the component is painted
+    requestFrame();
     featureChanged (SceneComponentIds::continuous);
 }
 
@@ -367,6 +426,16 @@ Color SceneComponent::getAmbientColor() const
 
 void SceneComponent::setExposure (float newExposure)
 {
+    clearProblems (*this, SceneComponentIds::exposure);
+
+    // A multiplier that is negative, or that is not a number, exposes nothing: the scene keeps the one it has. Told last,
+    // as who hears about it may destroy the component
+    if (! (newExposure >= 0.0f && std::isfinite (newExposure)))
+    {
+        reportProblem (*this, SceneComponentIds::exposure, "expected a multiplier that is not negative");
+        return;
+    }
+
     if (getExposure() == newExposure)
         return;
 
@@ -411,16 +480,21 @@ bool SceneComponent::isDefaultLightEnabled() const
 
 SceneComponent* SceneComponent::findFor (Component& component)
 {
+    auto* node = dynamic_cast<SceneNodeComponent*> (&component);
+
     for (auto* parent = component.getParentComponent(); parent != nullptr; parent = parent->getParentComponent())
     {
         if (auto* view = dynamic_cast<SceneComponent*> (parent))
             return view;
 
-        if (dynamic_cast<SceneNodeComponent*> (parent) == nullptr)
-            break;
+        node = dynamic_cast<SceneNodeComponent*> (parent);
+
+        if (node == nullptr)
+            return nullptr;
     }
 
-    return nullptr;
+    // The topmost node is in no scene: the one it left, with what is inside it, for as long as it keeps its entity
+    return node != nullptr ? node->getLeftScene() : nullptr;
 }
 
 ComponentDocument* SceneComponent::findDocument()
@@ -533,6 +607,14 @@ void SceneComponent::reportProblem (const DataTree& element, const Identifier& p
 
 void SceneComponent::assetChanged (const String& path)
 {
+    // A node on its way to another parent is not below the component, to be told: it comes back with entities made
+    // again, from the files as they are by then
+    const BailOutChecker checker (this);
+    releaseLeavingNodes();
+
+    if (checker.shouldBailOut())
+        return;
+
     // Forgotten before anything asks for it again: the first to ask reads the file, the others share what it read
     models.erase (path);
     textures.erase (std::make_pair (path, true));
@@ -602,7 +684,7 @@ void SceneComponent::sendProblems()
     std::erase_if (problems, [this] (const Problem& problem)
     {
         auto* component = problem.component.get();
-        return component == nullptr || findFor (*component) != this;
+        return component == nullptr || (component != this && findFor (*component) != this);
     });
 
     // A copy: who hears about a problem may change the scene, or destroy it
@@ -631,6 +713,9 @@ void SceneComponent::deferMeshUpdate (SceneMeshComponent& mesh)
 
     // Followed, to build the mesh once the values the document is applying are all in
     findDocument();
+
+    // Built by the next frame, which tells what is wrong with its arrays
+    requestFrame();
 }
 
 void SceneComponent::updateMeshes()
@@ -640,6 +725,16 @@ void SceneComponent::updateMeshes()
             mesh->getMesh();
 }
 
+void SceneComponent::buildMeshes()
+{
+    // While painting: the component is not asked to repaint, and what is wrong with the arrays is left for updateMeshes() to tell
+    const ScopedValueSetter<bool> updating (isUpdatingScene, true);
+
+    for (const auto& changed : changedMeshes)
+        if (auto* mesh = dynamic_cast<SceneMeshComponent*> (changed.get()))
+            mesh->updateMesh();
+}
+
 void SceneComponent::deferSurfaceUpdate()
 {
     // Followed, to find what shows the components once the values the document is applying are all in
@@ -647,26 +742,74 @@ void SceneComponent::deferSurfaceUpdate()
     sceneContentChanged();
 }
 
+void SceneComponent::deferEntityRelease (SceneNodeComponent& node)
+{
+    // Once, and without the ones that are gone or back in a scene: nothing else empties the list while no frame is drawn
+    std::erase_if (leavingNodes, [this, &node] (const WeakReference<Component>& leaving)
+    {
+        const auto* left = dynamic_cast<const SceneNodeComponent*> (leaving.get());
+        return left == nullptr || left == &node || left->getLeftScene() != this;
+    });
+
+    leavingNodes.emplace_back (&node);
+
+    // Followed, to release the entity when the document loads too: a load is a frame for what it keeps
+    findDocument();
+
+    // The scene is not seen through a camera that left it, and is drawn without what the node showed
+    updateActiveCamera();
+    sceneContentChanged();
+}
+
+void SceneComponent::releaseLeavingNodes()
+{
+    // A node whose entity goes tells what it showed, and who hears about it may destroy the scene
+    const BailOutChecker checker (this);
+
+    for (const auto& leaving : std::exchange (leavingNodes, {}))
+    {
+        if (auto* node = dynamic_cast<SceneNodeComponent*> (leaving.get()))
+            node->releaseLeftEntity (*this);
+
+        if (checker.shouldBailOut())
+            return;
+    }
+}
+
 void SceneComponent::updateSurfaces()
 {
-    std::vector<std::pair<WeakReference<Component>, String>> found;
+    struct Finding
+    {
+        WeakReference<Component> node;
+        String problem;
+        DataTreeDiagnostic::Severity severity;
+    };
 
-    forEachSceneNode (*this, [&found] (SceneNodeComponent& node)
+    std::vector<Finding> found;
+
+    // Nothing tells when code changes the mesh or the material that show the components: while a node shows some, they
+    // are looked at on every frame
+    hasSurfaces = false;
+
+    forEachSceneNode (*this, [this, &found] (SceneNodeComponent& node)
     {
         if (auto* surface = node.getSurface())
         {
-            if (const auto problem = surface->update(); problem.isNotEmpty())
-                found.emplace_back (&node, problem);
+            auto severity = DataTreeDiagnostic::Severity::error;
+            hasSurfaces = true;
+
+            if (const auto problem = surface->update (severity); problem.isNotEmpty())
+                found.push_back ({ WeakReference<Component> (&node), problem, severity });
         }
     });
 
     // Told last, once every node was seen: who hears about a problem may destroy the nodes, and the scene
     const BailOutChecker checker (this);
 
-    for (const auto& [node, problem] : found)
+    for (const auto& [node, problem, severity] : found)
     {
         if (auto* component = node.get())
-            reportProblem (*component, {}, problem);
+            reportProblem (*component, {}, problem, severity);
 
         if (checker.shouldBailOut())
             return;
@@ -695,7 +838,7 @@ SceneNodeComponent* SceneComponent::pickNode (Point<float> position)
     {
         auto* child = getChildComponent (i);
 
-        if (! child->isVisible() || dynamic_cast<SceneNodeComponent*> (child) != nullptr)
+        if (! child->isVisible() || ! isSceneSurfaceComponent (*child))
             continue;
 
         if (const auto point = child->getLocalPointFromParent (position); point.has_value() && child->findComponentAtForMouseEvent (*point) != nullptr)
@@ -749,6 +892,12 @@ void SceneComponent::sceneContentChanged()
         return;
 
     isSceneOutdated = true;
+    repaintScene();
+}
+
+void SceneComponent::repaintScene()
+{
+    requestFrame();
     repaint();
 }
 
@@ -773,6 +922,39 @@ void SceneComponent::resized()
 void SceneComponent::childrenChanged()
 {
     lastPick.reset();
+}
+
+void SceneComponent::visibilityChanged()
+{
+    showingChanged();
+}
+
+void SceneComponent::parentHierarchyChanged()
+{
+    // Under another parent the component may show or not without its visibility being changed
+    showingChanged();
+}
+
+void SceneComponent::showingChanged()
+{
+    const auto showing = isShowing();
+
+    // Showing, its next frame carries on with what was left to do while it was hidden and finds out whether more frames
+    // are needed. Hidden, it takes none, which leaves its window free to skip its frames
+    frameAttachment.setActive (showing);
+
+    // What a hidden scene was rendered into is of no use until it shows again, where it is made again
+    if (! showing)
+        renderer.releaseTargets();
+}
+
+void SceneComponent::requestFrame()
+{
+    isFrameRequested = true;
+
+    // A hidden scene waits: it is given its frames once it shows again
+    if (! frameAttachment.isActive() && isShowing())
+        frameAttachment.setActive (true);
 }
 
 //==============================================================================
@@ -804,6 +986,11 @@ void SceneComponent::paint (Graphics& g)
 {
     rendered = false;
 
+    // Whoever asked for this paint may have changed the scene without telling, as code holding it does: what is under
+    // the pointer is looked for again, and the frame that follows looks at the scene
+    lastPick.reset();
+    requestFrame();
+
     const auto bounds = getLocalBounds();
     const auto background = getSettings().backgroundColor;
 
@@ -822,6 +1009,9 @@ void SceneComponent::paint (Graphics& g)
 
     if (scene == nullptr)
         return;
+
+    // A scene painted with no display frame before, as a snapshot is, draws the meshes its arrays make all the same
+    buildMeshes();
 
     auto& context = g.getGraphicsContext();
 
@@ -864,8 +1054,13 @@ void SceneComponent::paint (Graphics& g)
         g.fillAll();
     }
 
+    // Without a theme there is no font to write the message with
+    const auto theme = ApplicationTheme::getGlobalTheme();
+    if (theme == nullptr)
+        return;
+
     g.setFillColor (opaqueBackground.contrasting());
-    g.fillFittedText (error, ApplicationTheme::getGlobalTheme()->getDefaultFont(), bounds.reduced (10.0f));
+    g.fillFittedText (error, theme->getDefaultFont(), bounds.reduced (10.0f));
 }
 
 void SceneComponent::refreshDisplay (double lastFrameTimeSeconds)
@@ -874,10 +1069,14 @@ void SceneComponent::refreshDisplay (double lastFrameTimeSeconds)
     lastPick.reset();
 
     // Here and not in paint(), as building a mesh, or finding that a node draws none for the components inside it, may
-    // report what is wrong: who hears about it may destroy the scene
+    // report what is wrong: who hears about it may destroy the scene. So may a node that left the scene and is not
+    // back in it, whose entity goes now
     const BailOutChecker checker (this);
 
-    updateMeshes();
+    releaseLeavingNodes();
+
+    if (! checker.shouldBailOut())
+        updateMeshes();
 
     if (! checker.shouldBailOut())
         updateSurfaces();
@@ -891,12 +1090,46 @@ void SceneComponent::refreshDisplay (double lastFrameTimeSeconds)
     // Nothing tells when the background of the scene changes, its color being a plain field, so
     // it is resolved on every frame. Here and not in paint(): by then the frame has read which
     // components are opaque, to skip painting what they cover
+    const auto wasOpaque = isOpaque();
     updateOpaqueState();
 
     // Frames still accumulating are requested here, as paint() must not call repaint(). Only after
-    // a paint that rendered: a hidden or empty component would never converge
-    if (continuousUpdates || (rendered && ! renderer.isConverged()))
-        repaint();
+    // a paint that rendered since the frame before: a hidden or empty component would never converge
+    const auto isAccumulating = std::exchange (rendered, false) && ! renderer.isConverged();
+
+    // A background that turned opaque or not was painted as it was, when no frame came before its paint
+    if (continuousUpdates || isAccumulating || isOpaque() != wasOpaque)
+        repaintScene();
+}
+
+void SceneComponent::takeFrame (double elapsedSeconds)
+{
+    // Hidden, the scene is left as it is: its next frame, once it shows again, carries on from there
+    if (! isShowing())
+    {
+        frameAttachment.setActive (false);
+        return;
+    }
+
+    // What the frame finds can reach a listener that destroys the component
+    const BailOutChecker checker (this);
+
+    isFrameRequested = false;
+    refreshDisplay (elapsedSeconds);
+
+    // Nothing is left for the frames to do, and nothing asked for the next one meanwhile: the window is free to skip the
+    // frames it has nothing to paint in, until a change or a paint of the scene asks for them again
+    if (! checker.shouldBailOut() && ! isFrameRequested && ! needsEveryFrame())
+        frameAttachment.setActive (false);
+}
+
+bool SceneComponent::needsEveryFrame() const
+{
+    // What changes without telling is looked at on every frame: the scene that is updated, and what the shaders of the
+    // materials and the components shown on the meshes read
+    return continuousUpdates
+        || hasSurfaces
+        || (scene != nullptr && (SceneModelComponent::isPlayingIn (*scene) || SceneMaterialComponent::hasShadersIn (*scene)));
 }
 
 bool SceneComponent::updateAnimatedComponents (double elapsedSeconds)
@@ -943,15 +1176,15 @@ void SceneComponent::updateOpaqueState()
 
 void registerSceneComponentTypes()
 {
-    auto& registry = ComponentTypeRegistry::getInstance();
-
-    registry.registerType (SceneComponent::getClassTypeInfo());
-    registry.registerType (SceneNodeComponent::getClassTypeInfo());
-    registry.registerType (SceneCameraComponent::getClassTypeInfo());
-    registry.registerType (SceneLightComponent::getClassTypeInfo());
-    registry.registerType (SceneMeshComponent::getClassTypeInfo());
-    registry.registerType (SceneModelComponent::getClassTypeInfo());
-    registry.registerType (SceneMaterialComponent::getClassTypeInfo());
+    ComponentTypeRegistry::getInstance().registerDefaultTypes ({
+        SceneComponent::getClassTypeInfo(),
+        SceneNodeComponent::getClassTypeInfo(),
+        SceneCameraComponent::getClassTypeInfo(),
+        SceneLightComponent::getClassTypeInfo(),
+        SceneMeshComponent::getClassTypeInfo(),
+        SceneModelComponent::getClassTypeInfo(),
+        SceneMaterialComponent::getClassTypeInfo(),
+    });
 }
 
 } // namespace yup

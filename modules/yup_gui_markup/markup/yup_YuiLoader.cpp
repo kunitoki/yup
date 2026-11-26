@@ -94,9 +94,16 @@ Result YuiLoader::reload()
         return resolve (detail::normalizeYuiPath (path));
     };
 
-    const auto result = text.has_value()
-                          ? document.loadFromString (*text, resolveImport)
-                          : Result::fail ("Can't load '" + (file != File() ? file.getFullPathName() : resourcePath) + "'");
+    // The main file is told by the name the files next to it import it by, for the ones that import it back. A text
+    // that can't be read is a problem of the document like the ones of a text that can't be parsed
+    YuiParser::ParseResult parsed;
+
+    if (text.has_value())
+        parsed = YuiParser::parse (*text, resolveImport, mainPath.fromLastOccurrenceOf ("/", false, false));
+    else
+        parsed.diagnostics.push_back ({ .message = "Can't load '" + (file != File() ? file.getFullPathName() : resourcePath) + "'" });
+
+    const auto result = document.load (parsed);
 
     watchFiles();
 

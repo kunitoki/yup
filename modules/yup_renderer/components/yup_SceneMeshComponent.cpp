@@ -105,26 +105,32 @@ void SceneMeshComponent::geometryChanged()
 
 Mesh::Ptr SceneMeshComponent::getMesh()
 {
+    updateMesh();
+
+    const auto built = mesh;
+
+    // What is wrong with the arrays is told last: who hears about it may destroy the mesh
+    if (auto* view = SceneComponent::findFor (*this); view != nullptr && untoldProblem.isNotEmpty())
+        view->reportProblem (*this, std::exchange (untoldProperty, {}), std::exchange (untoldProblem, {}));
+
+    return built;
+}
+
+void SceneMeshComponent::updateMesh()
+{
     if (! std::exchange (isMeshOutdated, false))
-        return mesh;
+        return;
 
-    Identifier problemProperty;
-    String problem;
+    untoldProperty = {};
+    untoldProblem.clear();
 
-    const auto built = buildMesh (problemProperty, problem);
-    mesh = built;
+    mesh = buildMesh (untoldProperty, untoldProblem);
 
     if (auto entity = getEntity(); entity.isValid())
         entity.getOrAttach<MeshNode>().mesh = mesh;
 
     // The scene is painted with the mesh it now has: the one that asked for it may have been painted already
     repaintScene();
-
-    // What is wrong with the arrays is told last: who hears about it may destroy the mesh
-    if (auto* view = SceneComponent::findFor (*this); view != nullptr && problem.isNotEmpty())
-        view->reportProblem (*this, problemProperty, problem);
-
-    return built;
 }
 
 void SceneMeshComponent::entityChanged()
@@ -197,6 +203,9 @@ Mesh::Ptr SceneMeshComponent::buildMesh (Identifier& problemProperty, String& pr
 
         for (const auto index : triangles.numbers)
         {
+            if (index != std::floor (index))
+                return fail (triangles, "the index " + String (index) + " is not a whole number");
+
             if (! (index >= 0.0 && index < static_cast<double> (numVertices)))
                 return fail (triangles, "the index " + String (index, 0) + " is not the one of a vertex, there are " + count (numVertices));
 

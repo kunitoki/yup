@@ -147,30 +147,32 @@ void SwitchButton::paintButton (Graphics& g)
 
 void SwitchButton::refreshDisplay (double lastFrameTimeSeconds)
 {
-    if (! isAnimating)
-        return;
-
-    auto currentTime = Time::getCurrentTime();
-    auto elapsedMs = (currentTime - animationStartTime).inMilliseconds();
-
-    const float targetPosition = toggleState ? 1.0f : 0.0f;
-
-    if (elapsedMs >= millisecondsToSpendMoving)
+    if (isAnimating)
     {
-        isAnimating = false;
+        animationSeconds += jmax (0.0, lastFrameTimeSeconds);
 
-        handlePosition = targetPosition;
+        const float targetPosition = toggleState ? 1.0f : 0.0f;
+        const auto secondsToSpendMoving = millisecondsToSpendMoving / 1000.0;
+
+        if (animationSeconds >= secondsToSpendMoving)
+        {
+            isAnimating = false;
+
+            handlePosition = targetPosition;
+        }
+        else
+        {
+            float progress = static_cast<float> (animationSeconds / secondsToSpendMoving);
+
+            progress = progress * progress * (3.0f - 2.0f * progress);
+
+            handlePosition = animationStartPosition + (targetPosition - animationStartPosition) * progress;
+        }
+
+        repaint();
     }
-    else
-    {
-        float progress = jlimit (0.0f, 1.0f, static_cast<float> (elapsedMs) / static_cast<float> (millisecondsToSpendMoving));
 
-        progress = progress * progress * (3.0f - 2.0f * progress);
-
-        handlePosition = animationStartPosition + (targetPosition - animationStartPosition) * progress;
-    }
-
-    repaint();
+    updateFrameAttachment();
 }
 
 //==============================================================================
@@ -182,6 +184,18 @@ void SwitchButton::resized()
     // The handle is where its state puts it in the new bounds, with nothing to slide from
     isAnimating = false;
     handlePosition = toggleState ? 1.0f : 0.0f;
+
+    updateFrameAttachment();
+}
+
+void SwitchButton::visibilityChanged()
+{
+    updateFrameAttachment();
+}
+
+void SwitchButton::parentHierarchyChanged()
+{
+    updateFrameAttachment();
 }
 
 Rectangle<float> SwitchButton::getSwitchBounds() const
@@ -209,6 +223,11 @@ Rectangle<float> SwitchButton::getSwitchCircleBounds() const
     return circle.reduced (jmin (1.0f, size * 0.5f));
 }
 
+bool SwitchButton::hitTest (float x, float y)
+{
+    return getSwitchBounds().contains (x, y);
+}
+
 void SwitchButton::clicked()
 {
     // The button of a radio group that is on stays on when clicked. A change of state runs onClick itself
@@ -224,8 +243,8 @@ void SwitchButton::updateSwitchCirclePosition()
 {
     const float targetPosition = toggleState ? 1.0f : 0.0f;
 
-    // A switch with no room yet has nowhere to slide
-    if (millisecondsToSpendMoving <= 0 || getWidth() <= 0.0f || getHeight() <= 0.0f)
+    // A switch out of sight, or with no room yet, has nowhere to slide
+    if (millisecondsToSpendMoving <= 0 || getWidth() <= 0.0f || getHeight() <= 0.0f || ! isShowing() || getNativeComponent() == nullptr)
     {
         handlePosition = targetPosition;
         isAnimating = false;
@@ -235,9 +254,16 @@ void SwitchButton::updateSwitchCirclePosition()
     else if (! approximatelyEqual (targetPosition, handlePosition))
     {
         animationStartPosition = handlePosition;
-        animationStartTime = Time::getCurrentTime();
+        animationSeconds = 0.0;
         isAnimating = true;
     }
+
+    updateFrameAttachment();
+}
+
+void SwitchButton::updateFrameAttachment()
+{
+    frameAttachment.setActive (isAnimating && isShowing());
 }
 
 } // namespace yup

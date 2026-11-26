@@ -274,14 +274,30 @@ ComponentEffect::Ptr ColorMatrixEffect::opacity (float amount)
 
 void ColorMatrixEffect::setMatrix (const Matrix& newMatrix) noexcept
 {
-    const ScopedLock sl (matrixLock);
-    matrix = newMatrix;
+    {
+        const ScopedLock sl (matrixLock);
+
+        if (matrix == newMatrix)
+            return;
+
+        matrix = newMatrix;
+    }
+
+    invalidate();
 }
 
 ColorMatrixEffect::Matrix ColorMatrixEffect::getMatrix() const noexcept
 {
     const ScopedLock sl (matrixLock);
     return matrix;
+}
+
+void ColorMatrixEffect::releaseResources()
+{
+    pipeline = nullptr;
+    target = nullptr;
+    pipelineDevice = nullptr;
+    compileAttempted = false;
 }
 
 void ColorMatrixEffect::apply (Graphics& g, GpuTexture::Ptr inputTexture, Rectangle<float> bounds)

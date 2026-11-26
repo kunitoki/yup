@@ -122,6 +122,10 @@ form type is `YSLZ`, wrapping the complete `YSLB` file compressed with
 detects the form type and decompresses transparently; the decompressed data must
 be a `YSLB` bundle, so compressed bundles never nest.
 
+A load refuses a `raw size` above 256 times the size of the payload. So a bundle
+that packs tighter than that is saved as a plain `YSLB` file, whatever compression
+was asked for: what is saved always loads.
+
 ---
 
 ## 3. Per-Stage Chunk (`SHDR`)
@@ -416,3 +420,12 @@ anything for them, when:
 | A chunk is longer than what is left of its container | `ShaderBundle: truncated chunk data` |
 | A string is longer than what is left of its chunk | `ShaderBundle: truncated string data` |
 | A compressed bundle states a size its bytes can't expand to | `ShaderBundle: invalid compressed data size` |
+
+Nor does it trust the stages and the languages it names. A `SHDR` whose stage or
+source language, or a `VART` whose language, is none of the values the format
+has fails the load:
+
+| Problem | Message |
+|---|---|
+| A stage is not one of the six pipeline stages | `ShaderBundle: unknown shader stage` |
+| A language is not one of the six shader languages | `ShaderBundle: unknown shader language` |

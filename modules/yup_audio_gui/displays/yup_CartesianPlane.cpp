@@ -32,7 +32,7 @@ const ComponentTypeInfo& CartesianPlane::getClassTypeInfo()
     // values in declaration order. An end of a range written past the other one moves it out of its way, so that
     // they can be written in any order
     static const auto info = ComponentTypeBuilder<C> (Identifier ("CartesianPlane"))
-                                 .property ("title", &C::getTitle, &C::setTitle, String(), "The title drawn above the plot.")
+                                 .property ("title", &Component::getTitle, &Component::setTitle, String(), "The title drawn above the plot, which is the title of the component.")
                                  .styleableProperty ("titleColor", &C::getTitleColor, &C::setTitleColor, Colors::white, "The color of the title.")
                                  .styleableProperty ("backgroundColor", &C::getBackgroundColor, &C::setBackgroundColor, Color (0xFF1E1E1E), "The color behind the plot.")
                                  .property ("xMin", [] (const C& c) { return c.getXRange().getStart(); }, [] (C& c, double v)
@@ -113,18 +113,12 @@ void CartesianPlane::setYRange (double minY, double maxY)
 
 void CartesianPlane::setXScaleType (AxisScaleType scaleType)
 {
-    if (scaleType == AxisScaleType::logarithmic && xMin <= 0.0)
-        return; // Cannot use log scale with non-positive values
-
     xScaleType = scaleType;
     repaint();
 }
 
 void CartesianPlane::setYScaleType (AxisScaleType scaleType)
 {
-    if (scaleType == AxisScaleType::logarithmic && yMin <= 0.0)
-        return; // Cannot use log scale with non-positive values
-
     yScaleType = scaleType;
     repaint();
 }
@@ -152,8 +146,12 @@ void CartesianPlane::setMargins (const EdgeSpacing<int>& newMargins)
 
 void CartesianPlane::setTitle (const String& title)
 {
-    titleText = title;
-    repaint();
+    const BailOutChecker bailOutChecker (this);
+
+    Component::setTitle (title);
+
+    if (! bailOutChecker.shouldBailOut())
+        repaint();
 }
 
 void CartesianPlane::setTitleFont (const Font& font)
@@ -246,10 +244,10 @@ void CartesianPlane::setXAxisLabels (const std::vector<double>& values, const Co
     xAxisLabels.clear();
     if (! values.empty())
     {
-        int precision = determineAxisPrecision (values, xScaleType);
+        int precision = determineAxisPrecision (values, getXScaleType());
         for (auto value : values)
         {
-            String text = formatAxisValueWithPrecision (value, xScaleType, precision);
+            String text = formatAxisValueWithPrecision (value, getXScaleType(), precision);
             xAxisLabels.emplace_back (value, text, color, fontSize);
         }
     }
@@ -273,10 +271,10 @@ void CartesianPlane::setYAxisLabels (const std::vector<double>& values, const Co
     yAxisLabels.clear();
     if (! values.empty())
     {
-        int precision = determineAxisPrecision (values, yScaleType);
+        int precision = determineAxisPrecision (values, getYScaleType());
         for (auto value : values)
         {
-            String text = formatAxisValueWithPrecision (value, yScaleType, precision);
+            String text = formatAxisValueWithPrecision (value, getYScaleType(), precision);
             yAxisLabels.emplace_back (value, text, color, fontSize);
         }
     }
@@ -377,7 +375,7 @@ float CartesianPlane::valueToX (double value) const
     auto bounds = getPlotBounds();
 
     double normalised = 0.0;
-    if (xScaleType == AxisScaleType::logarithmic)
+    if (getXScaleType() == AxisScaleType::logarithmic)
     {
         if (value <= 0.0 || xMin <= 0.0 || xMax <= 0.0)
             return bounds.getX();
@@ -400,7 +398,7 @@ float CartesianPlane::valueToY (double value) const
     auto bounds = getPlotBounds();
 
     double normalised = 0.0;
-    if (yScaleType == AxisScaleType::logarithmic)
+    if (getYScaleType() == AxisScaleType::logarithmic)
     {
         if (value <= 0.0 || yMin <= 0.0 || yMax <= 0.0)
             return bounds.getBottom();
@@ -421,9 +419,12 @@ float CartesianPlane::valueToY (double value) const
 double CartesianPlane::xToValue (float x) const
 {
     auto bounds = getPlotBounds();
+    if (bounds.getWidth() <= 0.0f)
+        return xMin;
+
     double normalised = (x - bounds.getX()) / bounds.getWidth();
 
-    if (xScaleType == AxisScaleType::logarithmic)
+    if (getXScaleType() == AxisScaleType::logarithmic)
     {
         double logMin = std::log10 (xMin);
         double logMax = std::log10 (xMax);
@@ -439,9 +440,12 @@ double CartesianPlane::xToValue (float x) const
 double CartesianPlane::yToValue (float y) const
 {
     auto bounds = getPlotBounds();
+    if (bounds.getHeight() <= 0.0f)
+        return yMin;
+
     double normalised = (bounds.getBottom() - y) / bounds.getHeight();
 
-    if (yScaleType == AxisScaleType::logarithmic)
+    if (getYScaleType() == AxisScaleType::logarithmic)
     {
         double logMin = std::log10 (yMin);
         double logMax = std::log10 (yMax);
@@ -460,8 +464,8 @@ Rectangle<float> CartesianPlane::getPlotBounds() const
     return Rectangle<float> (
         static_cast<float> (margins.getLeft()),
         static_cast<float> (margins.getTop()),
-        static_cast<float> (bounds.getWidth() - margins.getHorizontal()),
-        static_cast<float> (bounds.getHeight() - margins.getVertical()));
+        jmax (0.0f, static_cast<float> (bounds.getWidth() - margins.getHorizontal())),
+        jmax (0.0f, static_cast<float> (bounds.getHeight() - margins.getVertical())));
 }
 
 //==============================================================================
@@ -472,6 +476,8 @@ void CartesianPlane::paint (Graphics& g)
     drawBackground (g);
 
     auto plotBounds = getPlotBounds();
+    if (plotBounds.getWidth() <= 0.0f || plotBounds.getHeight() <= 0.0f)
+        return;
 
     drawGrid (g, plotBounds);
     drawSignals (g, plotBounds);
@@ -636,7 +642,8 @@ void CartesianPlane::drawAxisLabels (Graphics& g, const Rectangle<float>& bounds
 
 void CartesianPlane::drawTitle (Graphics& g)
 {
-    if (titleText.isEmpty())
+    const auto title = getTitle();
+    if (title.isEmpty())
         return;
 
     g.setFillColor (titleColor);
@@ -647,7 +654,7 @@ void CartesianPlane::drawTitle (Graphics& g)
         getWidth() - margins.getHorizontal(),
         margins.getTop() - 4);
 
-    g.fillFittedText (titleText, titleFont, titleBounds, titleJustification);
+    g.fillFittedText (title, titleFont, titleBounds, titleJustification);
 }
 
 void CartesianPlane::drawLegend (Graphics& g, const Rectangle<float>& bounds)
@@ -673,9 +680,9 @@ void CartesianPlane::drawLegend (Graphics& g, const Rectangle<float>& bounds)
     float legendX = bounds.getX() + bounds.proportionOfWidth (legendPosition.getX()) - legendWidth;
     float legendY = bounds.getY() + bounds.proportionOfHeight (legendPosition.getY());
 
-    // Keep legend within bounds
-    legendX = jlimit (bounds.getX(), bounds.getRight() - legendWidth, legendX);
-    legendY = jlimit (bounds.getY(), bounds.getBottom() - legendHeight, legendY);
+    // Keep legend within bounds, at their start when it is larger than they are
+    legendX = jlimit (bounds.getX(), jmax (bounds.getX(), bounds.getRight() - legendWidth), legendX);
+    legendY = jlimit (bounds.getY(), jmax (bounds.getY(), bounds.getBottom() - legendHeight), legendY);
 
     Rectangle<float> legendBounds (legendX, legendY, static_cast<float> (legendWidth), static_cast<float> (legendHeight));
 

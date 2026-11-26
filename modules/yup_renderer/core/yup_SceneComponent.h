@@ -33,15 +33,27 @@ class SceneNodeComponent;
     the scene is. With a BackgroundNode color of alpha below 1 it is not: the scene is then drawn
     over what lies behind the component, which shows wherever no surface covers it, through the
     share the background leaves. The component keeps isOpaque() up to date by itself, when the
-    scene is set and on every display frame before it paints, so the background may change at any
-    time: do not call setOpaque() on it. When no GPU is available it fills its background, made
-    opaque, and shows a message instead. Clicking the component gives it the keyboard focus, so
-    mouse wheel events reach it.
+    scene is set and on the display frames it takes, so the background may change at any time: do
+    not call setOpaque() on it. A color written to the BackgroundNode of a scene that stood still
+    is found by the frame that follows the paint asked for after it: that paint still fills the
+    component, and the scene is painted once more. When no GPU is available it fills its
+    background, made opaque, and shows a message instead. Clicking the component gives it the
+    keyboard focus, so mouse wheel events reach it.
 
     By default the scene is drawn only when the component repaints: call repaint() after
     changing it. The full tier then keeps repainting on its own until its temporal anti-aliasing
     has converged, see SceneRenderer::isConverged(). With setContinuousUpdates (true) the
     component calls Scene::update() and repaints on every display frame, for animated scenes.
+
+    The component only takes the display frames of its window that it has something to do in, so
+    a window showing a scene that stands still is free to skip the frames it has nothing to paint
+    in. It takes every frame while it updates continuously, while a clip of a `Model3D` plays,
+    while a `Material3D` names a shader and while a node shows components on its mesh. Otherwise
+    it takes the ones that follow a change of the components of the scene, and the one that
+    follows each of its paints, which is where a change made to the scene from code is found:
+    until nothing is left to do. While it is not showing (Component::isShowing) it takes no
+    frame at all: the scene is neither updated nor looked at, and the renderer lets go of what it
+    rendered into (SceneRenderer::releaseTargets). It carries on once it shows again.
 
     In a `.yui` document the component is the `Scene3D` element, which needs no code. It makes a
     scene of its own the first time one is needed, see getOrCreateScene(), and the 3D components
@@ -98,6 +110,11 @@ public:
         again in the new one. With nullptr they make them in a scene created for them, see
         getOrCreateScene().
 
+        The features of the component are those of the scene it shows, so they are not carried
+        over to the new one: the background, the ambient light, the exposure, the tone mapping
+        and the default light read what the new scene resolves to, and the properties that read
+        another value than before are told to have changed.
+
         A scene is meant to be shown by one SceneComponent at a time: every component showing it
         updates it on its display frames, so its clips and the time of its shaders would run
         once for each component.
@@ -119,6 +136,10 @@ public:
 
     //==============================================================================
     /** Chooses whether the scene is updated and repainted on every display frame.
+
+        The frames are those of the window the component is in, while the component is showing
+        (Component::isShowing): hidden, the scene is not updated, and the first frame after it
+        shows again is given the time of one frame.
 
         @param shouldUpdateContinuously True to call Scene::update() and repaint every frame.
     */
@@ -154,7 +175,9 @@ public:
     /** Changes the multiplier applied to the scene color before tone mapping, through the
         ExposureNode of the root of the scene.
 
-        @param newExposure The multiplier, 1 leaves the scene as it is lit.
+        @param newExposure The multiplier, 1 leaves the scene as it is lit. One that is negative,
+                           or that is not a finite number, is reported in the diagnostics of the
+                           document and the scene keeps the one it has.
     */
     void setExposure (float newExposure);
 
@@ -296,9 +319,9 @@ public:
 
         This is what the nodes answer Component::hitTest() with, which gives them the mouse
         events, the `:hover` and `:pressed` states and their mouse cursor. The answer is kept for
-        the position until the scene may have changed: when a node changes, and at the next
-        display frame at the latest. Each triangle of the meshes whose bounds the ray enters is
-        tested, see Mesh::intersectTriangles().
+        the position until the scene may have changed: when a node changes, when the scene is
+        painted and at each display frame it takes. Each triangle of the meshes whose bounds the
+        ray enters is tested, see Mesh::intersectTriangles().
 
         @param position A position in the component.
 
@@ -310,7 +333,10 @@ public:
     /** Returns the SceneComponent a 3D component belongs to.
 
         This is the closest one above the component, reached through 3D components only: a
-        SceneNodeComponent inside an ordinary component is not part of the scene around it.
+        SceneNodeComponent inside an ordinary component is not part of the scene around it. A
+        node taken out of its scene still belongs to it, with the components inside it, for as
+        long as it keeps its entity: until the next display frame of that scene, see
+        SceneNodeComponent.
 
         @param component A SceneNodeComponent, or a component placed inside one.
 
@@ -333,7 +359,13 @@ public:
     /** @internal */
     void childrenChanged() override;
     /** @internal */
+    void visibilityChanged() override;
+    /** @internal */
+    void parentHierarchyChanged() override;
+    /** @internal Runs a display frame of the scene, whether the component is showing or not: what the frames of its window call while it shows and has something for them to do, and a snapshot before each of its paints. */
     void refreshDisplay (double lastFrameTimeSeconds);
+    /** @internal Paints the scene again, with a display frame before the paint: what a component calls after it changed how the scene is drawn, as sceneContentChanged() does for what it shows. */
+    void repaintScene();
     /** @internal Paints the scene again after a component changed what it shows: what was under the pointer is forgotten, and the scene is updated before it is drawn. */
     void sceneContentChanged();
     /** @internal Updates the scene with no time elapsed when a component changed it since it was last updated: what paint() does before it renders. */
@@ -346,6 +378,8 @@ public:
     void deferMeshUpdate (SceneMeshComponent& mesh);
     /** @internal Has the mesh and the material that show the components inside a node looked for before the next frame, and when its document has loaded. */
     void deferSurfaceUpdate();
+    /** @internal Keeps the entity of a node that left the scene, out of the tree of the scene, until the next frame, where it goes unless the node is back in the scene by then. */
+    void deferEntityRelease (SceneNodeComponent& node);
 
 private:
     struct DocumentLink;
@@ -373,15 +407,21 @@ private:
     void sendProblem (const Problem& problem);
     void sendProblems();
     void updateMeshes();
+    void buildMeshes();
     void updateSurfaces();
+    void releaseLeavingNodes();
     SceneNodeComponent* pickNode (Point<float> position);
     void assetChanged (const String& path);
     bool updateAnimatedComponents (double elapsedSeconds);
+    void requestFrame();
+    void takeFrame (double elapsedSeconds);
+    bool needsEveryFrame() const;
+    void showingChanged();
 
     Scene::Ptr scene;
     SceneRenderer renderer;
     bool continuousUpdates = false;
-    bool rendered = false;
+    bool rendered = false; // A paint rendered the scene since its last display frame
     Entity activeCamera;
     SignalConnection entityDestroyed;
     std::map<String, ResultValue<GltfModel>> models;
@@ -389,11 +429,14 @@ private:
     std::map<String, ResultValue<MaterialShader::Ptr>> materialShaders;
     std::vector<Problem> problems;
     Array<WeakReference<Component>> changedMeshes;
+    std::vector<WeakReference<Component>> leavingNodes; // The nodes that left the scene with an entity it keeps for them until its next frame
     std::optional<Pick> lastPick;
     bool isSceneOutdated = false;
     bool isUpdatingScene = false;
+    bool isFrameRequested = false; // Something asked for a display frame since the last one started
+    bool hasSurfaces = false;      // A node showed components on its mesh when the nodes were last looked at
     std::unique_ptr<DocumentLink> documentLink;
-    FrameAttachment frameAttachment { *this, bindFront (&SceneComponent::refreshDisplay, this) };
+    FrameAttachment frameAttachment { *this, bindFront (&SceneComponent::takeFrame, this) };
 
     template <class T>
     friend class ComponentTestHelper;

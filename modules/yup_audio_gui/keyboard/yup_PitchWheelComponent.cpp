@@ -69,10 +69,8 @@ const ComponentTypeInfo& PitchWheelComponent::getClassTypeInfo()
 
 //==============================================================================
 PitchWheelComponent::PitchWheelComponent (StringRef componentID)
-    : Component (componentID)
+    : MidiWheelComponent (componentID, Source::pitchWheel, true)
 {
-    setOpaque (true); // paint() always fully covers its bounds
-    setMouseCursor (MouseCursor::Hand);
 }
 
 PitchWheelComponent::PitchWheelComponent (MidiKeyboardState& stateToUse, StringRef componentID)
@@ -81,166 +79,12 @@ PitchWheelComponent::PitchWheelComponent (MidiKeyboardState& stateToUse, StringR
     setState (&stateToUse);
 }
 
-PitchWheelComponent::~PitchWheelComponent()
-{
-    if (state != nullptr)
-        state->removeListener (this);
-}
-
-//==============================================================================
-void PitchWheelComponent::setState (MidiKeyboardState* newState)
-{
-    if (state == newState)
-        return;
-
-    if (state != nullptr)
-        state->removeListener (this);
-
-    // What the previous state reported and isn't shown yet is not read from the new one
-    cancelPendingUpdate();
-
-    state = newState;
-
-    if (state != nullptr)
-        state->addListener (this);
-}
-
-//==============================================================================
-void PitchWheelComponent::setValue (double newValue, NotificationType notification)
-{
-    newValue = constrainValue (newValue);
-
-    if (! approximatelyEqual (value, newValue))
-    {
-        value = newValue;
-
-        const BailOutChecker bailOutChecker (this);
-
-        notifyPropertyChanged (PitchWheelComponentIds::value);
-        if (bailOutChecker.shouldBailOut())
-            return;
-
-        sendChangeNotification (notification, [this]
-        {
-            if (onValueChanged)
-                onValueChanged (value);
-        });
-
-        repaint();
-    }
-}
-
-void PitchWheelComponent::setDefaultValue (double newDefaultValue)
-{
-    defaultValue = constrainValue (newDefaultValue);
-}
-
-void PitchWheelComponent::setMidiChannel (int midiChannelNumber)
-{
-    jassert (midiChannelNumber > 0 && midiChannelNumber <= 16);
-
-    midiChannel.store (jlimit (1, 16, midiChannelNumber));
-}
-
-void PitchWheelComponent::setMouseDragSensitivity (double sensitivity)
-{
-    mouseDragSensitivity = std::max (0.001, sensitivity);
-}
-
 //==============================================================================
 void PitchWheelComponent::paint (Graphics& g)
 {
+    // Stays in the class: a subclass is painted with the style of the wheel type named here
     if (auto style = ApplicationTheme::findComponentStyle (*this))
         style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
-}
-
-void PitchWheelComponent::mouseDown (const MouseEvent& event)
-{
-    if (! isEnabled())
-        return;
-
-    isDragging = true;
-    mouseDragStartY = event.getPosition().getY();
-    valueOnMouseDown = value;
-
-    if (onDragStart)
-        onDragStart (event);
-
-    repaint();
-}
-
-void PitchWheelComponent::mouseDrag (const MouseEvent& event)
-{
-    if (! isEnabled() || ! isDragging)
-        return;
-
-    const auto height = getLocalBounds().getHeight();
-    if (height <= 0.0f)
-        return;
-
-    const auto normalizedDelta = ((static_cast<double> (mouseDragStartY) - event.getPosition().getY()) / height) * 2.0 * mouseDragSensitivity;
-    setValue (valueOnMouseDown + normalizedDelta);
-}
-
-void PitchWheelComponent::mouseUp (const MouseEvent& event)
-{
-    if (! isEnabled() || ! isDragging)
-        return;
-
-    isDragging = false;
-
-    if (resetOnRelease)
-        setValue (defaultValue);
-
-    if (onDragEnd)
-        onDragEnd (event);
-
-    repaint();
-}
-
-void PitchWheelComponent::mouseDoubleClick (const MouseEvent&)
-{
-    if (isEnabled())
-        setValue (defaultValue);
-}
-
-void PitchWheelComponent::mouseEnter (const MouseEvent&)
-{
-    isMouseOverWheel = true;
-    repaint();
-}
-
-void PitchWheelComponent::mouseExit (const MouseEvent&)
-{
-    isMouseOverWheel = false;
-    repaint();
-}
-
-//==============================================================================
-double PitchWheelComponent::constrainValue (double newValue) const noexcept
-{
-    return std::clamp (newValue, -1.0, 1.0);
-}
-
-//==============================================================================
-void PitchWheelComponent::handleNoteOn (MidiKeyboardState*, int, int, float)
-{
-}
-
-void PitchWheelComponent::handleNoteOff (MidiKeyboardState*, int, int, float)
-{
-}
-
-void PitchWheelComponent::handlePitchWheelMoved (MidiKeyboardState*, int midiChannelNumber, int)
-{
-    if (midiChannelNumber == midiChannel.load())
-        triggerAsyncUpdate();
-}
-
-void PitchWheelComponent::handleAsyncUpdate()
-{
-    if (state != nullptr)
-        setValue ((state->getPitchWheelPosition (midiChannel.load()) - 8192.0) / 8191.0, dontSendNotification);
 }
 
 } // namespace yup

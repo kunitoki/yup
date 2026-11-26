@@ -176,6 +176,25 @@ def test_component_keeps_the_effect_alive():
     assert component.getComponentEffect() is not None
 
 
+def test_component_effect_is_active_and_keeps_nothing_by_default():
+    effect = NoopEffect()
+
+    assert effect.isActive()
+
+    effect.releaseResources()
+
+
+def test_component_effect_tells_the_components_it_is_set_on_that_it_changed():
+    component = yup.Component()
+    effect = NoopEffect()
+
+    # On no component it asks for nothing
+    effect.invalidate()
+
+    component.setComponentEffect(effect)
+    effect.invalidate()
+
+
 # ==============================================================================
 # Component listeners
 # ==============================================================================

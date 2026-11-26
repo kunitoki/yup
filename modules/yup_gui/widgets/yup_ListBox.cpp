@@ -119,9 +119,9 @@ struct ListBoxIds
 
 const Identifier ListBox::Style::backgroundColorId { "listBoxBackground" };
 const Identifier ListBox::Style::outlineColorId { "listBoxOutline" };
-const Identifier ListBox::Style::rowBackgroundColorId { "rowBackground" };
-const Identifier ListBox::Style::selectedRowBackgroundColorId { "selectedRowBackground" };
-const Identifier ListBox::Style::hoveredRowBackgroundColorId { "hoveredRowBackground" };
+const Identifier ListBox::Style::rowBackgroundColorId { "listBoxRowBackground" };
+const Identifier ListBox::Style::selectedRowBackgroundColorId { "listBoxSelectedRowBackground" };
+const Identifier ListBox::Style::hoveredRowBackgroundColorId { "listBoxHoveredRowBackground" };
 const Identifier ListBox::Style::refreshIndicatorColorId { "listBoxRefreshIndicator" };
 const Identifier ListBox::Style::refreshIndicatorSizeId { "listBoxRefreshIndicatorSize" };
 
@@ -1180,6 +1180,16 @@ void ListBox::resized()
     dispatchPendingNotifications();
 }
 
+void ListBox::visibilityChanged()
+{
+    updateFrameAttachment();
+}
+
+void ListBox::parentHierarchyChanged()
+{
+    updateFrameAttachment();
+}
+
 void ListBox::refreshDisplay (double lastFrameTimeSeconds)
 {
     const auto deltaSeconds = jlimit (0.0, listBoxMaxFrameGapSeconds, lastFrameTimeSeconds);
@@ -2157,6 +2167,9 @@ bool ListBox::startDraggingSelectedRows (int touchIndex, Point<float> screenPosi
 //==============================================================================
 void ListBox::dispatchPendingNotifications()
 {
+    // Whatever moved the content got here: this is where the list knows whether it needs frames
+    updateFrameAttachment();
+
     const BailOutChecker checker (this);
 
     if (const auto position = scroller.getOffset(); position != lastNotifiedScrollPosition)
@@ -2215,6 +2228,14 @@ void ListBox::dispatchPendingNotifications()
         if (onEndReached)
             onEndReached();
     }
+}
+
+void ListBox::updateFrameAttachment()
+{
+    // A touch is timed by the frames, for its long press and for the speed it lets go with
+    const auto needsFrames = gesture.active || scroller.isAnimating() || refreshing;
+
+    frameAttachment.setActive (needsFrames && isShowing());
 }
 
 } // namespace yup

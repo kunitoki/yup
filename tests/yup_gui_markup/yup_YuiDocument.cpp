@@ -882,6 +882,33 @@ TEST_F (YuiDocumentTests, ValidatesDocumentTreesAgainstSchemaAndReportsLocations
     EXPECT_EQ (document.getDiagnostics().front().column, 5);
 }
 
+TEST_F (YuiDocumentTests, HoldsATreeBuiltInCodeToTheDepthOfAText)
+{
+    const auto nested = [] (int depth)
+    {
+        DataTree document ("yui");
+        auto parent = document;
+
+        for (int level = 0; level < depth; ++level)
+        {
+            DataTree child ("Component");
+            parent.beginTransaction().addChild (child);
+            parent = child;
+        }
+
+        return document;
+    };
+
+    YuiDocument document;
+    ASSERT_TRUE (document.load (nested (8)).wasOk());
+    auto* root = document.getRoot();
+
+    const auto result = document.load (nested (200));
+    EXPECT_TRUE (result.failed());
+    EXPECT_TRUE (result.getErrorMessage().contains ("nested")) << result.getErrorMessage();
+    EXPECT_EQ (document.getRoot(), root);
+}
+
 TEST_F (YuiDocumentTests, LiveTreeMutationsUpdateComponentsAndStyleSheetAutomatically)
 {
     YuiDocument document;
@@ -908,12 +935,123 @@ TEST_F (YuiDocumentTests, LiveTreeMutationsUpdateComponentsAndStyleSheetAutomati
     auto labelNode = liveTree.getChild (1).getChild (1);
 
     labelNode.beginTransaction().setProperty ("text", "\"Live\"");
+
+    // The interface follows once the changes are over, from the message loop, which a test stands for
+    EXPECT_EQ (title->getText(), "Init");
+    document.applyPendingChanges();
+
     EXPECT_EQ (document.findById<Label> ("title"), title);
     EXPECT_EQ (title->getText(), "Live");
 
     styleDecl.beginTransaction().setProperty ("value", "12");
+    document.applyPendingChanges();
+
     EXPECT_EQ (document.findById<Slider> ("knob"), knob);
     EXPECT_DOUBLE_EQ (static_cast<double> (knob->findProperty (Identifier ("trackWidth"))), 12.0);
+}
+
+TEST_F (YuiDocumentTests, TellsListenersEachTimeTheInterfaceIsBuiltAgainWithoutALoad)
+{
+    struct Recorder final : YuiDocument::Listener
+    {
+        void documentLoaded (YuiDocument& document, const Result& result) override
+        {
+            loads.add (result.wasOk());
+            numProblems.add (static_cast<int> (document.getDiagnostics().size()));
+        }
+
+        void documentDiagnosed (YuiDocument&, const DataTreeDiagnostic&) override
+        {
+            ++numDiagnosed;
+        }
+
+        Array<bool> loads;
+        Array<int> numProblems;
+        int numDiagnosed = 0;
+    };
+
+    DataTree tree ("sequencer");
+    tree.beginTransaction().setProperty ("length", 1);
+
+    DataTreeBindingProvider sequencer (tree, nullptr);
+
+    YuiDocument document;
+    document.setModel ("seq", sequencer);
+
+    Recorder recorder;
+    document.addListener (&recorder);
+
+    ASSERT_TRUE (document.loadFromString ("Row { id: row; Slider { id: knob; value: 0.5; } repeat i in 0 .. seq.length { Label {} } }").wasOk());
+    auto* root = document.getRoot();
+
+    // A change of the tree that keeps the root, and has a problem to list
+    auto row = document.getTree().getChild (0);
+    row.getChild (0).beginTransaction().setProperty ("value", "missing");
+    EXPECT_EQ (recorder.loads, Array<bool> ({ true }));
+
+    document.applyPendingChanges();
+    EXPECT_EQ (document.getRoot(), root);
+    EXPECT_EQ (recorder.loads, Array<bool> ({ true, true }));
+    EXPECT_EQ (recorder.numProblems, Array<int> ({ 0, 1 }));
+
+    // A change of a range
+    tree.beginTransaction().setProperty ("length", 3);
+    document.applyPendingChanges();
+    EXPECT_EQ (document.findById ("row")->getNumChildComponents(), 4);
+    EXPECT_EQ (recorder.loads, Array<bool> ({ true, true, true }));
+
+    // A change of the tree the interface can't be built for, which is kept as it was
+    row.getChild (0).beginTransaction().setProperty ("value", "0.25");
+    row.beginTransaction().addChild (DataTree ("Missing"));
+    document.applyPendingChanges();
+    EXPECT_EQ (document.findById ("row")->getNumChildComponents(), 4);
+    EXPECT_EQ (recorder.loads, Array<bool> ({ true, true, true, false }));
+
+    // Both changing lead to one build
+    row.beginTransaction().removeChild (2);
+    tree.beginTransaction().setProperty ("length", 2);
+    document.applyPendingChanges();
+    EXPECT_EQ (document.findById ("row")->getNumChildComponents(), 3);
+    EXPECT_DOUBLE_EQ (document.findById<Slider> ("knob")->getValue(), 0.25);
+    EXPECT_EQ (recorder.loads, Array<bool> ({ true, true, true, false, true }));
+    EXPECT_EQ (recorder.numProblems.getLast(), 0);
+
+    // The problems of a build are told with it, not one by one
+    EXPECT_EQ (recorder.numDiagnosed, 0);
+
+    document.removeListener (&recorder);
+}
+
+TEST_F (YuiDocumentTests, AProblemHasNoPositionOnceElementsAreAddedRemovedOrMovedInTheTree)
+{
+    YuiDocument document;
+    ASSERT_TRUE (document.loadFromString ("Column {\n    Slider { id: knob; value: missing; }\n    Label { id: caption; }\n}").wasOk());
+
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics().front().line, 2);
+
+    // A property changing moves no element: the problem is still where it was written
+    auto column = document.getTree().getChild (0);
+    column.getChild (1).beginTransaction().setProperty ("text", "\"Gain\"");
+    document.applyPendingChanges();
+
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics().front().line, 2);
+    EXPECT_TRUE (document.getSourceMap() != nullptr);
+
+    // An element added before the slider puts it where the label was written, which is not its line
+    column.beginTransaction().addChild (DataTree ("Label"), 0);
+    document.applyPendingChanges();
+
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().front().message.startsWith ("Slider.value: ")) << document.getDiagnostics().front().message;
+    EXPECT_EQ (document.getDiagnostics().front().line, 0);
+    EXPECT_TRUE (document.getSourceMap() == nullptr);
+
+    // Until a text is loaded
+    ASSERT_TRUE (document.loadFromString ("Column {\n    Label {}\n    Slider { id: knob; value: missing; }\n}").wasOk());
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics().front().line, 3);
 }
 
 TEST_F (YuiDocumentTests, ADrawingTakesArraysForTheValuesNumbersMake)

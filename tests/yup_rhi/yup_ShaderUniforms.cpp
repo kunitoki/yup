@@ -351,6 +351,23 @@ TEST_F (ShaderUniformsTests, LeavesOutMembersItCannotSet)
     EXPECT_TRUE (isZeroed (uniforms));
 }
 
+TEST_F (ShaderUniformsTests, LeavesOutAnArrayDeclaringNoStride)
+{
+    // A reflection read from a file: with no stride every element would be the first one, however many it declares
+    for (const auto count : { 2u, 65536u, 0xffffffffu })
+    {
+        const ShaderUniforms uniforms (makeBlock (16, { makeArray (makeMember ("levels", BaseType::float32, 0), count, 0), makeMember ("gain", BaseType::float32, 4) }));
+
+        EXPECT_FALSE (uniforms.hasMember ("levels")) << count;
+        EXPECT_EQ (uniforms.getNumComponents ("levels"), 0) << count;
+        EXPECT_TRUE (uniforms.hasMember ("gain")) << count;
+    }
+
+    // An array of one element needs none
+    const ShaderUniforms single (makeBlock (16, { makeArray (makeMember ("levels", BaseType::float32, 0), 1, 0) }));
+    EXPECT_EQ (single.getNumComponents ("levels"), 1);
+}
+
 TEST_F (ShaderUniformsTests, SetsFromVarNumbersBooleansAndArrays)
 {
     ShaderUniforms uniforms (makeBlock (48, { makeMember ("intensity", BaseType::float32, 0), makeMember ("count", BaseType::int32, 4), makeMember ("enabled", BaseType::boolean, 8), makeMember ("tint", BaseType::float32, 16, 4), makeMember ("cell", BaseType::int32, 32, 2) }));
@@ -423,4 +440,31 @@ TEST_F (ShaderUniformsTests, ComparesMembersAndBytes)
     ShaderUniforms other (otherBlock);
     EXPECT_TRUE (other.set ("strength", 0.5f));
     EXPECT_FALSE (first == other);
+}
+
+TEST_F (ShaderUniformsTests, TellsTheUniformsOfTheSameBlockWhateverTheyHold)
+{
+    ShaderUniforms first (makeVectorBlock());
+    ShaderUniforms second (makeVectorBlock());
+
+    EXPECT_TRUE (first.set ("intensity", 0.5f));
+    EXPECT_FALSE (first == second);
+    EXPECT_TRUE (first.hasSameLayoutAs (second));
+    EXPECT_TRUE (second.hasSameLayoutAs (first));
+    EXPECT_TRUE (ShaderUniforms().hasSameLayoutAs (ShaderUniforms()));
+    EXPECT_FALSE (first.hasSameLayoutAs (ShaderUniforms()));
+
+    // As many bytes, laid out for a member of another name, then for one at another place
+    auto renamed = makeVectorBlock();
+    renamed.members.front().name = "strength";
+    EXPECT_FALSE (first.hasSameLayoutAs (ShaderUniforms (renamed)));
+
+    auto moved = makeVectorBlock();
+    moved.members.front().offset = 4;
+    EXPECT_FALSE (first.hasSameLayoutAs (ShaderUniforms (moved)));
+
+    // The same members in a larger block
+    auto larger = makeVectorBlock();
+    larger.blockSize = 64;
+    EXPECT_FALSE (first.hasSameLayoutAs (ShaderUniforms (larger)));
 }

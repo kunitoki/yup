@@ -125,6 +125,10 @@ public:
     /** @internal */
     void resized() override;
     /** @internal */
+    void visibilityChanged() override;
+    /** @internal */
+    void parentHierarchyChanged() override;
+    /** @internal */
     const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
     /** @internal */
     void refreshDisplay (double lastFrameTimeSeconds);
@@ -139,6 +143,7 @@ private:
     void updateScrollBars();
     void updateViewPosition();
     void updateViewPositionFromScroller();
+    void updateFrameAttachment();
 
     Component* viewedComponent = nullptr;
     std::unique_ptr<Component> ownedComponent;
@@ -153,7 +158,7 @@ private:
     float scrollStep = 40.0f;
     bool showVerticalScrollBar = true;
     bool showHorizontalScrollBar = true;
-    FrameAttachment frameAttachment { *this, bindFront (&Viewport::refreshDisplay, this) };
+    FrameAttachment frameAttachment { *this, bindFront (&Viewport::refreshDisplay, this), false };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Viewport)
 };

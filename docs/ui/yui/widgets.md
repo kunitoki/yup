@@ -4,6 +4,10 @@ A `drawing:` rule replaces what paints a widget, and keeps everything else:
 its layout, its input, its value. This page lists what each widget tells a
 drawing, so that the drawing can paint it whole.
 
+A drawing paints what it likes of the widget. Where it paints nothing, or a
+translucent color, what is behind the widget shows: a drawing needs no
+background of its own.
+
 A drawing reads three kinds of things from the component it paints:
 
 - its **properties**, by name: its state (`value`, `checked`, `hovered`), the
@@ -53,9 +57,9 @@ style {
 | `ToggleButton` | `text`, `checked` | `text` |
 | `SwitchButton` | `checked`, `vertical`, `trackBounds` (the switch, of the size its style gives it and centered), `thumbBounds` (it slides when toggled) | - |
 | `Label` | `text`, `justification`, `strokeWidth` | `text`, `textOutline` |
-| `ComboBox` | `text`, `open`, `items`, `selectedIndex` | `text` (takes `bounds`) |
-| `Slider` | `value`, `normalized`, `minValue`, `maxValue`, `minNormalized`, `maxNormalized`, `dragging`, `sliderType`, `trackBounds`, `thumbSize` | - |
-| `Slider` with `incDecButtons` | `decrementBounds`, `incrementBounds`, `pressedStep`, `decimalPlaces` | - |
+| `ComboBox` | `text`, `open`, `items`, `selectedIndex`, `textBounds`, `arrowBounds` | `text` (takes `bounds`, goes in `textBounds` without) |
+| `Slider` | `value`, `normalized`, `minValue`, `maxValue`, `minNormalized`, `maxNormalized`, `dragging`, `sliderType`, `trackBounds`, `thumbBounds`, `thumbSize` | - |
+| `Slider` with `incDecButtons` | `decrementBounds`, `incrementBounds`, `pressedStep`, `decimalPlaces` (the theme shows 3 at most) | - |
 | `ScrollBar` | `thumbBounds`, `trackBounds`, `thumbHovered`, `dragging`, `scrollingNeeded`, `visibilityMode` | - |
 | `ProgressBar` | `progress`, `indeterminate`, `phase` | - |
 | `Image` | `source`, `fitting`, `justification`, `imageOpacity` | `image` (takes `bounds`) |
@@ -64,11 +68,15 @@ style {
 - `thumbBounds` of a `SwitchButton` and `phase` of an indeterminate
   `ProgressBar` move at every frame while they animate: the widget repaints,
   and the drawing reads where they are.
-- A `Slider` tells its track, not its thumb: a thumb is where `normalized`
-  puts it along `trackBounds`, with the size the drawing gives it. The two
-  thumbs of a two-value slider are at `minNormalized` and `maxNormalized`.
+- A linear `Slider` tells its track and its thumb: `thumbBounds` is centered
+  where `normalized` puts the value along `trackBounds`, as large as
+  `thumbSize`, and is what a press grabs. A press on the track beside it brings
+  it under the pointer. The two thumbs of a two-value slider are at
+  `minNormalized` and `maxNormalized`.
 - A `SwitchButton` and a stepper keep their size in a larger component and
-  are centered in it: `trackBounds` tells where they are.
+  are centered in it: `trackBounds` tells where they are. A press beside the
+  switch, in the room the component has around it, is not a press of the
+  switch.
 
 ## Text
 

@@ -83,6 +83,29 @@ protected:
 
         return materialNode != nullptr ? materialNode->material : Material::Ptr();
     }
+
+    /** A glTF model holding everything as data URIs: the scene Main with Panel, whose mesh is made of two
+        primitives, a triangle each over the same texture coordinates.
+    */
+    static MemoryBlock twoPrimitiveFile()
+    {
+        return bytesOf (String (R"({
+            "asset": { "version": "2.0" },
+            "scene": 0,
+            "scenes": [ { "name": "Main", "nodes": [ 0 ] } ],
+            "nodes": [ { "name": "Panel", "mesh": 0 } ],
+            "meshes": [ { "name": "PanelMesh", "primitives": [ { "attributes": { "POSITION": 0, "TEXCOORD_0": 2 } },
+                                                               { "attributes": { "POSITION": 1, "TEXCOORD_0": 2 } } ] } ],
+            "buffers": [ $FRONT, $BACK, $UVS ],
+            "bufferViews": [ { "buffer": 0, "byteLength": 36 }, { "buffer": 1, "byteLength": 36 }, { "buffer": 2, "byteLength": 24 } ],
+            "accessors": [ { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3" },
+                           { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+                           { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" } ]
+        })")
+                            .replace ("$FRONT", bufferOf<float> ({ -1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f, 1.0f, 1.0f, 0.0f }))
+                            .replace ("$BACK", bufferOf<float> ({ -1.0f, -1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, -1.0f }))
+                            .replace ("$UVS", bufferOf<float> ({ 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f })));
+    }
 };
 
 TEST_F (SceneSurfaceTests, TheComponentsInsideANodeAreShownOnItsMeshAndTheOnesInsideTheSceneOverIt)
@@ -827,6 +850,66 @@ TEST_F (SceneSurfaceTests, ANodeWithoutAMaterialIsGivenOneThatLooksAsItsMeshWoul
 
     EXPECT_EQ (materialOf (*painted), nullptr);
     EXPECT_FALSE (panel->isManuallyComposited());
+}
+
+TEST_F (SceneSurfaceTests, AMeshOfSeveralPrimitivesShownByTheMaterialOfTheSurfaceIsWarnedAbout)
+{
+    files["panel.gltf"] = twoPrimitiveFile();
+
+    const auto text = [] (const String& material)
+    {
+        return "Scene3D {\n"
+               "    id: view;\n"
+               "    Model3D {\n"
+               "        source: \"panel.gltf\";\n"
+               "        Node3D {\n"
+               "            id: panel; node: \"Panel\"; "
+             + material
+             + "\n"
+               "            Label { text: \"Shown\"; width: 100; height: 20; }\n"
+               "        }\n"
+               "    }\n"
+               "}";
+    };
+
+    YuiDocument document;
+    serve (document);
+
+    const auto result = document.loadFromString (text (""));
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    auto* view = showSceneOf (document);
+    auto* panel = document.findById<SceneNodeComponent> ("panel");
+
+    ASSERT_NE (view, nullptr);
+    ASSERT_NE (panel, nullptr);
+    ASSERT_NE (panel->getEntity().get<MeshNode>(), nullptr);
+    ASSERT_NE (panel->getEntity().get<MeshNode>()->mesh, nullptr);
+    ASSERT_EQ (panel->getEntity().get<MeshNode>()->mesh->getNumPrimitives(), 2);
+
+    // The components are shown all the same, by the material the surface gives the part, which is then the one of
+    // both primitives: a warning says so, where the node is written
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
+
+    const auto& diagnostic = document.getDiagnostics().front();
+    EXPECT_EQ (diagnostic.message, "Node3D: the components inside a node are shown by one material, which takes the place of the ones of the 2 primitives of its mesh: "
+                                   "give the node a Material3D to choose that material, or bind it to a part drawn with one");
+    EXPECT_EQ (diagnostic.line, 5);
+    EXPECT_EQ (diagnostic.severity, DataTreeDiagnostic::Severity::warning);
+    EXPECT_NE (materialOf (*panel), nullptr);
+
+    // Told once, whatever the number of frames
+    view->refreshDisplay (0.0);
+    view->refreshDisplay (0.0);
+    EXPECT_EQ (Internals::getNumProblems (*view), 1u);
+    EXPECT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
+
+    // A Material3D of the node is the material its author chose for the whole part: nothing to tell
+    load (document, text ("Material3D { }"));
+
+    view = document.findById<SceneComponent> ("view");
+    ASSERT_NE (view, nullptr);
+    EXPECT_EQ (Internals::getNumProblems (*view), 0u);
 }
 
 TEST_F (SceneSurfaceTests, TheMaterial3DOfANodeIsTheOneThatShowsItsComponents)

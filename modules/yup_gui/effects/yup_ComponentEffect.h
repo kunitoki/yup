@@ -22,6 +22,7 @@
 namespace yup
 {
 
+class Component;
 class Graphics;
 class GpuTexture;
 
@@ -37,9 +38,19 @@ class GpuTexture;
     the main Graphics context, allowing arbitrary shader-based post-processing
     such as blurs, drop shadows, colour adjustments, or custom GLSL effects.
 
+    Where no offscreen texture can be made, without a GPU or for a component larger than
+    a texture of the device can be, the component is painted directly, without its effect.
+    So it is with an effect that tells it has nothing to apply, see isActive().
+
     Subclass ComponentEffect and override apply() to implement custom effects.
     Use g.getGraphicsContext() to access the GPU device for creating GpuPipeline
     and GpuCanvas resources.
+
+    The offscreen texture is kept from one paint to the next, and painted again only
+    where the component or one of its children repainted. An effect knows the components
+    it is set on: when what it draws changes, such as one of its parameters, invalidate()
+    has each of them drawn through apply() again over the texture as it is. The setters of
+    an effect call it, so nothing has to be called on a component for a change of its effect.
 
     Effects that move pixels around (waves, lenses, zooms) should also override
     displayToContent() and contentToDisplay(), so that mouse input lands on the
@@ -52,6 +63,9 @@ class YUP_API ComponentEffect : public ReferenceCountedObject
 public:
     /** A shared pointer to a ComponentEffect. */
     using Ptr = ReferenceCountedObjectPtr<ComponentEffect>;
+
+    /** Creates an effect, which is set on no component yet. */
+    ComponentEffect() = default;
 
     /** Destructor. */
     virtual ~ComponentEffect() override = default;
@@ -78,6 +92,53 @@ public:
                              room it has. For a snapshot it is the local bounds.
     */
     virtual void apply (Graphics& g, GpuTexture::Ptr inputTexture, Rectangle<float> bounds) = 0;
+
+    /**
+        Tells whether the effect has something to apply.
+
+        A component only goes through an effect that is active: it is rendered into an offscreen
+        texture, and drawn back by apply(). With an effect that is not active it is painted as if
+        it had none: directly, with no texture in between, and with its points mapped by neither
+        displayToContent() nor contentToDisplay().
+
+        Return false while apply() would draw the texture as it is, such as with a shader that
+        could not be loaded, or with a parameter that turns the effect off. Repaint the component
+        when the value changes, with Component::repaint().
+
+        This is called on the message thread and while the window is painted, as
+        displayToContent() is: the same threading rules apply.
+
+        The default implementation returns true.
+
+        @return True if the component has to be drawn through apply().
+
+        @see Component::setComponentEffect
+    */
+    virtual bool isActive() const
+    {
+        return true;
+    }
+
+    /**
+        Releases what the effect keeps of the window it was last applied in.
+
+        An effect that keeps GPU objects from one apply() to the next (targets, pipelines,
+        textures, canvases, or the GpuDevice they were made with) has to let go of them here:
+        they belong to the device of a window, which may be gone by the next apply(). Kept
+        longer, they hold that device alive past its window and are released once its
+        rendering context is gone, or with the context of another window current.
+
+        A component calls it for its effect when it leaves its window: when it is removed from
+        a parent that is in one, and before the window is destroyed when it is taken off the
+        desktop, itself or with an ancestor. It is called on the message thread, never while
+        apply() runs, and may be called more than once in a row. The next apply() makes what
+        the effect needs again, for the device it is then given.
+
+        The default implementation does nothing.
+
+        @see Component::setComponentEffect
+    */
+    virtual void releaseResources() {}
 
     /**
         Maps a point in the displayed (post-effect) local space of the component to the
@@ -131,6 +192,46 @@ public:
     {
         return contentPoint;
     }
+
+    /**
+        Tells the components the effect is set on that what it draws changed.
+
+        Each component the effect is set on is drawn through apply() again at the next frame of
+        its window, over the texture it kept of its subtree: neither the component nor its
+        children are painted again, which is what makes a change of an effect cheap.
+
+        The setters of an effect call it when the value they are given is not the one the effect
+        has (a parameter, a color, the time of an animation), so that who uses the effect has
+        nothing to call. Call it yourself for what an effect reads without being told, or for an
+        effect that wraps another one and changed it.
+
+        @code
+        void MyEffect::setAmount (float newAmount)
+        {
+            if (std::exchange (amount, newAmount) != newAmount)
+                invalidate();
+        }
+        @endcode
+
+        A component that is not drawn through the effect is painted again as it is, as by
+        Component::repaint(): when the effect has nothing to apply (see isActive()), or where
+        there is no GPU to keep a texture with. An effect that is set on no component asks for
+        nothing.
+
+        Call it on the message thread, or with the message manager locked, as
+        Component::repaint(), and never from apply(): a component can't be repainted while it
+        is painted.
+
+        @see Component::setComponentEffect, isActive
+    */
+    void invalidate();
+
+private:
+    friend class Component;
+
+    Array<Component*> components;
+
+    YUP_DECLARE_NON_COPYABLE (ComponentEffect)
 };
 
 } // namespace yup

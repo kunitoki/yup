@@ -63,6 +63,13 @@ public:
     /** Starts a frame; a size change releases every texture and history. */
     void beginFrame (int widthPx, int heightPx);
 
+    /** Releases every transient texture and every history, as a size change does. Call it between frames.
+
+        The frames in flight keep the textures they bound. The next frame creates the ones it acquires again, and
+        its histories are not valid.
+    */
+    void releaseTextures() noexcept;
+
     /** A transient texture for this frame. The same descriptor gets the same texture back next frame;
         two acquires of one descriptor within a frame get two textures.
 

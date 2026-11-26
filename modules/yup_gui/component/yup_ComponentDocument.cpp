@@ -22,37 +22,35 @@
 namespace yup
 {
 
-namespace
-{
-
-std::vector<ComponentDocument*>& getComponentDocuments()
-{
-    static std::vector<ComponentDocument*> documents;
-    return documents;
-}
-
-} // namespace
-
 //==============================================================================
 
 ComponentDocument::~ComponentDocument()
 {
-    unregisterDocument();
+    detachFromRoot();
 }
 
-void ComponentDocument::registerDocument()
+void ComponentDocument::attachToRoot()
 {
-    getComponentDocuments().push_back (this);
+    auto* newRoot = getRoot();
+
+    if (attachedRoot.get() == newRoot)
+        return;
+
+    detachFromRoot();
+
+    attachedRoot = newRoot;
+
+    if (newRoot != nullptr)
+        newRoot->componentDocument = this;
 }
 
-void ComponentDocument::unregisterDocument()
+void ComponentDocument::detachFromRoot()
 {
-    std::erase (getComponentDocuments(), this);
-}
+    // A root given to another document since is left to it
+    if (auto* root = attachedRoot.get(); root != nullptr && root->componentDocument == this)
+        root->componentDocument = nullptr;
 
-const std::vector<ComponentDocument*>& ComponentDocument::getRegisteredDocuments()
-{
-    return getComponentDocuments();
+    attachedRoot = nullptr;
 }
 
 //==============================================================================
@@ -61,11 +59,8 @@ ComponentDocument* ComponentDocument::findFor (const Component* component)
 {
     for (; component != nullptr; component = component->getParentComponent())
     {
-        for (auto* document : getComponentDocuments())
-        {
-            if (document->getRoot() == component)
-                return document;
-        }
+        if (component->componentDocument != nullptr)
+            return component->componentDocument;
     }
 
     return nullptr;

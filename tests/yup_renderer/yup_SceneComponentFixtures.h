@@ -57,6 +57,12 @@ public:
     {
         return view.changedMeshes.size();
     }
+
+    /** Gives a component a native of its own, which it then owns: the window of the components added to it afterwards. */
+    static void attachNative (Component& component, ComponentNative* native)
+    {
+        component.native = native;
+    }
 };
 
 } // namespace yup
@@ -279,6 +285,148 @@ protected:
         ASSERT_TRUE (actual.has_value());
         EXPECT_NEAR (actual->getX(), x, tolerance);
         EXPECT_NEAR (actual->getY(), y, tolerance);
+    }
+
+    //==============================================================================
+    /** Stands in for the window a scene is shown in: its only frames are the ones a test sends, and it
+        tells whether anything in it still takes them.
+    */
+    class WindowNative final : public ComponentNative
+    {
+    public:
+        explicit WindowNative (Component& componentToShow)
+            : ComponentNative (componentToShow, ComponentNative::defaultFlags)
+        {
+        }
+
+        void setTitle (const String&) override {}
+
+        String getTitle() const override { return {}; }
+
+        void setVisible (bool) override {}
+
+        bool isVisible() const override { return true; }
+
+        bool isResizable() const override { return false; }
+
+        void setResizable (bool) override {}
+
+        void toFront() override {}
+
+        void setSize (const Size<int>&) override {}
+
+        Size<int> getSize() const override { return {}; }
+
+        Size<int> getContentSize() const override { return {}; }
+
+        Point<int> getPosition() const override { return {}; }
+
+        void setPosition (const Point<int>&) override {}
+
+        Rectangle<int> getBounds() const override { return {}; }
+
+        void setBounds (const Rectangle<int>&) override {}
+
+        Rectangle<int> getSafeAreaBounds() const override { return {}; }
+
+        void setFullScreen (bool) override {}
+
+        bool isFullScreen() const override { return false; }
+
+        bool isDecorated() const override { return false; }
+
+        void setAspectRatio (std::optional<float>) override {}
+
+        std::optional<float> getAspectRatio() const override { return std::nullopt; }
+
+        void setOpacity (float) override {}
+
+        float getOpacity() const override { return 1.0f; }
+
+        void setFocusedComponent (Component*, FocusChangeType) override {}
+
+        Component* getFocusedComponent() const override { return nullptr; }
+
+        Component* getPointerTarget() const override { return nullptr; }
+
+        bool isContinuousRepaintingEnabled() const override { return false; }
+
+        void enableContinuousRepainting (bool) override {}
+
+        bool isAtomicModeEnabled() const override { return false; }
+
+        void enableAtomicMode (bool) override {}
+
+        bool isWireframeEnabled() const override { return false; }
+
+        void enableWireframe (bool) override {}
+
+        GpuTriangulationThresholds getTriangulationThresholds() const override { return {}; }
+
+        void setTriangulationThresholds (const GpuTriangulationThresholds&) override {}
+
+        void repaint() override {}
+
+        void repaint (const Rectangle<float>&) override {}
+
+        const RectangleList<float>& getRepaintAreas() const override { return repaintAreas; }
+
+        void setGlobalMouseCaptureActive (bool) override {}
+
+        void cancelCurrentMouseGesture() override {}
+
+        void startTextInput (Component&) override {}
+
+        void stopTextInput (Component&) override {}
+
+        void updateTextInputRect (Component&) override {}
+
+        float getScaleDpi() const override { return 1.0f; }
+
+        float getCurrentFrameRate() const override { return 60.0f; }
+
+        float getDesiredFrameRate() const override { return 60.0f; }
+
+        void setDesiredFrameRate (std::optional<float>) override {}
+
+        bool isVsyncEnabled() const override { return false; }
+
+        void setVsyncEnabled (bool) override {}
+
+        void* getNativeHandle() const override { return nullptr; }
+
+        rive::Factory* getFactory() override { return nullptr; }
+
+        GraphicsContext* getGraphicsContext() override { return nullptr; }
+
+        using ComponentNative::callFrameListeners;
+        using ComponentNative::hasFrameListeners;
+
+    private:
+        RectangleList<float> repaintAreas;
+
+        YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WindowNative)
+    };
+
+    /** Makes a component a window, visible and 200 pixels wide and high, and returns the native that sends the
+        frames of what is added to it afterwards.
+    */
+    static WindowNative& makeWindow (Component& component)
+    {
+        auto* native = new WindowNative (component);
+        Internals::attachNative (component, native);
+
+        component.setVisible (true);
+        component.setBounds (0.0f, 0.0f, 200.0f, 200.0f);
+
+        return *native;
+    }
+
+    /** Sends frames to a window, a sixtieth of a second apart. */
+    static void sendFrames (WindowNative& native, int numFrames)
+    {
+        for (int i = 0; i < numFrames; ++i)
+            native.callFrameListeners (1.0 / 60.0);
     }
 
     //==============================================================================

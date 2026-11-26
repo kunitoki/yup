@@ -72,7 +72,11 @@ public:
     struct Influences
     {
         std::array<uint16, 4> joints {};                 ///< Indices among the joints of the Skin. A joint whose weight is 0 is not used.
-        std::array<float, 4> weights {};                 ///< The share of each joint, adding up to 1. All zero, the vertex stays in its bind pose.
+
+        /** The share of each joint. addPrimitive() makes the weights of a vertex add up to 1, one that
+            is negative counting for nothing. All zero, the vertex stays in its bind pose.
+        */
+        std::array<float, 4> weights {};
     };
 
     /** A morph target of a primitive: how far its vertices move when the weight of the target is 1.
@@ -123,8 +127,10 @@ public:
         positions then gets the normal deltas that keep it flat too, as glTF asks, in place of
         the ones it came with, and its tangent deltas go with the tangents.
 
-        A primitive whose influences or morph deltas are neither empty nor one per vertex asserts
-        and is not added.
+        The weights of the influences of a vertex are made to add up to 1, see Influences.
+
+        A primitive that is not made of triangles of its vertices, or whose influences or morph
+        deltas are neither empty nor one per vertex, is not added.
 
         @param vertices      The vertices, at least three.
         @param indices       The triangle indices, a multiple of three, or empty.
@@ -132,8 +138,10 @@ public:
         @param influences    The joints moving each vertex, one per vertex, or empty for a
                              primitive that is not skinned.
         @param morphTargets  The morph targets, or empty for a primitive that has none.
+
+        @return A failure telling what is wrong with the primitive, which is not added then.
     */
-    void addPrimitive (std::vector<Vertex> vertices, std::vector<uint32> indices, Material::Ptr material = nullptr, std::vector<Influences> influences = {}, std::vector<MorphTarget> morphTargets = {});
+    Result addPrimitive (std::vector<Vertex> vertices, std::vector<uint32> indices, Material::Ptr material = nullptr, std::vector<Influences> influences = {}, std::vector<MorphTarget> morphTargets = {});
 
     /** Returns the number of primitives. */
     int getNumPrimitives() const noexcept { return static_cast<int> (primitives.size()); }
@@ -195,6 +203,26 @@ public:
     */
     Span<const float> getMorphWeights() const noexcept { return morphWeights; }
 
+    /** Sets the names of the morph targets, which findMorphTarget() looks for.
+
+        glTF has no place for them: GltfModel takes the ones exporters write to the targetNames
+        of the extras of a mesh.
+
+        @param newNames  The name of each morph target, in their order. Targets beyond them have
+                         no name, names beyond the targets are not used.
+    */
+    void setMorphTargetNames (StringArray newNames) { morphTargetNames = std::move (newNames); }
+
+    /** Returns the names of the morph targets, as they were set: none by default. */
+    const StringArray& getMorphTargetNames() const noexcept { return morphTargetNames; }
+
+    /** Returns the index of the first morph target with a name, or -1 if there is none.
+
+        It is the index of the weight of the target, in setMorphWeights() and in
+        DeformNode::setWeights().
+    */
+    int findMorphTarget (StringRef targetName) const noexcept;
+
     //==============================================================================
     /** Replaces the vertices of a primitive, keeping its indices and material: for meshes
         deformed on the CPU, by skinning or morph targets for example.
@@ -204,15 +232,17 @@ public:
         device asks for it. The vertices are taken as they are: no normal is generated.
 
         The number of vertices cannot change, since the indices refer to them: another number,
-        or a primitive that does not exist, asserts and changes nothing.
+        or a primitive that does not exist, changes nothing.
 
         Every entity drawing the mesh shows the new vertices, so give each deformed instance a
         mesh of its own.
 
         @param primitiveIndex  The primitive.
         @param vertices        The new vertices, as many as the primitive has, copied into it.
+
+        @return A failure telling why the vertices were not taken.
     */
-    void setVertices (int primitiveIndex, Span<const Vertex> vertices);
+    Result setVertices (int primitiveIndex, Span<const Vertex> vertices);
 
     /** Returns how many times setVertices() changed the vertices of a primitive.
 
@@ -226,7 +256,8 @@ public:
     //==============================================================================
     /** Returns the vertex buffer of a primitive for a device, uploading every primitive if needed.
 
-        The vertices setVertices() changed since are written into the same buffer first.
+        The vertices setVertices() changed since are written into the same buffer first. A device
+        that could not take them is asked again the next time.
 
         @param device          The device that renders the mesh.
         @param primitiveIndex  The primitive.
@@ -258,6 +289,8 @@ public:
     static std::vector<uint32> computeEdgeIndices (Span<const uint32> triangleIndices);
 
 private:
+    friend class DeformNode;
+
     struct GpuBuffers
     {
         GpuBuffer::Ptr vertices;
@@ -265,6 +298,11 @@ private:
         GpuBuffer::Ptr edges;
         bool verticesStale = false; // setVertices() changed the vertices since they were uploaded
     };
+
+    /** Adds what is drawn of a primitive a mesh already took, as it is: its vertices, indices, material and
+        bounds, with nothing checked or generated again. For the copy a DeformNode draws.
+    */
+    void addDrawnCopy (const Primitive& primitive);
 
     void updateBounds (Primitive& changed);
     void prepareGpuBuffers (const GpuDevice::Ptr& device);
@@ -276,6 +314,7 @@ private:
     int numJoints = 0;
     int numMorphTargets = 0;
     std::vector<float> morphWeights;
+    StringArray morphTargetNames;
 
     GpuDevice::Ptr cachedDevice;
     std::vector<GpuBuffers> gpuBuffers;

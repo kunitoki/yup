@@ -197,6 +197,39 @@ TEST_F (YuiLoaderTests, LoadsAFileWithItsImportsRelativeToIt)
     EXPECT_DOUBLE_EQ (getTrackWidth (document), 7.0);
 }
 
+TEST_F (YuiLoaderTests, AFileImportingTheMainFileBackImportsNothing)
+{
+    write ("parts/style.yui", "import \"../ui.yui\"; style { .knob { trackWidth: 4; } }");
+
+    YuiDocument document;
+    YuiLoader loader (document);
+
+    const auto result = loader.loadFile (folder.getChildFile ("ui.yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getTree().getNumChildren(), 2);
+    EXPECT_DOUBLE_EQ (getTrackWidth (document), 4.0);
+
+    // The main file of resources is in a folder its imports are relative to
+    const auto finder = [] (const char* path, std::size_t& size) -> const uint8*
+    {
+        static const char* main = "import \"part.yui\"; Component { Slider { id: knob; } }";
+        static const char* part = "import \"main.yui\"; style { }";
+
+        const String key (path);
+        const char* text = key == "ui/main.yui" ? main : (key == "ui/part.yui" ? part : nullptr);
+
+        size = text != nullptr ? std::strlen (text) : 0;
+        return reinterpret_cast<const uint8*> (text);
+    };
+
+    const auto embedded = loader.loadResource ("ui/main.yui", finder);
+
+    ASSERT_TRUE (embedded.wasOk()) << embedded.getErrorMessage();
+    EXPECT_EQ (document.getTree().getNumChildren(), 2);
+}
+
 TEST_F (YuiLoaderTests, ResolvesRelativeImageAndSvgAssetsAgainstTheLoadedYuiDirectory)
 {
     static constexpr const char* redDotPngBase64 =
@@ -305,6 +338,28 @@ TEST_F (YuiLoaderTests, FailsWhenTheFileCantBeRead)
 
     EXPECT_TRUE (loader.loadFile (folder.getChildFile ("missing.yui")).failed());
     EXPECT_EQ (document.getRoot(), nullptr);
+}
+
+TEST_F (YuiLoaderTests, TellsTheDocumentWhenTheMainFileCantBeRead)
+{
+    YuiDocument document;
+    YuiLoader loader (document);
+    AssetRecorder recorder (document);
+
+    ASSERT_TRUE (loader.loadFile (folder.getChildFile ("ui.yui")).wasOk());
+    auto* root = document.getRoot();
+    EXPECT_EQ (recorder.loads, 1);
+
+    folder.getChildFile ("ui.yui").deleteFile();
+    const auto result = loader.reload();
+
+    // As for a text that can't be parsed: the interface is kept, the listeners are told and the problem is the one listed
+    EXPECT_TRUE (result.failed());
+    EXPECT_EQ (document.getRoot(), root);
+    EXPECT_EQ (recorder.loads, 2);
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics().front().message, "Can't load '" + folder.getChildFile ("ui.yui").getFullPathName() + "'");
+    EXPECT_EQ (result.getErrorMessage(), document.getDiagnostics().front().message);
 }
 
 TEST_F (YuiLoaderTests, ReloadsFromAStringWithTheImportsOfTheFile)

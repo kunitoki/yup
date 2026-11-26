@@ -808,6 +808,10 @@ public:
     /** @internal */
     void resized() override;
     /** @internal */
+    void visibilityChanged() override;
+    /** @internal */
+    void parentHierarchyChanged() override;
+    /** @internal */
     void refreshDisplay (double lastFrameTimeSeconds);
     /** @internal */
     void mouseDown (const MouseEvent& event) override;
@@ -887,6 +891,7 @@ private:
     void setHoveredRow (int newHoveredRow);
 
     void dispatchPendingNotifications();
+    void updateFrameAttachment();
 
     bool isTouchLike (const MouseEvent& event) const;
     void gestureDown (const MouseEvent& event);
@@ -974,7 +979,7 @@ private:
     bool mouseDragScrollingEnabled = false;
     bool pullToRefreshEnabled = false;
     bool refreshing = false;
-    FrameAttachment frameAttachment { *this, bindFront (&ListBox::refreshDisplay, this) };
+    FrameAttachment frameAttachment { *this, bindFront (&ListBox::refreshDisplay, this), false };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ListBox)
 };

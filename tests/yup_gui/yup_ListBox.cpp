@@ -235,6 +235,21 @@ protected:
         listBox->mouseUp (touchAt (position));
     }
 
+    /** Puts a component in a window of its own, and returns the native that sends its frames. */
+    static StubComponentNative& makeWindow (Component& component)
+    {
+        auto* native = new StubComponentNative (component, ComponentNative::defaultFlags);
+        yup::ComponentTestHelper<Component>::attachNative (component, native);
+        return *native;
+    }
+
+    /** Sends frames to a window until nothing in it asks for one, giving up after ten seconds of them. */
+    static void runFramesUntilIdle (StubComponentNative& native)
+    {
+        for (int frame = 0; frame < 600 && native.hasFrameListeners(); ++frame)
+            native.callFrameListeners (1.0 / 60.0);
+    }
+
     std::unique_ptr<TestListBoxModel> model;
     std::unique_ptr<ListBox> listBox;
 };
@@ -2477,4 +2492,82 @@ TEST_F (ListBoxTests, ReportsSelectionChangesToPropertyListeners)
     EXPECT_FALSE (listener.changed.contains ("selectedRow"));
 
     listBox->removeComponentListener (&listener);
+}
+
+//==============================================================================
+// Frames
+//==============================================================================
+
+TEST_F (ListBoxTests, AsksForFramesOnlyWhileItIsTouchedOrScrollsByItself)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.setBounds (0.0f, 0.0f, 300.0f, 400.0f);
+    window.setVisible (true);
+    window.addAndMakeVisible (*listBox);
+
+    listBox->setRowSize (50.0f);
+
+    // A list at rest asks for none, and a jump moves nothing over time
+    listBox->setScrollPosition (100.0f);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    listBox->setScrollPosition (300.0f, true);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    runFramesUntilIdle (native);
+
+    EXPECT_FALSE (native.hasFrameListeners());
+    EXPECT_FLOAT_EQ (300.0f, listBox->getScrollPosition());
+    EXPECT_EQ (ListBox::ScrollState::idle, listBox->getScrollState());
+
+    // A finger is timed by the frames, and what it flings keeps them coming until it rests
+    swipe (300.0f, 150.0f, false);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    listBox->mouseUp (touchAt (pointAlong (150.0f)));
+    const auto released = listBox->getScrollPosition();
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    runFramesUntilIdle (native);
+
+    EXPECT_FALSE (native.hasFrameListeners());
+    EXPECT_GT (listBox->getScrollPosition(), released);
+    EXPECT_EQ (ListBox::ScrollState::idle, listBox->getScrollState());
+
+    window.removeChildComponent (*listBox);
+}
+
+TEST_F (ListBoxTests, AHiddenListAsksForNoFrameAndScrollsOnWhenItShowsAgain)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.setBounds (0.0f, 0.0f, 300.0f, 400.0f);
+    window.setVisible (true);
+    window.addAndMakeVisible (*listBox);
+
+    listBox->setRowSize (50.0f);
+    listBox->setScrollPosition (300.0f, true);
+
+    native.callFrameListeners (1.0 / 60.0);
+    ASSERT_TRUE (native.hasFrameListeners());
+
+    const auto reached = listBox->getScrollPosition();
+    EXPECT_GT (reached, 0.0f);
+    EXPECT_LT (reached, 300.0f);
+
+    // Hiding a parent hides the list
+    window.setVisible (false);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    window.setVisible (true);
+    EXPECT_TRUE (native.hasFrameListeners());
+    EXPECT_FLOAT_EQ (reached, listBox->getScrollPosition());
+
+    runFramesUntilIdle (native);
+
+    EXPECT_FALSE (native.hasFrameListeners());
+    EXPECT_FLOAT_EQ (300.0f, listBox->getScrollPosition());
+
+    window.removeChildComponent (*listBox);
 }

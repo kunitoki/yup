@@ -832,8 +832,12 @@ if (auto* camera = document.findById<yup::SceneCameraComponent> ("camera"))
 
 - `SceneNodeComponent::getEntity()` is the entity of an element, and
   `SceneModelComponent::getInstance()` the root of the model it shows, for
-  code that attaches nodes of its own. Both are made again when the element
-  moves to another parent or its model is loaded again.
+  code that attaches nodes of its own. They stay the same when the element
+  moves to another parent of its scene, with what code attached to them or
+  set on their nodes: an element taken out of its scene keeps its entity, out
+  of the tree of the scene, until the next frame of the `Scene3D`. They are
+  made again when the element goes to another scene or comes back after that
+  frame, and the instance when its model is loaded again.
 - A component that moves the camera with the mouse listens to the elements of
   the scene too, with `addMouseListener (this, true)`: a drag that starts on a
   node goes to that node, not to the `Scene3D`.
@@ -851,15 +855,28 @@ of the property it is about, and stays there for as long as it stands:
 Node3D.position: expected 3 numbers
 Node3D.node: the model has no entity 'Handle'
 Light3D.node: only a Node3D can be bound to an entity of a model
+Camera3D.fov: expected an angle above 0 and below 180deg
+Camera3D.projection: an orthographic camera sees up to its far plane, which has to be beyond its near one
+Light3D.intensity: expected a brightness that is not negative
+Scene3D.exposure: expected a multiplier that is not negative
 Mesh3D.indices: the index 7 is not the one of a vertex, there are 3
+Mesh3D.indices: the index 1.5 is not a whole number
 Model3D.source: the file 'models/chair.glb' can't be read
 Model3D.clip: the model has no clip 'Walk'
 Node3D.morphWeights: the entity of the node draws no mesh with morph targets
 Material3D.baseColorTexture: the file 'textures/wood.png' can't be read
 Material3D.shader: the stylesheet has no shader 'Hologram'
+shader Hologram: the renderer can't draw with it, which leaves the meshes to their material: it has no full tier variant
 Material3D: the parent already has a Material3D, this one is not used
 Mesh3D: the components inside a node are shown over the texture coordinates of its mesh, and the ones of this mesh span no area: give the Mesh3D its uvs, or the part of the model its texture coordinates
 ```
+
+A camera, a light or a scene keeps the value it had when it is given one it
+can't have. A number that is not finite is no number for the position, the
+rotation and the scale of a node, its morph weights and the arrays of a mesh.
+A node showing components on a mesh made of several primitives, with no
+`Material3D` of its own, is listed as a warning: the material showing the
+components takes the place of the one of every primitive.
 
 What a glTF file holds that could not be converted is listed as warnings on
 the `source` of its `Model3D`. [`yup_yui_tool verify`](tooling.md) loads the

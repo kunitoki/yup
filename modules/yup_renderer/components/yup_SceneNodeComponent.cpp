@@ -40,9 +40,10 @@ struct SceneNodeComponentIds
     static inline const Identifier surface { "surface" };
 };
 
+/* Whether a value is a number a scene can be made of: one that is finite. */
 bool isSceneNumber (const var& value) noexcept
 {
-    return value.isDouble() || value.isInt() || value.isInt64();
+    return (value.isDouble() || value.isInt() || value.isInt64()) && std::isfinite (static_cast<double> (value));
 }
 
 var makeSceneVector (double x, double y, double z)
@@ -120,13 +121,6 @@ std::optional<Point<float>> findScenePointInArea (const Matrix4& toClipSpace, co
                          area.getY() + (1.0f - clip[1] / clip[3]) * 0.5f * area.getHeight());
 }
 
-/* Whether a component inside a node is shown on its mesh: every component that is not part of the scene. */
-bool isSceneSurfaceComponent (const Component& component)
-{
-    return dynamic_cast<const SceneNodeComponent*> (&component) == nullptr
-        && dynamic_cast<const SceneMaterialComponent*> (&component) == nullptr;
-}
-
 } // namespace
 
 //==============================================================================
@@ -141,9 +135,16 @@ SceneNodeComponent::SceneNodeComponent (StringRef componentID)
 
 SceneNodeComponent::~SceneNodeComponent()
 {
+    const auto wasLeaving = isEntityLeaving;
+
     // While the entity is there: what the surface gave it goes first
     surface.reset();
     releaseEntity();
+
+    // The nodes inside a node that goes on its way out of a scene are not told by a parent anymore: the entities they
+    // had went with its own
+    if (wasLeaving)
+        updateEntitiesBelow (*this);
 }
 
 //==============================================================================
@@ -180,7 +181,7 @@ bool SceneNodeComponent::isBound() const
 
 //==============================================================================
 
-void SceneNodeComponent::updateEntity()
+void SceneNodeComponent::updateEntity (bool canKeepEntity)
 {
     const auto previous = getEntity();
     String problem;
@@ -200,12 +201,26 @@ void SceneNodeComponent::updateEntity()
 
             if (target.isValid())
             {
+                // What the model gave the entity is what a node already bound to it took: the entity gets it back
+                // whichever of the two lets go of it last
+                const auto* model = findModel();
+                const auto* first = model != nullptr ? findSceneNode (*model, target) : nullptr;
+
                 entity = target;
                 scene = target.getScene();
-                boundVisible = target.isVisible();
 
-                if (const auto* transform = target.get<TransformNode>())
-                    boundTransform = Transform { transform->getPosition(), transform->getRotation(), transform->getScale() };
+                if (first != nullptr)
+                {
+                    boundVisible = first->boundVisible;
+                    boundTransform = first->boundTransform;
+                }
+                else
+                {
+                    boundVisible = target.isVisible();
+
+                    if (const auto* transform = target.get<TransformNode>())
+                        boundTransform = Transform { transform->getPosition(), transform->getRotation(), transform->getScale() };
+                }
             }
         }
     }
@@ -215,22 +230,48 @@ void SceneNodeComponent::updateEntity()
             problem = "only a Node3D can be bound to an entity of a model";
 
         const auto parentEntity = findParentEntity();
+        const auto isKept = isEntityOwned && previous.isValid();
 
-        // An entity can't go to another scene: it is made again there
-        if (! isEntityOwned || ! previous.isValid() || previous.getScene() != parentEntity.getScene())
+        // With no entity to be under anymore, the node may only be on its way to another parent of its scene: the scene
+        // it was in keeps the entity for it until its next frame
+        auto* leftScene = isKept && canKeepEntity && ! parentEntity.isValid() ? dynamic_cast<SceneComponent*> (entityScene.get()) : nullptr;
+
+        if (leftScene != nullptr)
         {
-            releaseEntity();
+            // Out of the tree of the scene, with the entities under it: neither drawn nor updated. What is wrong with
+            // the node was told when it came
+            problem.clear();
+
+            if (! std::exchange (isEntityLeaving, true))
+            {
+                entity.removeFromParent();
+                leftScene->deferEntityRelease (*this);
+            }
+        }
+        else
+        {
+            // An entity can't go to another scene: it is made again there
+            if (! isKept || previous.getScene() != parentEntity.getScene())
+            {
+                releaseEntity();
+
+                if (parentEntity.isValid())
+                {
+                    entity = parentEntity.getScene()->createEntity ({}, parentEntity);
+                    scene = entity.getScene();
+                    isEntityOwned = true;
+                }
+            }
 
             if (parentEntity.isValid())
             {
-                entity = parentEntity.getScene()->createEntity ({}, parentEntity);
-                scene = entity.getScene();
-                isEntityOwned = true;
+                // Under the entity of its parent, where one that was on its way comes back with all it had
+                placeEntity (parentEntity);
+
+                isEntityLeaving = false;
+                entityScene = SceneComponent::findFor (*this);
             }
         }
-
-        if (parentEntity.isValid())
-            placeEntity (parentEntity);
     }
 
     // What is wrong is told last, once the node has the entity it can have: who hears about it may destroy the node
@@ -301,9 +342,34 @@ void SceneNodeComponent::releaseEntity()
     entity = {};
     scene = nullptr;
     isEntityOwned = false;
+    isEntityLeaving = false;
+    entityScene = nullptr;
     boundTransform.reset();
     boundVisible = true;
     drivesPosition = drivesRotation = drivesScale = false;
+}
+
+SceneComponent* SceneNodeComponent::getLeftScene() const
+{
+    return isEntityLeaving ? dynamic_cast<SceneComponent*> (entityScene.get()) : nullptr;
+}
+
+void SceneNodeComponent::releaseLeftEntity (const SceneComponent& leftScene)
+{
+    // Back in a scene since, or one that another scene is to release
+    if (! isEntityLeaving || entityScene.get() != &leftScene)
+        return;
+
+    // Out of the scene for good: the entity goes as it does with a node that has nowhere to keep it, and who hears
+    // about what goes with it may destroy the node
+    const BailOutChecker checker (this);
+
+    isEntityLeaving = false;
+    updateEntity (false);
+
+    // The entities of the nodes inside it went with its own
+    if (! checker.shouldBailOut())
+        updateEntitiesBelow (*this);
 }
 
 Entity SceneNodeComponent::findParentEntity()
@@ -319,7 +385,7 @@ Entity SceneNodeComponent::findParentEntity()
     return {};
 }
 
-Entity SceneNodeComponent::findModelEntity (String& problem)
+SceneModelComponent* SceneNodeComponent::findModel()
 {
     // The model is the closest Model3D above the node, reached through the nodes bound to it
     auto* parent = dynamic_cast<SceneNodeComponent*> (getParentComponent());
@@ -327,7 +393,12 @@ Entity SceneNodeComponent::findModelEntity (String& problem)
     while (parent != nullptr && dynamic_cast<SceneModelComponent*> (parent) == nullptr)
         parent = parent->isBound() ? dynamic_cast<SceneNodeComponent*> (parent->getParentComponent()) : nullptr;
 
-    const auto* model = dynamic_cast<SceneModelComponent*> (parent);
+    return dynamic_cast<SceneModelComponent*> (parent);
+}
+
+Entity SceneNodeComponent::findModelEntity (String& problem)
+{
+    const auto* model = findModel();
 
     if (model == nullptr)
     {
@@ -627,6 +698,22 @@ void SceneNodeComponent::repaintScene()
 {
     if (auto* view = SceneComponent::findFor (*this))
         view->sceneContentChanged();
+}
+
+bool SceneNodeComponent::checkValue (const Identifier& property, bool isUsable, const String& expected)
+{
+    auto* view = SceneComponent::findFor (*this);
+
+    if (view == nullptr)
+        return isUsable;
+
+    view->clearProblems (*this, property);
+
+    // Told last: who hears about it may destroy the node
+    if (! isUsable)
+        view->reportProblem (*this, property, expected);
+
+    return isUsable;
 }
 
 //==============================================================================

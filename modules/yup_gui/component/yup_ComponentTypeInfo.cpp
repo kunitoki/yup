@@ -116,7 +116,11 @@ bool ComponentTypeInfo::isSubtypeOf (const Identifier& otherTypeName) const
 
 bool ComponentTypeInfo::isSubtypeOf (const ComponentTypeInfo& other) const
 {
-    return isSubtypeOf (other.typeName);
+    for (const auto* info = this; info != nullptr; info = info->baseTypeInfo)
+        if (info == std::addressof (other))
+            return true;
+
+    return false;
 }
 
 const ComponentSignal* ComponentTypeInfo::findSignal (const Identifier& signalName) const

@@ -102,6 +102,45 @@ protected:
         return channelAt (pixels, x, y, 3);
     }
 
+    /** A shader no desktop graphics API has a variant of: its bundle, made by hand, holds WGSL variants only. */
+    static GpuImageShader::Ptr makeShaderWithoutAVariant()
+    {
+        ShaderReflection::ResourceBinding pixel;
+        pixel.name = "color";
+        pixel.type = ShaderReflection::ResourceType::stageOutput;
+        pixel.baseType = ShaderReflection::BaseType::float32;
+        pixel.vecSize = 4;
+
+        ShaderBundle::Ptr bundle (new ShaderBundle());
+
+        for (const auto stage : { ShaderStage::vertex, ShaderStage::fragment })
+        {
+            ShaderInfo info;
+            info.stage = stage;
+            info.language = ShaderLanguage::wgsl;
+            info.source = "void main() {}";
+
+            if (stage == ShaderStage::fragment)
+                info.reflection.stageOutputs = { pixel };
+
+            bundle->addShader (std::move (info));
+        }
+
+        const auto created = GpuImageShader::createFromBundle (bundle);
+        EXPECT_TRUE (created.wasOk()) << created.getErrorMessage();
+        return created.wasOk() ? created.getValue() : nullptr;
+    }
+
+    /** Expects the square where the source paints it, as a filter that could not run leaves it. */
+    static void expectTheSourceAsItIs (const std::vector<uint8>& pixels)
+    {
+        ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+        EXPECT_GT (channelAt (pixels, 32, 32, 0), 200);
+        EXPECT_GT (alphaAt (pixels, 32, 32), 200);
+        EXPECT_LT (alphaAt (pixels, 46, 32), 10);
+    }
+
 #if YUP_ENABLE_SHADER_TRANSPILER
     static GpuImageShader::Ptr compileShader (const char* fragment)
     {
@@ -144,6 +183,19 @@ layout(location = 0) out vec4 color;
 void main()
 {
     color = params.tint;
+})";
+
+    /** The sum of the three pictures it reads, one more than a filter gives. */
+    static constexpr const char* sumFragment = R"(#version 450
+layout(set = 0, binding = 0) uniform texture2D first;
+layout(set = 0, binding = 1) uniform texture2D second;
+layout(set = 0, binding = 2) uniform texture2D third;
+layout(set = 0, binding = 3) uniform sampler linearClamp;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main()
+{
+    color = texture (sampler2D (first, linearClamp), uv) + texture (sampler2D (second, linearClamp), uv) + texture (sampler2D (third, linearClamp), uv);
 })";
 #endif
 
@@ -350,7 +402,64 @@ TEST_F (FilterGraphTests, ShaderThatCantBeDrawnLeavesThePictureAsItIs)
     EXPECT_LT (alphaAt (pixels, 46, 32), 10);
 }
 
+TEST_F (FilterGraphTests, TellsWhatPreventedAShaderFromRunning)
+{
+    const FilterGraph::Primitive moved { .type = FilterGraph::Type::offset, .result = "moved", .offset = { 16.0f, 0.0f } };
+
+    // A filter that ran has nothing to tell
+    render ({ moved });
+    EXPECT_EQ (source.getFilterState().getShaderError(), String());
+    EXPECT_EQ (source.getFilterState().getFailedPrimitive(), -1);
+
+    // A primitive without a shader is told, with where it is in the filter
+    expectTheSourceAsItIs (render ({ moved, { .type = FilterGraph::Type::shader, .in = "moved" } }));
+    EXPECT_TRUE (source.getFilterState().getShaderError().contains ("no shader")) << source.getFilterState().getShaderError();
+    EXPECT_EQ (source.getFilterState().getFailedPrimitive(), 1);
+
+    // And forgotten once the filter runs again
+    render ({ moved });
+    EXPECT_EQ (source.getFilterState().getShaderError(), String());
+    EXPECT_EQ (source.getFilterState().getFailedPrimitive(), -1);
+}
+
+TEST_F (FilterGraphTests, ShaderTheDeviceCantDrawIsToldAndLeavesThePictureAsItIs)
+{
+    const auto undrawable = makeShaderWithoutAVariant();
+    ASSERT_NE (undrawable, nullptr);
+
+    const FilterGraph::Primitive shader { .type = FilterGraph::Type::shader, .shader = undrawable, .uniforms = undrawable->createUniforms() };
+
+    expectTheSourceAsItIs (render ({ { .type = FilterGraph::Type::offset, .offset = { 16.0f, 0.0f } }, shader }));
+
+    const auto error = source.getFilterState().getShaderError();
+    EXPECT_TRUE (error.isNotEmpty());
+    EXPECT_EQ (source.getFilterState().getFailedPrimitive(), 1);
+
+    // The reason stands for the next filters running the shader, wherever they run it
+    expectTheSourceAsItIs (render ({ shader, { .type = FilterGraph::Type::offset, .offset = { 16.0f, 0.0f } } }));
+    EXPECT_EQ (source.getFilterState().getShaderError(), error);
+    EXPECT_EQ (source.getFilterState().getFailedPrimitive(), 0);
+
+    // Until the state lets go of what it holds
+    source.releaseResources();
+    EXPECT_EQ (source.getFilterState().getShaderError(), String());
+    EXPECT_EQ (source.getFilterState().getFailedPrimitive(), -1);
+}
+
 #if YUP_ENABLE_SHADER_TRANSPILER
+
+TEST_F (FilterGraphTests, ShaderReadingMoreThanTwoPicturesIsToldAndLeavesThePictureAsItIs)
+{
+    const auto sum = compileShader (sumFragment);
+    ASSERT_NE (sum, nullptr);
+    EXPECT_EQ (sum->getNumInputTextures(), 3);
+
+    expectTheSourceAsItIs (render ({ { .type = FilterGraph::Type::offset, .offset = { 16.0f, 0.0f } },
+                                     { .type = FilterGraph::Type::shader, .shader = sum, .uniforms = sum->createUniforms() } }));
+
+    EXPECT_TRUE (source.getFilterState().getShaderError().contains ("3 textures")) << source.getFilterState().getShaderError();
+    EXPECT_EQ (source.getFilterState().getFailedPrimitive(), 1);
+}
 
 TEST_F (FilterGraphTests, ShaderRunsOnThePictureItReads)
 {

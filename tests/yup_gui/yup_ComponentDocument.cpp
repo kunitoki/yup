@@ -40,12 +40,12 @@ protected:
         explicit FakeDocument (Component& rootToUse)
             : root (&rootToUse)
         {
-            registerDocument();
+            attachToRoot();
         }
 
         ~FakeDocument() override
         {
-            unregisterDocument();
+            detachFromRoot();
         }
 
         Component* getRoot() const override { return root; }
@@ -68,6 +68,7 @@ protected:
 
         void reportDiagnostic (DataTreeDiagnostic, const Component* = nullptr) override {}
 
+        using ComponentDocument::attachToRoot;
         using ComponentDocument::notifyDocumentAssetChanged;
         using ComponentDocument::notifyDocumentLoaded;
 
@@ -132,6 +133,52 @@ TEST_F (ComponentDocumentTests, FindsTheClosestDocumentAboveAComponent)
     EXPECT_EQ (ComponentDocument::findFor (&knob), &inner);
     EXPECT_EQ (ComponentDocument::findFor (&panel), &inner);
     EXPECT_EQ (ComponentDocument::findFor (&root), &outer);
+}
+
+TEST_F (ComponentDocumentTests, IsFoundFromTheRootItHasNowAndNoMoreFromTheOneBefore)
+{
+    Component first ("first");
+    Component second ("second");
+    Component child ("child");
+    second.addChildComponent (child);
+
+    FakeDocument document (first);
+    EXPECT_EQ (ComponentDocument::findFor (&first), &document);
+
+    document.root = &second;
+    document.attachToRoot();
+
+    EXPECT_EQ (ComponentDocument::findFor (&first), nullptr);
+    EXPECT_EQ (ComponentDocument::findFor (&child), &document);
+
+    // A root that is gone before its document leaves the document free for another one
+    auto third = std::make_unique<Component> ("third");
+    document.root = third.get();
+    document.attachToRoot();
+    EXPECT_EQ (ComponentDocument::findFor (&child), nullptr);
+
+    third.reset();
+    document.root = &first;
+    document.attachToRoot();
+    EXPECT_EQ (ComponentDocument::findFor (&first), &document);
+
+    // Without a root it is found by no component
+    document.root = nullptr;
+    document.attachToRoot();
+    EXPECT_EQ (ComponentDocument::findFor (&first), nullptr);
+}
+
+TEST_F (ComponentDocumentTests, ARootGivenToAnotherDocumentIsLeftToItByTheOneBefore)
+{
+    Component root ("root");
+
+    auto earlier = std::make_unique<FakeDocument> (root);
+    FakeDocument later (root);
+
+    EXPECT_EQ (ComponentDocument::findFor (&root), &later);
+
+    earlier.reset();
+    EXPECT_EQ (ComponentDocument::findFor (&root), &later);
 }
 
 TEST_F (ComponentDocumentTests, ReadsAssetsThroughTheDocumentOfAComponentAndFromTheFileWithoutOne)

@@ -49,6 +49,10 @@ the pointer onto it, with the mechanism described below. See
 [Components on 3D objects](yui/scenes.md#components-on-3d-objects) for the
 mapping, the `surface` property and the material a screen wants.
 
+A scene that shows components on its meshes takes every display frame of its
+window while it is showing, to follow the mesh and the material that show them:
+one without them leaves a window that stands still free to skip its frames.
+
 The rest of this page is for a host of your own: a mesh drawn with your
 pipeline, or a mapping the scene components do not do.
 

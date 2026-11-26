@@ -177,12 +177,24 @@ BlurEffect::~BlurEffect() = default;
 
 void BlurEffect::setRadius (float radiusPoints) noexcept
 {
-    radius.store (jmax (0.0f, radiusPoints), std::memory_order_relaxed);
+    const auto newRadius = jmax (0.0f, radiusPoints);
+
+    if (radius.exchange (newRadius, std::memory_order_relaxed) != newRadius)
+        invalidate();
 }
 
 float BlurEffect::getRadius() const noexcept
 {
     return radius.load (std::memory_order_relaxed);
+}
+
+void BlurEffect::releaseResources()
+{
+    pipeline = nullptr;
+    targetA = nullptr;
+    targetB = nullptr;
+    pipelineDevice = nullptr;
+    compileAttempted = false;
 }
 
 void BlurEffect::apply (Graphics& g, GpuTexture::Ptr inputTexture, Rectangle<float> bounds)

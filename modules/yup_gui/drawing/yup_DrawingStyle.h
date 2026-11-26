@@ -95,7 +95,8 @@ class DependencyObserver;
     of these values changes: a shader given the time is drawn at every frame of the window of its
     component, which it keeps repainting while it is showing with this style, and any other costs
     nothing between two changes. Without a GPU, or when the shader can't be drawn by the device,
-    the `use` paints nothing, and repaints nothing.
+    the `use` paints nothing, and repaints nothing: getShaderFailures() tells what the device
+    refused.
 
     A `use` inside a `filter` runs a shader as one of its primitives: on the picture `in` names,
     and on the one `in2` names when the shader declares two textures. A shader declaring none
@@ -233,6 +234,38 @@ public:
         compiled shader, nullptr for one the style was created without.
     */
     std::vector<Shader> getShaders() const;
+
+    /** A shader the drawing could not run where one of its `use` elements does, as
+        getShaderFailures() tells it. */
+    struct ShaderFailure
+    {
+        /** The shader, as getShaders() tells it. */
+        Shader shader;
+
+        /** Why it was not drawn, as GpuImageShader::draw() tells it. */
+        String message;
+    };
+
+    /** Returns what the device of the window could not draw of the shaders the drawing runs, as
+        its last paint found it: one for each `use` painting a shader, or running one in a
+        `filter`, whose shader could not be drawn, such as for a pipeline the device failed to
+        compile or a bundle with no variant for its graphics API. That `use` paints nothing,
+        and the filter leaves its layer as it is.
+
+        A failure is logged when it is found, and the StyleContext styling the component of the
+        drawing reports it at its next restyle, as a diagnostic at the `shader` block. It is
+        forgotten when the component is painted by another device and when it leaves its window.
+    */
+    std::vector<ShaderFailure> getShaderFailures() const;
+
+    /** Releases what the style keeps of the device it was last painted with: the textures
+        its shaders were drawn into, the ones holding their series, and the rasters of its
+        patterns and of its filtered layers.
+
+        The component the style is set on calls it when it leaves its window, so that nothing
+        of the device of that window is kept past it. The next paint makes them again.
+    */
+    void releaseResources();
 
     /** Creates the style again, for the same component and the same drawing, with the shaders
         another resolver finds.

@@ -557,6 +557,72 @@ TEST_F (DeformNodeTests, FollowsTheVerticesItsMeshIsGiven)
     EXPECT_EQ (deformed->getChangeCount(), count + 3);
 }
 
+TEST_F (DeformNodeTests, CopiesAMeshGivenVerticesWithoutNormalsVertexForVertex)
+{
+    // The two triangles of the strip share two of its four vertices. Given vertices without normals
+    // once it is made, the mesh keeps the four: only Mesh::addPrimitive() generates normals
+    const auto mesh = makeMorphedStrip();
+    auto withoutNormals = makeStripVertices();
+
+    for (auto& vertex : withoutNormals)
+        vertex.normal = {};
+
+    mesh->setVertices (0, withoutNormals);
+    ASSERT_EQ (mesh->getPrimitive (0).vertices.size(), 4u);
+
+    auto entity = scene.createEntity ("strip");
+    auto& deform = entity.attach<DeformNode> (mesh);
+
+    // So does the copy, where a vertex for each of the six indices would leave it out of step with the mesh
+    const auto& copy = deform.getDeformedMesh()->getPrimitive (0);
+    ASSERT_EQ (copy.vertices.size(), 4u);
+    EXPECT_EQ (copy.indices, mesh->getPrimitive (0).indices);
+    expectNear (copy.vertices[3].normal, { 0.0f, 0.0f, 0.0f });
+
+    // And it deforms: the first target lifts the top by 1
+    deform.setWeights (std::vector<float> { 1.0f });
+    scene.update (0.0);
+
+    expectNear (copy.vertices[2].position, { 0.0f, 3.0f, 0.0f });
+    expectNear (copy.vertices[3].position, { 1.0f, 3.0f, 0.0f });
+}
+
+TEST_F (DeformNodeTests, FollowsThePrimitivesItsMeshTakesLater)
+{
+    const auto mesh = makeMorphedStrip();
+    auto entity = scene.createEntity ("strip");
+    auto& deform = entity.attach<DeformNode> (mesh);
+    const auto deformed = deform.getDeformedMesh();
+    ASSERT_EQ (deformed->getNumPrimitives(), 1);
+
+    // The mesh takes a triangle 2 behind the strip, with a third morph target that moves nothing
+    std::vector<Mesh::Vertex> triangle (3);
+    triangle[0].position = { 0.0f, 0.0f, -2.0f };
+    triangle[1].position = { 1.0f, 0.0f, -2.0f };
+    triangle[2].position = { 0.0f, 1.0f, -2.0f };
+
+    for (auto& vertex : triangle)
+        vertex.normal = { 0.0f, 0.0f, 1.0f };
+
+    mesh->addPrimitive (triangle, {}, nullptr, {}, std::vector<Mesh::MorphTarget> (3));
+    scene.update (0.0);
+
+    // The copy the entity draws takes it at the next update, and the node has a weight for the new target
+    ASSERT_EQ (deformed->getNumPrimitives(), 2);
+    EXPECT_EQ (deformed->getPrimitive (1).indices, mesh->getPrimitive (1).indices);
+    expectNear (deformed->getPrimitive (1).vertices[2].position, { 0.0f, 1.0f, -2.0f });
+    expectNear (deformed->getBounds().getMin(), { 0.0f, 0.0f, -2.0f });
+    ASSERT_EQ (deform.getWeights().size(), 3u);
+    EXPECT_FLOAT_EQ (deform.getWeights()[2], 0.0f);
+
+    // The strip still deforms: the first target lifts its top by 1
+    deform.setWeights (std::vector<float> { 1.0f });
+    scene.update (0.0);
+
+    expectNear (deformed->getPrimitive (0).vertices[2].position, { 0.0f, 3.0f, 0.0f });
+    expectNear (deformed->getPrimitive (1).vertices[2].position, { 0.0f, 1.0f, -2.0f });
+}
+
 TEST_F (DeformNodeTests, ADestroyedJointStaysWhereItLastWas)
 {
     const auto mesh = makeStrip();
@@ -632,6 +698,29 @@ TEST_F (DeformNodeTests, DetachingGivesTheEntityTheSharedMeshBack)
 
     EXPECT_TRUE (rig.entity.detach<DeformNode>());
     EXPECT_EQ (rig.entity.get<MeshNode>()->mesh, mesh);
+}
+
+TEST_F (DeformNodeTests, AMeshNodeGivenTheSharedMeshAgainDrawsTheCopyFromTheNextUpdate)
+{
+    const auto mesh = makeStrip();
+    auto rig = makeRig (mesh);
+
+    // Attached again, the MeshNode draws the mesh in its bind pose, which the node never writes
+    rig.entity.attach<MeshNode> (mesh);
+    ASSERT_EQ (rig.entity.get<MeshNode>()->mesh, mesh);
+
+    rig.tip.get<TransformNode>()->setRotation (quarterTurnAboutX());
+    scene.update (0.0);
+
+    EXPECT_EQ (rig.entity.get<MeshNode>()->mesh, rig.deform->getDeformedMesh());
+    expectNear (rig.getVertices()[2].position, { 0.0f, 1.0f, 1.0f });
+
+    // Another mesh is the choice of who gave it, and stays
+    const auto other = makeStrip();
+    rig.entity.get<MeshNode>()->mesh = other;
+    scene.update (0.0);
+
+    EXPECT_EQ (rig.entity.get<MeshNode>()->mesh, other);
 }
 
 TEST_F (DeformNodeTests, ASkinWithoutEveryJointOfTheMeshIsNotUsed)

@@ -50,9 +50,13 @@ function failure (reason: string): AgentToolAnswer {
     return { text: reason, isError: true, image: "" };
 }
 
+function workspaceFolders (): string[] {
+    return (vscode.workspace.workspaceFolders ?? []).map (folder => folder.uri.fsPath);
+}
+
 // Whether a file is one of the workspace where it really is: a link leading out of it is not
 function isInWorkspace (file: string): boolean {
-    return isInsideFolders (file, (vscode.workspace.workspaceFolders ?? []).map (folder => folder.uri.fsPath));
+    return isInsideFolders (file, workspaceFolders ());
 }
 
 async function readReference (file: string): Promise<Uint8Array | undefined> {
@@ -142,7 +146,8 @@ export class YuiAgentBackend implements AgentBackend {
             let text = withRealPaths (parsed.text);
 
             if (ran.output !== undefined && parsed.isError !== true && image.length > 0) {
-                await saveImage (ran.output, image);
+                // Drawing took a while, in which what leads to the file may have changed: it is held to the workspace again
+                await saveImage (ran.output, image, workspaceFolders ());
                 text = withMember (text, "output", ran.output);
             }
 

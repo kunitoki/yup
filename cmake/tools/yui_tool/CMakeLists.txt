@@ -111,7 +111,9 @@ if (YUP_PLATFORM_EMSCRIPTEN)
     list (APPEND sources "${CMAKE_CURRENT_LIST_DIR}/web/main.cpp")
 
     # A material is compiled around the template of yup_renderer, which reads it from its folder of shaders. The
-    # module has no disk, so the template and the library it includes are files of its own, at the path it is built from
+    # module has no disk, so the template and the library it includes are files of its own, in a folder that is the
+    # same whoever builds it rather than at the path of its builder: the module tells the renderer to read them there
+    set (material_shader_folder "/yup_renderer/shaders")
     set (material_shader_sources "")
     set (material_shader_options "")
 
@@ -120,7 +122,8 @@ if (YUP_PLATFORM_EMSCRIPTEN)
         file (GLOB material_shader_sources "${renderer_shaders}/yup_MaterialShader.*" "${renderer_shaders}/lib/*.glsl")
 
         foreach (source IN LISTS material_shader_sources)
-            list (APPEND material_shader_options "--embed-file=${source}@${source}")
+            file (RELATIVE_PATH source_name "${renderer_shaders}" "${source}")
+            list (APPEND material_shader_options "--embed-file=${source}@${material_shader_folder}/${source_name}")
         endforeach()
     endif()
 
@@ -155,6 +158,10 @@ if (YUP_PLATFORM_EMSCRIPTEN)
     # The host loads the script by itself, with no page around it
     set_target_properties (${target_name} PROPERTIES SUFFIX ".js")
     set_property (TARGET ${target_name} APPEND PROPERTY LINK_DEPENDS ${material_shader_sources})
+    target_compile_definitions (${target_name} PRIVATE YUP_YUI_TOOL_MATERIAL_SHADERS="${material_shader_folder}")
+
+    # Nor does what is compiled tell where its builder keeps the sources: the renderer names its own file to find its shaders
+    target_compile_options (${target_name} PRIVATE "-fmacro-prefix-map=${yup_root}=.")
 else()
     yup_standalone_app (
         TARGET_NAME ${target_name}

@@ -848,6 +848,18 @@ protected:
     */
     bool hasFrameListeners() const noexcept;
 
+    /** Returns true when a theme changed since the frame listeners were last called.
+
+        A stylesheet that is up to date takes no frame, so the window is what tells it that the
+        theme changed: a backend runs a frame when this is true, and callFrameListeners() then has
+        the stylesheets of the components of the window look at the theme again.
+
+        Safe to call from any thread, without the message manager locked.
+
+        @see ApplicationTheme::getLastGeneration
+    */
+    bool hasThemeChanged() const noexcept;
+
     /** Calls the frame listeners.
 
         A backend calls this once per frame before painting, with the message manager locked.
@@ -866,6 +878,7 @@ protected:
 private:
     ListenerList<FrameListener> frameListeners;
     std::atomic<int> numFrameListeners { 0 };
+    std::atomic<uint32> lastThemeGeneration { 0 };
 
     YUP_DECLARE_WEAK_REFERENCEABLE (ComponentNative)
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComponentNative)

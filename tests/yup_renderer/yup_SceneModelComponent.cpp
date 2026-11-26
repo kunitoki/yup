@@ -824,6 +824,41 @@ TEST_F (SceneModelComponentTests, AModelThatDoesNotPlayAsksNothingOfTheFrames)
     EXPECT_DOUBLE_EQ (robot.model->getTime(), 0.5);
 }
 
+TEST_F (SceneModelComponentTests, APlayingClipTakesTheFramesOfItsWindowUntilItStops)
+{
+    Component window;
+    auto& native = makeWindow (window);
+
+    YuiDocument document;
+    serve (document);
+    load (document, robotWith (""));
+
+    const Robot robot (document);
+    ASSERT_TRUE (robot.isValid());
+
+    window.addChildComponent (*robot.view);
+
+    // A model that stands still leaves the window free to skip its frames
+    sendFrames (native, 3);
+    ASSERT_FALSE (native.hasFrameListeners());
+
+    robot.model->setPlaying (true);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    native.callFrameListeners (0.25);
+    native.callFrameListeners (0.25);
+
+    EXPECT_DOUBLE_EQ (robot.model->getTime(), 0.5);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    // The clip stops at its end, 1 second in: nothing is left for the frames to move
+    native.callFrameListeners (0.75);
+    EXPECT_DOUBLE_EQ (robot.model->getTime(), 1.0);
+
+    sendFrames (native, 3);
+    EXPECT_FALSE (native.hasFrameListeners());
+}
+
 TEST_F (SceneModelComponentTests, TheSpeedScalesTheTimeOfTheFramesAndANegativeOnePlaysBackwards)
 {
     YuiDocument document;
@@ -1240,16 +1275,17 @@ TEST_F (SceneModelComponentTests, AModelInstantiatedAgainPlaysOnAsItWas)
     robot.view->refreshDisplay (0.25);
     expectPlaying (1.0);
 
-    // Moved to another parent, the model leaves the scene on its way and is instantiated again under the entity it gets
+    // Moved to another parent of its scene, the model keeps its entity and the instance under it: its clip plays on
     const auto second = robot.model->getInstance();
     group->addAndMakeVisible (*robot.model);
 
-    EXPECT_FALSE (second.isValid());
-    ASSERT_TRUE (robot.model->getInstance().isValid());
+    EXPECT_TRUE (second.isValid());
+    EXPECT_EQ (robot.model->getInstance(), second);
     EXPECT_EQ (robot.model->getEntity().getParent(), group->getEntity());
     expectPlaying (1.0);
 
     robot.view->refreshDisplay (0.25);
+    EXPECT_EQ (robot.model->getInstance(), second);
     expectPlaying (1.5);
 
     EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());

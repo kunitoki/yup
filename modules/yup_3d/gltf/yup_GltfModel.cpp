@@ -77,8 +77,8 @@ struct GltfModel::Data
     std::vector<Mesh::Ptr> meshes;
     std::vector<Material::Ptr> materials;
     std::vector<Texture::Ptr> textures;
-    std::vector<AnimationClip::Ptr> animations;
-    std::vector<Skin::Ptr> skins;
+    std::vector<AnimationClip::Ptr> animations; // By glTF index, nullptr for an animation that can't be played
+    std::vector<Skin::Ptr> skins;               // By glTF index, nullptr for a skin that can't be used
     std::vector<NodeDesc> nodes;
     std::vector<CameraDesc> cameras;
     std::vector<LightDesc> lights;
@@ -180,10 +180,15 @@ struct GltfModel::Data
 
         // A mesh that deforms is copied for each instance and follows joints that are entities of that
         // instance, and clips target glTF nodes: the entity each node became is only known once an
-        // instance is built
-        if (! deformers->empty() || ! animations.empty())
+        // instance is built. An animation that can't be played keeps its place, without a clip
+        const auto hasClips = std::any_of (animations.begin(), animations.end(), [] (const AnimationClip::Ptr& clip)
         {
-            prefab->addLink ([deformers = deformers, clips = animations, nodeParts = std::move (nodeParts)] (Span<const Entity> entities)
+            return clip != nullptr;
+        });
+
+        if (! deformers->empty() || hasClips)
+        {
+            prefab->addLink ([deformers = deformers, clips = animations, hasClips, nodeParts = std::move (nodeParts)] (Span<const Entity> entities)
             {
                 std::vector<Entity> targets (nodeParts.size());
 
@@ -220,7 +225,7 @@ struct GltfModel::Data
                     deform.update (0.0);
                 }
 
-                if (clips.empty())
+                if (! hasClips)
                     return;
 
                 if (auto root = entities.front(); root.isValid())
@@ -503,16 +508,25 @@ public:
                                                      "KHR_materials_emissive_strength", "KHR_materials_ior", "KHR_materials_specular",
                                                      "KHR_materials_clearcoat", "KHR_materials_sheen" };
 
-        for (uint32_t i = 0; i < model.extensions_required_count; ++i)
+        const auto isSupported = [] (tg3_str extension)
         {
-            const auto& extension = model.extensions_required[i];
-            const auto supported = std::any_of (std::begin (supportedExtensions), std::end (supportedExtensions), [&] (const char* name)
+            return std::any_of (std::begin (supportedExtensions), std::end (supportedExtensions), [&] (const char* name)
             {
                 return tg3_str_equals_cstr (extension, name) != 0;
             });
+        };
 
-            if (! supported)
+        for (uint32_t i = 0; i < model.extensions_required_count; ++i)
+        {
+            if (const auto& extension = model.extensions_required[i]; ! isSupported (extension))
                 return Result::fail ("Unsupported required glTF extension: " + gltfToString (extension));
+        }
+
+        // What a file uses without requiring it can be left out: it then shows without what the extension changes
+        for (uint32_t i = 0; i < model.extensions_used_count; ++i)
+        {
+            if (const auto& extension = model.extensions_used[i]; ! isSupported (extension))
+                warn ("Unsupported glTF extension: " + gltfToString (extension) + ", ignored");
         }
 
         for (uint32_t i = 0; i < model.materials_count; ++i)
@@ -528,12 +542,7 @@ public:
             data.lights.push_back (convertLight (model.lights[i]));
 
         for (uint32 i = 0; i < model.skins_count; ++i)
-        {
-            skins.push_back (convertSkin (model.skins[i], static_cast<int> (i)));
-
-            if (skins.back() != nullptr)
-                data.skins.push_back (skins.back());
-        }
+            data.skins.push_back (convertSkin (model.skins[i], static_cast<int> (i)));
 
         // What is counted last is left out first, see keepValues(): a model can do without the clips and
         // the deformations that no longer fit, not without its scenes
@@ -542,10 +551,7 @@ public:
         convertDeformers();
 
         for (uint32 i = 0; i < model.animations_count; ++i)
-        {
-            if (auto clip = convertAnimation (model.animations[i], static_cast<int> (i)); clip != nullptr)
-                data.animations.push_back (std::move (clip));
-        }
+            data.animations.push_back (convertAnimation (model.animations[i], static_cast<int> (i)));
 
         return Result::ok();
     }
@@ -677,13 +683,14 @@ private:
 
         const auto& accessor = model.accessors[index];
         numComponents = tg3_num_components (accessor.type);
-        const auto componentSize = static_cast<uint64> (tg3_component_size (accessor.component_type));
+        const auto componentBytes = tg3_component_size (accessor.component_type);
         const auto count = accessor.count;
 
-        // More than the model can keep is never read
-        if (numComponents <= 0 || numComponents > 16 || componentSize == 0 || count > valuesBudget / static_cast<uint64> (numComponents))
+        // More than the model can keep is never read, and nothing of a type that is not known: its size is negative
+        if (numComponents <= 0 || numComponents > 16 || componentBytes <= 0 || count > valuesBudget / static_cast<uint64> (numComponents))
             return false;
 
+        const auto componentSize = static_cast<uint64> (componentBytes);
         const auto elementSize = static_cast<uint64> (numComponents) * componentSize;
         const auto normalized = accessor.normalized != 0;
         values.assign (static_cast<size_t> (count) * static_cast<size_t> (numComponents), 0.0);
@@ -719,7 +726,12 @@ private:
 
         const auto& sparse = accessor.sparse;
         const auto sparseCount = static_cast<uint64> (jmax (0, sparse.count));
-        const auto indexSize = static_cast<uint64> (tg3_component_size (sparse.indices.component_type));
+        const auto indexComponentBytes = tg3_component_size (sparse.indices.component_type);
+
+        if (indexComponentBytes <= 0)
+            return false;
+
+        const auto indexSize = static_cast<uint64> (indexComponentBytes);
 
         const uint8* indexBytes = nullptr;
         const uint8* valueBytes = nullptr;
@@ -727,7 +739,6 @@ private:
         uint64 valueViewSize = 0;
 
         if (sparseCount > count
-            || indexSize == 0
             || ! getBufferView (sparse.indices.buffer_view, indexBytes, indexViewSize)
             || ! getBufferView (sparse.values.buffer_view, valueBytes, valueViewSize)
             || sparse.indices.byte_offset > indexViewSize
@@ -902,6 +913,28 @@ private:
         return member != nullptr ? toNumber (*member, fallback) : fallback;
     }
 
+    /** The names of the first morph targets of a mesh, as exporters write them to the targetNames of its extras:
+        glTF has no place for them. One that is not a string is empty, so that the others keep their index.
+    */
+    static StringArray readTargetNames (const tg3_value* extras, int numTargets)
+    {
+        StringArray names;
+
+        const auto* targetNames = findMember (extras, "targetNames");
+        if (targetNames == nullptr || targetNames->type != TG3_VALUE_ARRAY)
+            return names;
+
+        const auto numNames = jmin (targetNames->array_count, static_cast<uint32_t> (jmax (0, numTargets)));
+
+        for (uint32_t i = 0; i < numNames; ++i)
+        {
+            const auto& name = targetNames->array_data[i];
+            names.add (name.type == TG3_VALUE_STRING ? gltfToString (name.string_val) : String());
+        }
+
+        return names;
+    }
+
     /** Fills @p destination from a number array member, leaving it untouched when absent or too short. */
     template <size_t N>
     static void readNumbers (const tg3_value* object, const char* key, std::array<float, N>& destination)
@@ -1063,34 +1096,18 @@ private:
 
         std::vector<Mesh::Influences> influences (numVertices);
 
-        for (size_t v = 0; v < numVertices; ++v)
+        // glTF: weights are not negative, and no transformation applies to a vertex whose weights are all zero.
+        // Nothing says it follows the first joint: it is left without weights, and stays where the bind pose has
+        // it. A joint without weight is not used, whatever index it has. Mesh::addPrimitive() then makes the
+        // weights of a vertex add up to 1, as glTF asks: files only do nearly, and not at all once the joints of
+        // JOINTS_1 are left out
+        for (size_t i = 0; i < influences.size() * 4; ++i)
         {
-            const auto* joint = joints.data() + v * 4;
-            auto* weight = weights.data() + v * 4;
-            auto total = 0.0;
-
-            // glTF: weights are not negative
-            for (size_t i = 0; i < 4; ++i)
-            {
-                weight[i] = weight[i] > 0.0 ? weight[i] : 0.0;
-                total += weight[i];
-            }
-
-            // glTF: no transformation applies to a vertex whose weights are all zero. Nothing says it follows
-            // the first joint: it is left without weights, and stays where the bind pose has it
-            if (total == 0.0 || ! std::isfinite (total))
+            if (! (weights[i] > 0.0))
                 continue;
 
-            // glTF asks for weights adding up to 1, which files only do nearly, and not at all once the joints
-            // of JOINTS_1 are left out. A joint without weight is not used, whatever index it has
-            for (size_t i = 0; i < 4; ++i)
-            {
-                if (weight[i] == 0.0)
-                    continue;
-
-                influences[v].joints[i] = static_cast<uint16> (joint[i]);
-                influences[v].weights[i] = static_cast<float> (weight[i] / total);
-            }
+            influences[i / 4].joints[i % 4] = static_cast<uint16> (joints[i]);
+            influences[i / 4].weights[i % 4] = static_cast<float> (weights[i]);
         }
 
         return influences;
@@ -1140,7 +1157,7 @@ private:
                     continue;
 
                 // glTF: a morph target accessor has as many elements as the vertices have. Another is not read
-                if (countElements (attribute.value) != numVertices || ! readAccessor (attribute.value, values, numComponents) || numComponents != 3)
+                if (countElements (attribute.value) != numVertices || ! readAccessor (attribute.value, values, numComponents) || numComponents != 3 || ! areFinite (values))
                 {
                     warn (targetWhere + ": invalid " + name + ", ignored");
                     continue;
@@ -1208,7 +1225,7 @@ private:
             std::vector<double> values;
             int numComponents = 0;
 
-            if (! readAccessor (positionAccessor, values, numComponents) || numComponents != 3)
+            if (! readAccessor (positionAccessor, values, numComponents) || numComponents != 3 || ! areFinite (values))
             {
                 warn (where + ": missing or invalid POSITION");
                 continue;
@@ -1325,11 +1342,15 @@ private:
                                     ? data.materials[static_cast<size_t> (primitive.material)]
                                     : nullptr;
 
-            mesh->addPrimitive (std::move (vertices), std::move (indices), material, std::move (influences), std::move (morphTargets));
+            if (const auto result = mesh->addPrimitive (std::move (vertices), std::move (indices), material, std::move (influences), std::move (morphTargets)); result.failed())
+                warn (where + ": " + result.getErrorMessage() + ", ignored");
         }
 
         // glTF: the weights the morph targets have unless a node gives its own
         mesh->setMorphWeights (toFloats (std::vector<double> (source.weights, source.weights + source.weights_count)));
+
+        // glTF has no place for the names of morph targets: exporters write them to the extras of the mesh
+        mesh->setMorphTargetNames (readTargetNames (source.ext.extras, mesh->getNumMorphTargets()));
 
         return mesh;
     }
@@ -1413,7 +1434,10 @@ private:
             std::vector<double> values;
             int numComponents = 0;
 
-            if (! readAccessor (source.inverse_bind_matrices, values, numComponents) || numComponents != 16)
+            // Only the matrices of the joints are kept, and have to be numbers
+            if (! readAccessor (source.inverse_bind_matrices, values, numComponents)
+                || numComponents != 16
+                || ! areFinite (Span<const double> (values.data(), joints.size() * 16)))
             {
                 warn (where + ": invalid inverseBindMatrices, ignored");
                 return nullptr;
@@ -1436,11 +1460,11 @@ private:
     /** The skin that moves the mesh of a node, or nullptr, with a warning when the node has one that can't. */
     Skin::Ptr findNodeSkin (const tg3_node& source, int nodeIndex)
     {
-        if (! isPositiveAndBelow (source.skin, static_cast<int> (skins.size())) || ! isPositiveAndBelow (source.mesh, static_cast<int> (data.meshes.size())))
+        if (! isPositiveAndBelow (source.skin, static_cast<int> (data.skins.size())) || ! isPositiveAndBelow (source.mesh, static_cast<int> (data.meshes.size())))
             return nullptr;
 
         // A skin that could not be read told so itself
-        const auto skin = skins[static_cast<size_t> (source.skin)];
+        const auto skin = data.skins[static_cast<size_t> (source.skin)];
         if (skin == nullptr)
             return nullptr;
 
@@ -1524,6 +1548,14 @@ private:
     {
         std::vector<bool> hasParent (model.nodes_count, false);
 
+        const auto areNumbers = [] (std::initializer_list<float> values)
+        {
+            return std::all_of (values.begin(), values.end(), [] (float value)
+            {
+                return std::isfinite (value);
+            });
+        };
+
         for (uint32_t i = 0; i < model.nodes_count; ++i)
         {
             const auto& source = model.nodes[i];
@@ -1554,6 +1586,16 @@ private:
                                             static_cast<float> (source.rotation[2]),
                                             static_cast<float> (source.rotation[3]))
                                     .normalized();
+            }
+
+            // A file can state numbers beyond the floats a transform is made of: it would take the node, and all
+            // that follows it, nowhere
+            if (! areNumbers ({ node.position.getX(), node.position.getY(), node.position.getZ(), node.rotation.getX(), node.rotation.getY(), node.rotation.getZ(), node.rotation.getW(), node.scale.getX(), node.scale.getY(), node.scale.getZ() }))
+            {
+                warn ("Node " + String (i) + ": a transform that is not finite, ignored");
+                node.position = {};
+                node.rotation = Quaternion::identity();
+                node.scale = { 1.0f, 1.0f, 1.0f };
             }
         }
 
@@ -1669,6 +1711,17 @@ private:
         return floats;
     }
 
+    /** True when every value is a number a float can hold: a file can state what is not a number, and
+        doubles beyond the floats they become.
+    */
+    static bool areFinite (Span<const double> values) noexcept
+    {
+        return std::all_of (values.begin(), values.end(), [] (double value)
+        {
+            return std::abs (value) <= static_cast<double> (std::numeric_limits<float>::max());
+        });
+    }
+
     /** The number of morph targets of the mesh a node draws, or -1 for a node that draws none. */
     int countMorphTargets (int nodeIndex) const
     {
@@ -1723,10 +1776,20 @@ private:
             const auto numTimes = countValues (sampler.input);
             const auto numValues = countValues (sampler.output);
 
-            // The number of weights of a key only comes from dividing the two: the mesh they morph, when the
-            // node draws one, tells how many there can be
-            if (const auto numTargets = countMorphTargets (channel.target.node); *path == AnimationClip::Path::weights && numTargets >= 0)
+            if (*path == AnimationClip::Path::weights)
             {
+                const auto numTargets = countMorphTargets (channel.target.node);
+
+                // Weights morph the mesh their node draws: without one they would be kept, and sampled at
+                // every pose, for nothing
+                if (numTargets < 0)
+                {
+                    warn (channelWhere + ": the node draws no mesh for the weights to morph, ignored");
+                    continue;
+                }
+
+                // The number of weights of a key only comes from dividing the two: the mesh tells how many
+                // there can be
                 const auto numElements = numTimes * (*interpolation == AnimationClip::Interpolation::cubicSpline ? 3u : 1u);
                 const auto numWeights = numElements > 0 ? numValues / numElements : 0u;
 
@@ -1780,7 +1843,6 @@ private:
     std::vector<std::optional<Image>> decodedImages;
     std::vector<bool> imageDecoded;
     std::map<int, Texture::Ptr> textureCache;
-    std::vector<Skin::Ptr> skins;  // By glTF index, nullptr for a skin that can't be used
     std::vector<uint32> reachedBy; // For each node, the last scene counted that reaches it, see countSceneValues()
     uint32 reachingScene = 0;
     const uint64 valuesBudget = countValuesBudget (model);

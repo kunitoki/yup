@@ -62,6 +62,29 @@ TEST_F (YuiHandlerTests, ParsesSingleCallArrowParametersAndCallBlocks)
     EXPECT_TRUE (empty.getReference().calls.empty());
 }
 
+TEST_F (YuiHandlerTests, TakesCommentsWhereverTheParserDoes)
+{
+    // What the parser accepts as a handler is kept as it is written, comments included
+    const auto parsed = YuiParser::parse ("Slider { onValueChanged: (v /* the value */) /* then */ => // the call\n action (\"set\", v); }");
+    ASSERT_TRUE (parsed.wasOk()) << DataTreeDiagnostic::join (parsed.diagnostics);
+
+    const auto arrow = YuiHandler::parse (parsed.document.getChild (0).getProperty ("onValueChanged").toString());
+    ASSERT_TRUE (arrow.wasOk()) << arrow.getErrorMessage();
+    EXPECT_EQ (arrow.getReference().argumentNames, StringArray ({ "v" }));
+    ASSERT_EQ (arrow.getReference().calls.size(), 1u);
+    EXPECT_EQ (arrow.getReference().calls[0].name, "action");
+    EXPECT_EQ (arrow.getReference().calls[0].arguments.size(), 2u);
+
+    const auto block = YuiHandler::parse ("(index, /* the text */ label) /* then */ => /* both */ { action (\"pick\", label); /* and */ bus.select (index); }");
+    ASSERT_TRUE (block.wasOk()) << block.getErrorMessage();
+    EXPECT_EQ (block.getReference().argumentNames, StringArray ({ "index", "label" }));
+    ASSERT_EQ (block.getReference().calls.size(), 2u);
+    EXPECT_EQ (block.getReference().calls[1].name, "select");
+
+    // A parenthesis that starts no names is not taken for them
+    EXPECT_TRUE (YuiHandler::parse ("(a b) => action (a)").failed());
+}
+
 TEST_F (YuiHandlerTests, RejectsMalformedHandlerSyntax)
 {
     EXPECT_TRUE (YuiHandler::parse ("").failed());

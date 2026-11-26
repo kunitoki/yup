@@ -87,6 +87,20 @@ public:
     */
     Result loadFromString (const String& text, YuiParser::ImportResolver resolveImport = nullptr);
 
+    /** Loads the outcome of a parse, as @ref loadFromString loads the one it makes.
+
+        This is for the code parsing the text itself, as YuiLoader does to tell the parser the
+        path of the main file.
+
+        @param parsed  The outcome of YuiParser::parse. When it has errors, they become the
+                       diagnostics of the document and the load fails, which keeps the
+                       interface loaded before.
+
+        @returns A failure when the text has errors, or when its stylesheet or its components
+                 are invalid.
+    */
+    Result load (const YuiParser::ParseResult& parsed);
+
     /** Loads the interface of an already parsed document.
 
         @param document   A `yui` document, as returned by YuiParser.
@@ -171,7 +185,13 @@ public:
     void notifyAssetChanged (const String& path);
 
     //==============================================================================
-    /** Returns the parsed document of the interface loaded last. */
+    /** Returns the parsed document of the interface loaded last.
+
+        The interface follows the changes made to this tree in place: it is built again once they
+        are over, from the message loop, keeping the components still described (see
+        @ref applyPendingChanges). A change that adds, removes or moves an element leaves the
+        problems listed afterwards without a line and a column, until a text is loaded again.
+    */
     const DataTree& getTree() const noexcept { return tree; }
 
     /** Returns the root component, or nullptr if nothing is loaded. */
@@ -234,9 +254,12 @@ public:
         builder.setInitializer<ComponentType> (id, std::move (initializer));
     }
 
-    /** Makes again, now, the components of the `repeat` blocks whose range changed (see YuiBuilder::applyPendingChanges).
+    /** Applies, now, the changes waiting for the message loop (see YuiBuilder::applyPendingChanges).
 
-        The message loop does it by itself, a tool or a test with none calls this.
+        These are the changes made in place to the tree of the document (see @ref getTree) and the
+        ranges of the `repeat` blocks that changed: the interface is built again for them once
+        they are over, and the listeners are told as for a load. The message loop does it by
+        itself, a tool or a test with none calls this.
     */
     void applyPendingChanges();
 
@@ -290,13 +313,6 @@ public:
     */
     static YuiDocument* findDocumentFor (const Component* component);
 
-    /** Returns every document that exists now, in the order they were created.
-
-        Development tools gather the diagnostics of a whole application without being handed each
-        of its documents, which is what this is for.
-    */
-    static std::vector<YuiDocument*> getAllDocuments();
-
     //==============================================================================
     /** Receives the loads of a document. */
     class YUP_API Listener
@@ -308,13 +324,20 @@ public:
 
             A failed load keeps the interface loaded before, so the root may be unchanged, or
             null when nothing was loaded yet.
+
+            It is also called each time the interface was built again without a load, for a
+            change made to the tree of the document or to the range of a `repeat` (see
+            YuiDocument::applyPendingChanges), with the result of that build. The builds made
+            after a load that failed tell the failure of the load again, as its problems are
+            still the ones listed.
         */
         virtual void documentLoaded (YuiDocument& document, const Result& result) = 0;
 
         /** Called when a problem is met after a load, and added to the diagnostics.
 
             This happens when a rule starts matching later, such as a `:hover` rule with an
-            invalid value. The problems met while loading are reported by documentLoaded.
+            invalid value. The problems met while loading, or while the interface is built
+            again, are reported by documentLoaded.
         */
         virtual void documentDiagnosed (YuiDocument& document, const DataTreeDiagnostic& diagnostic) {}
 
@@ -343,8 +366,8 @@ private:
 
     Result loadTree (const DataTree& document, const std::shared_ptr<const DataTreeSourceMap>& map);
     Result buildTree (const DataTree& document, const std::shared_ptr<const DataTreeSourceMap>& map);
-    void handleLiveTreeMutation();
-    void handleRangeChange();
+    Result handleLiveTreeMutation();
+    Result handleRangeChange();
     void attachStyleContext (Component& root);
     Result fail (const String& message);
     void resetState();

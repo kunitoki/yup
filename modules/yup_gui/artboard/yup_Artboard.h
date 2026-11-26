@@ -136,6 +136,8 @@ public:
 
     /** Sets the Rive artboard to paused or running.
 
+        A paused artboard asks its window for no frame.
+
         @param shouldPause True to pause the Rive artboard, false to run it.
     */
     void setPaused (bool shouldPause);
@@ -145,6 +147,9 @@ public:
 
     /** Sets the Rive artboard to pause when hidden.
 
+        An artboard pausing while it is not showing asks its window for no frame until it
+        shows again, so it does not keep that window from idling.
+
         @param shouldPause True to pause the Rive artboard when hidden, false to not pause.
     */
     void shouldPauseWhenHidden (bool shouldPause);
@@ -152,8 +157,8 @@ public:
     //==============================================================================
     /** Advances the Rive artboard by a given number of seconds.
 
-        The artboard calls this every frame and repaints only when it returns true,
-        so a still artboard costs nothing to draw.
+        The artboard calls this every frame while it has a scene and is not paused, and
+        repaints only when it returns true, so a still artboard costs nothing to draw.
 
         @param elapsedSeconds The number of seconds to advance the Rive artboard by.
 
@@ -532,6 +537,10 @@ public:
     /** @internal */
     void resized() override;
     /** @internal */
+    void visibilityChanged() override;
+    /** @internal */
+    void parentHierarchyChanged() override;
+    /** @internal */
     void contentScaleChanged (float dpiScale) override;
     /** @internal */
     void mouseEnter (const MouseEvent& event) override;
@@ -599,6 +608,7 @@ private:
     void forwardButtons (const MouseEvent& event, int changedButtons, bool isDown);
     void syncTextInput();
     void afterInput();
+    void updateFrameAttachment();
 
     std::shared_ptr<ArtboardFile> artboardFile;
     uint64_t deferredTarget = 0;
@@ -632,7 +642,7 @@ private:
     bool notifyingNodeBounds = false;
     bool drainingEvents = false;
     bool applyingNodeAttachment = false;
-    FrameAttachment frameAttachment { *this, bindFront (&Artboard::refreshDisplay, this) };
+    FrameAttachment frameAttachment { *this, bindFront (&Artboard::refreshDisplay, this), false };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Artboard)
 };

@@ -28,7 +28,8 @@ namespace yup
 /** A component that gives a material to the meshes of the 3D component it is in: the
     `Material3D` of a `.yui` document.
 
-    It is not a node of the scene and has no entity. It owns a Material, described by its
+    It is not a node of the scene and has no entity: it paints nothing and takes no mouse
+    event, whatever its bounds. It owns a Material, described by its
     properties, and attaches it as a MaterialNode to the entity of its parent: a node, or the
     `Scene3D` itself for the whole scene. The material then replaces the one of every mesh of
     that entity and of the entities under it, the nearest `Material3D` up the tree winning, and
@@ -117,7 +118,10 @@ namespace yup
     as the styles report what prevents an image shader: at its `material` for files that can't
     be read and for what the loader or the compiler says of them, and at a `property` that
     does not fit the uniform block. A file that stops loading while it is edited leaves the
-    shader as it was. All of them are reported with the load of the document, or by the display
+    shader as it was. A material the renderer can't draw with is a problem of the `material` of
+    its block too, one that has no variant for the tier the scene is drawn on or whose pipelines
+    the device does not compile: the painting of the scene finds it, and the display frame that
+    follows tells it. All of them are reported with the load of the document, or by the display
     frame that finds them later, and again after each load for as long as they stand.
 
     @see SceneNodeComponent, SceneMeshComponent, Material, MaterialNode, MaterialShader, MaterialShaderNode
@@ -177,6 +181,9 @@ public:
     /** @internal Looks for the shaders the Material3D components shown by a scene name and reads their values again, on
         every display frame. Returns true when a value given to the renderer changed. */
     static bool updateShaders (Scene& shownScene, double elapsedSeconds);
+    /** @internal Returns true when a Material3D shown by a scene names a shader: nothing tells when the values its
+        shader reads change, so the scene then takes every display frame. */
+    static bool hasShadersIn (Scene& shownScene);
 
 private:
     //==============================================================================
@@ -203,6 +210,7 @@ private:
     void updateShaderLink();
     bool refreshShader (double elapsedSeconds, std::vector<ShaderProblem>& problems);
     void updateShader (StyleSheet::Ptr sheet, std::vector<ShaderProblem>& problems);
+    void updateRendererProblem (const MaterialShaderNode& node, std::vector<ShaderProblem>& problems);
     bool readShaderInputs (const DataTree& block, const ShaderUniforms& uniforms, std::vector<ShaderInput>& inputs, std::vector<ShaderProblem>& problems);
     void addShaderProblem (std::vector<ShaderProblem>& problems, const DataTree& element, const Identifier& property, const String& message);
     var findShaderInput (const Identifier& name) const;
@@ -221,6 +229,7 @@ private:
     String shaderPath;           // The file of the shader the meshes are colored with
     StyleSheet::Ptr shaderSheet; // The stylesheet the shader was looked for in, nullptr to look for it again
     std::weak_ptr<const DataTreeSourceMap> shaderLoad; // The source map of the load of the document it was last looked for after
+    String rendererProblem;      // What the renderer said prevents it from drawing with the shader, as it was last told
     std::vector<ShaderInput> shaderInputs;
     double shaderTime = 0.0;
     bool fillsShaderTime = false;

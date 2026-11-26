@@ -317,6 +317,10 @@ public:
     /** @internal */
     void resized() override;
     /** @internal */
+    void visibilityChanged() override;
+    /** @internal */
+    void parentHierarchyChanged() override;
+    /** @internal */
     void refreshDisplay (double lastFrameTimeSeconds);
     /** @internal */
     bool keyDown (const KeyPress& key, const Point<float>& position) override;
@@ -363,6 +367,7 @@ private:
     void updateOverflowButtonContent (bool selectedIsHidden);
     void moveButton (TabButton& button, Motion& motion, Rectangle<float> target, bool animate);
     void updateDraggedTab (float pointer);
+    void updateFrameAttachment();
     bool isDragging (const TabButton& button) const noexcept;
     void notifySelectionChanged (NotificationType notification);
     void notifyTabMoved (Identifier tabId, int oldIndex, int newIndex, NotificationType notification);
@@ -395,7 +400,7 @@ private:
     bool ignoreMouseDownAfterMenuDismissal = false;
 
     ListenerList<Listener> listeners;
-    FrameAttachment frameAttachment { *this, bindFront (&TabBar::refreshDisplay, this) };
+    FrameAttachment frameAttachment { *this, bindFront (&TabBar::refreshDisplay, this), false };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TabBar)
 };

@@ -40,7 +40,14 @@ namespace yup
 
     The `color` is a color of the interface, sRGB encoded: the light gets it as the linear RGB
     it shades with, and the property reads back as it was set. The shadow bias and the contact
-    shadows of LightNode have no property: set them on the LightNode of getEntity().
+    shadows of LightNode have no property: set them on the LightNode of getEntity(), which keeps
+    them for as long as the light keeps its entity, so also when it moves to another parent of
+    its scene.
+
+    A brightness, a range, a cone angle or a radius that is negative, or that is not a finite
+    number, is reported in the diagnostics of the document, and the light keeps the value it
+    had. A spot light whose inner cone is wider than its outer one ends at the outer one,
+    without fading.
 
     @see SceneNodeComponent, LightNode
 */
@@ -141,6 +148,7 @@ private:
     template <class Value>
     void setValue (Value& value, const Value& newValue, const Identifier& property);
 
+    void setAmount (float& value, float newValue, const Identifier& property, const char* expected);
     void updateLight();
 
     LightNode settings; // The values the LightNode of the entity is given

@@ -180,6 +180,75 @@ TEST_F (ComponentTypeInfoTests, BuilderInfersTypesDefaultsStatelessBoolSettersSi
     EXPECT_EQ (received, 42);
 }
 
+TEST_F (ComponentTypeInfoTests, ConnectingANullHandlerDisconnectsASignal)
+{
+    struct DefaultTheme
+    {
+        DefaultTheme() { ApplicationTheme::setGlobalTheme (createThemeVersion1()); }
+
+        ~DefaultTheme() { ApplicationTheme::setGlobalTheme (oldTheme.get()); }
+
+        ApplicationTheme::Ptr oldTheme = ApplicationTheme::getGlobalTheme();
+    };
+
+    const DefaultTheme theme;
+    const auto handler = [] (const Array<var>&) {};
+
+    // A signal the builder makes of a callback of the widget
+    SampleWidget widget;
+    const auto* triggered = widget.getTypeInfo().findSignal (Identifier ("onTriggered"));
+    ASSERT_NE (triggered, nullptr);
+
+    triggered->connect (widget, handler);
+    EXPECT_TRUE (widget.onTriggered != nullptr);
+
+    triggered->connect (widget, nullptr);
+    EXPECT_TRUE (widget.onTriggered == nullptr);
+
+    // And those the widgets connect themselves, which leave no callback to call a handler that is not there
+    TabBar bar;
+    const auto* selectionChanged = bar.getTypeInfo().findSignal (Identifier ("onSelectionChanged"));
+    ASSERT_NE (selectionChanged, nullptr);
+
+    selectionChanged->connect (bar, handler);
+    EXPECT_TRUE (bar.onSelectionChanged != nullptr);
+
+    selectionChanged->connect (bar, nullptr);
+    EXPECT_TRUE (bar.onSelectionChanged == nullptr);
+
+    TabComponent tabs;
+    const auto* tabChanged = tabs.getTypeInfo().findSignal (Identifier ("onTabChanged"));
+    ASSERT_NE (tabChanged, nullptr);
+
+    tabChanged->connect (tabs, handler);
+    EXPECT_TRUE (tabs.getTabBar().onSelectionChanged != nullptr);
+
+    tabChanged->connect (tabs, nullptr);
+    EXPECT_TRUE (tabs.getTabBar().onSelectionChanged == nullptr);
+}
+
+TEST_F (ComponentTypeInfoTests, IsASubtypeOfTheTypesItDerivesFromAndNotOfTheirNamesakes)
+{
+    const auto& base = MeterWidget::getMeterTypeInfo();
+
+    LabeledMeterWidget labeled;
+    const auto& derived = labeled.getTypeInfo();
+
+    EXPECT_TRUE (derived.isSubtypeOf (derived));
+    EXPECT_TRUE (derived.isSubtypeOf (base));
+    EXPECT_TRUE (derived.isSubtypeOf (Component::getClassTypeInfo()));
+    EXPECT_FALSE (base.isSubtypeOf (derived));
+
+    // Another type info of the same name is another type: its accessors may be those of another class
+    const ComponentTypeInfo namesake (base.getTypeName(), nullptr, {});
+    EXPECT_FALSE (derived.isSubtypeOf (namesake));
+    EXPECT_FALSE (namesake.isSubtypeOf (base));
+
+    // By name they are told as the same
+    EXPECT_TRUE (derived.isSubtypeOf (base.getTypeName()));
+    EXPECT_TRUE (namesake.isSubtypeOf (base.getTypeName()));
+}
+
 TEST_F (ComponentTypeInfoTests, SeriesAreReadWhereTheComponentKeepsThem)
 {
     MeterWidget widget;

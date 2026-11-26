@@ -231,6 +231,32 @@ TEST_F (ForwardPassMockTests, FailedMaterialShaderCompileIsRememberedInsteadOfRe
     EXPECT_EQ (pipelinesMade, 8);
 }
 
+TEST_F (ForwardPassMockTests, WhatPreventsDrawingWithAMaterialShaderIsToldEachTimeItIsAsked)
+{
+    ForwardPass pass;
+    const auto stock = MaterialShader::createDefault();
+    const auto rasterOnly = MaterialShader::createFromBundles (stock->getRasterBundle(), nullptr);
+    ASSERT_TRUE (rasterOnly.wasOk());
+
+    // A shader without the variant of the tier
+    const auto missing = pass.prepareMaterialShader (device, rasterOnly.getValue(), makeTargets (true), 1);
+    EXPECT_TRUE (missing.failed());
+    EXPECT_EQ (missing.getErrorMessage(), "it has no full tier variant");
+
+    // Pipelines the device does not compile: what it said is told again once the failure is remembered
+    failPipelines = true;
+    const auto refused = pass.prepareMaterialShader (device, stock, makeTargets (false), 1);
+
+    failPipelines = false;
+    const auto remembered = pass.prepareMaterialShader (device, stock, makeTargets (false), 1);
+
+    EXPECT_TRUE (refused.failed());
+    EXPECT_TRUE (remembered.failed());
+    EXPECT_EQ (remembered.getErrorMessage(), refused.getErrorMessage());
+
+    EXPECT_TRUE (pass.prepareMaterialShader (device, stock, makeTargets (true), 1).wasOk());
+}
+
 TEST_F (ForwardPassMockTests, ItemsOfAMaterialShaderDrawWithItsPipelinesAmongTheOthers)
 {
     ForwardPass pass;

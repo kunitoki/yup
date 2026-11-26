@@ -96,6 +96,9 @@ class Settings(yup.BindingProvider):
 The document keeps the provider given to `setModel` alive, and the undo manager
 given to `setUndoManager`. A `YuiLoader` keeps its document alive.
 
+A change made to `document.getTree()` is applied from the message loop. A
+script that runs none applies it with `document.applyPendingChanges()`.
+
 ## Failures
 
 - `loadFromString`, `load` and the loader return a `Result`, as in C++. The

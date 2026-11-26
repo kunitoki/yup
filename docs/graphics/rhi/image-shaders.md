@@ -88,8 +88,8 @@ binds, and nothing has a fixed set or binding number:
 | A uniform block | The parameters. Optional, one at most, no larger than 64 KiB. `createUniforms()` is laid out for it. |
 | `uniform texture2D` | An input: none, or up to four (`GpuImageShader::maxInputTextures`). The first input is the texture with the lowest set, then the lowest binding, whatever the order they are declared in, and `getInputTextureNames()` tells the name of each. |
 | `uniform sampler` | Declared apart from the textures and combined where they are read. Filters linearly and clamps to the edge. One sampler can read every texture. |
-| `layout(location = 0) in vec2 uv` | From (0, 0) at the top left of the target to (1, 1) at its bottom right, on every graphics API. Optional. |
-| `layout(location = 0) out vec4` | The pixel. |
+| `layout(location = 0) in vec2 uv` | From (0, 0) at the top left of the target to (1, 1) at its bottom right, on every graphics API. Optional, and the only input. |
+| `layout(location = 0) out vec4` | The pixel, and the only output. |
 
 - **Colors are multiplied by their alpha**, in the textures read and in the
   color written. The target is cleared to transparent black and drawn over
@@ -101,6 +101,9 @@ binds, and nothing has a fixed set or binding number:
 - A combined `uniform sampler2D`, a second uniform block, a fifth texture and a
   texture that is not a `texture2D` can't be bound: the shader is refused when
   it is created, with a message.
+- So is what a draw binds nothing to, in either stage: a storage buffer, a
+  storage image, a subpass input, a push constant block, an input other than
+  `uv` and an output other than the pixel.
 
 A shader that makes a picture alone declares no texture:
 
@@ -150,11 +153,17 @@ Each returns a `ResultValue`: the shader, or what prevents it.
 
 - A shader is immutable and reference counted: create it once and draw it from
   as many places as needed.
+- A bundle can be built for some graphics APIs only. `canDrawWith (platform)`
+  tells whether the shader has a variant of both stages for one, before any
+  device draws it: `shader->canDrawWith (device->getPlatform())`.
 
 ```text
 The fragment stage declares a combined sampler2D, which cannot be bound: declare a texture2D and a sampler, and combine them where the texture is read
 The fragment stage declares 2 uniform blocks: an image shader has one at most
 The fragment stage declares 5 textures: an image shader has 4 at most
+The fragment stage declares the storage buffer Particles, which cannot be bound: an image shader takes its values through one uniform block and its textures
+The fragment stage declares the input tint: an image shader has one at most, the vec2 uv at location 0
+The fragment stage has to declare one output, the vec4 pixel at location 0
 ShaderBundleCompiler: SPIR-V compilation failed for stage fragment: ERROR: 0:3: 'missingValue' : undeclared identifier
 ```
 
@@ -238,13 +247,17 @@ frame.submit();
 - The device is the one the frame was begun on, and the one the target and the
   inputs were created with.
 - The inputs a shader does not declare are ignored, so a caller can always pass
-  what it has. An input can't be the texture of the target.
+  what it has. An input can't be the texture of the target: the draw fails
+  rather than read what it writes.
 - A shader reading more than two inputs takes them as a span, in the order of
   `getInputTextureNames()`.
-- The uniforms have to come from `createUniforms()` of the same shader.
+- The uniforms have to come from `createUniforms()` of the same shader: the
+  draw fails with those of another block, of the same size or not
+  (`ShaderUniforms::hasSameLayoutAs()` tells them apart).
 - The target has a color format and is not multisampled.
 - It returns a failed `Result`, having recorded nothing, when the device has no
-  GPU or was lost, an input the shader declares is missing, or the pipeline
+  GPU or was lost, an input the shader declares is missing or is the texture of
+  the target, the uniforms are not the ones of the shader, or the pipeline
   can't be compiled for the device.
 - Any thread drawing with the device can call it, also while other threads
   draw the same shader.

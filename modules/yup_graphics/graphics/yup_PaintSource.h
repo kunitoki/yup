@@ -135,6 +135,11 @@ public:
     /** Returns the filter the content goes through, empty by default. */
     const FilterGraph& getFilter() const noexcept { return filter; }
 
+    /** Returns what the filter was last rendered with, which tells what prevented a shader it
+        runs from being drawn (see FilterGraph::State::getShaderError).
+    */
+    const FilterGraph::State& getFilterState() const noexcept { return filterState; }
+
 private:
     friend class Graphics;
 

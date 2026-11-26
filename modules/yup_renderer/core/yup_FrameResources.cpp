@@ -54,13 +54,16 @@ void FrameResources::beginFrame (int widthPx, int heightPx)
     ++frameCounter;
 
     if (widthPx != width || heightPx != height)
-    {
-        transients.clear();
-        histories.clear();
-    }
+        releaseTextures();
 
     width = widthPx;
     height = heightPx;
+}
+
+void FrameResources::releaseTextures() noexcept
+{
+    transients.clear();
+    histories.clear();
 }
 
 GpuTexture::Ptr FrameResources::acquire (const GpuTextureDesc& desc)

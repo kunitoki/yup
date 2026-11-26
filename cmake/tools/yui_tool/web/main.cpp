@@ -54,6 +54,15 @@ File getFilesFolder()
     return File ("/yui");
 }
 
+// Tells the renderer where the module holds the template a material is compiled around and the library it includes:
+// the folder they are embedded in, see CMakeLists.txt, in place of the one of the sources the module was built from
+void useEmbeddedMaterialShaders()
+{
+#if YUP_ENABLE_SHADER_TRANSPILER
+    MaterialShader::setSourceDirectory (File (YUP_YUI_TOOL_MATERIAL_SHADERS));
+#endif
+}
+
 // Calls a function with a component, then with each of those it holds
 template <class Function>
 void forEachComponent (Component& component, Function&& call)
@@ -662,6 +671,8 @@ bool prepareToRunWithoutPage()
 
     ignoreUnused (isLoopStopped);
 
+    useEmbeddedMaterialShaders();
+
     getFilesFolder().createDirectory();
     getFilesFolder().setAsCurrentWorkingDirectory();
 
@@ -713,6 +724,8 @@ public:
 
     void initialise (const String&) override
     {
+        useEmbeddedMaterialShaders();
+
         MessageManager::callAsync ([this]
         {
             // The page has controls of its own, so the keys only go to the interface while its canvas has the focus

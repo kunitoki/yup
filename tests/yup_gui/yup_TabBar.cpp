@@ -100,6 +100,21 @@ protected:
             bar->refreshDisplay (1.0 / 60.0);
     }
 
+    /** Puts a component in a window of its own, and returns the native that sends its frames. */
+    static StubComponentNative& makeWindow (Component& component)
+    {
+        auto* native = new StubComponentNative (component, ComponentNative::defaultFlags);
+        yup::ComponentTestHelper<Component>::attachNative (component, native);
+        return *native;
+    }
+
+    /** Sends frames to a window until nothing in it asks for one, giving up after a second of them. */
+    static void runFramesUntilIdle (StubComponentNative& native)
+    {
+        for (int frame = 0; frame < 60 && native.hasFrameListeners(); ++frame)
+            native.callFrameListeners (1.0 / 60.0);
+    }
+
     void pressKey (int keyCode)
     {
         bar->keyDown (KeyPress (keyCode), {});
@@ -244,6 +259,24 @@ TEST_F (TabBarTests, RemovingUnselectedTabKeepsSelectionSilently)
     EXPECT_EQ (Identifier ("b"), listener.removals[0]);
 
     bar->removeListener (&listener);
+}
+
+TEST_F (TabBarTests, TheSelectedTabPropertyTakesNoIdForTheFirstTab)
+{
+    addTabs ({ "a", "b" });
+
+    bar->setProperty (Identifier ("selectedTab"), "b");
+    EXPECT_EQ (Identifier ("b"), bar->getSelectedTabId());
+    EXPECT_EQ (bar->getProperty (Identifier ("selectedTab")).toString(), "b");
+
+    // No id is the tab a new bar has selected, as it is on a TabComponent
+    bar->setProperty (Identifier ("selectedTab"), String());
+    EXPECT_EQ (Identifier ("a"), bar->getSelectedTabId());
+
+    // A bar with no tab has none to select
+    TabBar empty;
+    empty.setProperty (Identifier ("selectedTab"), String());
+    EXPECT_TRUE (empty.getSelectedTabId().isNull());
 }
 
 TEST_F (TabBarTests, RemovingTheOnlyTabClearsSelection)
@@ -804,4 +837,71 @@ TEST_F (TabBarTests, ResizingSnapsWithoutAnimating)
 
     EXPECT_FLOAT_EQ (bar->getTabArea().getWidth() * 0.5f, tab ("a").getWidth());
     EXPECT_EQ (tab ("a").getBounds(), bar->getIndicatorBounds());
+}
+
+TEST_F (TabBarTests, AsksForFramesOnlyWhileTabsOrTheIndicatorSlide)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.setBounds (0.0f, 0.0f, 600.0f, 36.0f);
+    window.setVisible (true);
+    window.addAndMakeVisible (*bar);
+
+    addTabs ({ "a", "b", "c" });
+    bar->setAnimationDuration (0.2);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    bar->setSelectedTab ("c");
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    runFramesUntilIdle (native);
+
+    EXPECT_FALSE (native.hasFrameListeners());
+    EXPECT_EQ (tab ("c").getBounds(), bar->getIndicatorBounds());
+
+    // The neighbours of a tab that goes slide into its place
+    const auto slotOfB = tab ("b").getX();
+    bar->removeTab ("b");
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    runFramesUntilIdle (native);
+
+    EXPECT_FALSE (native.hasFrameListeners());
+    EXPECT_FLOAT_EQ (slotOfB, tab ("c").getX());
+
+    window.removeChildComponent (*bar);
+}
+
+TEST_F (TabBarTests, AHiddenBarAsksForNoFrameAndSlidesOnWhenItShowsAgain)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.setBounds (0.0f, 0.0f, 600.0f, 36.0f);
+    window.setVisible (true);
+    window.addAndMakeVisible (*bar);
+
+    addTabs ({ "a", "b", "c" });
+    bar->setAnimationDuration (0.2);
+    bar->setSelectedTab ("c");
+
+    native.callFrameListeners (1.0 / 60.0);
+    native.callFrameListeners (1.0 / 60.0);
+    ASSERT_TRUE (native.hasFrameListeners());
+
+    const auto midway = bar->getIndicatorBounds();
+
+    // Hiding a parent hides the bar
+    window.setVisible (false);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    window.setVisible (true);
+    EXPECT_TRUE (native.hasFrameListeners());
+    EXPECT_EQ (midway, bar->getIndicatorBounds());
+
+    runFramesUntilIdle (native);
+
+    EXPECT_FALSE (native.hasFrameListeners());
+    EXPECT_EQ (tab ("c").getBounds(), bar->getIndicatorBounds());
+
+    window.removeChildComponent (*bar);
 }

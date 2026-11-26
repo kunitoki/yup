@@ -348,6 +348,50 @@ TEST_F (Scene3DTests, SettingASceneMovesTheNodesIntoIt)
     EXPECT_EQ (view.getScene()->getRoot().getNumChildren(), 2);
 }
 
+TEST_F (Scene3DTests, SettingASceneTellsTheFeaturesThatReadAnotherValue)
+{
+    struct Recorder final : ComponentListener
+    {
+        void componentPropertyChanged (Component&, const Identifier& name) override
+        {
+            changed.add (name.toString());
+        }
+
+        StringArray changed;
+    };
+
+    SceneComponent view;
+    view.setBackgroundColor (Color (0xff102030));
+    view.setExposure (2.0f);
+
+    Recorder recorder;
+    view.addComponentListener (&recorder);
+
+    // The features are those of the scene shown: another one gives them its own, and the ones that read another
+    // value are told, in the order of the properties
+    const auto other = Scene::Ptr (new Scene());
+    other->getRoot().attach<ExposureNode> (2.0f);
+    other->getRoot().attach<ToneMappingNode> (ToneMappingOperator::agx);
+
+    view.setScene (other);
+
+    EXPECT_EQ (view.getBackgroundColor(), SceneSettings().backgroundColor);
+    EXPECT_FLOAT_EQ (view.getExposure(), 2.0f);
+    EXPECT_EQ (view.getToneMapping(), ToneMappingOperator::agx);
+    EXPECT_EQ (recorder.changed, StringArray ({ "background", "toneMapping" }));
+
+    // The scene it already shows changes nothing
+    recorder.changed.clear();
+    view.setScene (other);
+    EXPECT_TRUE (recorder.changed.isEmpty());
+
+    // And no scene reads as the defaults
+    view.setScene (nullptr);
+    EXPECT_EQ (recorder.changed, StringArray ({ "exposure", "toneMapping" }));
+
+    view.removeComponentListener (&recorder);
+}
+
 TEST_F (Scene3DTests, ASceneWithoutNodesIsFilledWithTheBackgroundItReads)
 {
     YuiDocument document;
@@ -363,6 +407,22 @@ TEST_F (Scene3DTests, ASceneWithoutNodesIsFilledWithTheBackgroundItReads)
     ASSERT_EQ (fills.size(), 1u);
     EXPECT_EQ (fills.front(), view->getBackgroundColor());
     EXPECT_EQ (fills.front(), BackgroundNode().color);
+}
+
+TEST_F (Scene3DTests, ASceneThatCanNotBeDrawnIsFilledWithItsBackgroundWhenNoThemeGivesAFont)
+{
+    SceneComponent view;
+    view.setScene (Scene::Ptr (new Scene()));
+    view.setBackgroundColor (Color (0xff102030));
+    showScene (view);
+
+    // What prevents drawing the scene is written with the font of the theme: without one the background is all there is
+    ApplicationTheme::setGlobalTheme (nullptr);
+
+    const auto fills = paintWithoutGpu (view);
+
+    ASSERT_EQ (fills.size(), 1u);
+    EXPECT_EQ (fills.front(), Color (0xff102030));
 }
 
 TEST_F (Scene3DTests, AFeatureIsPaintedBeforeItsChangeIsTold)
@@ -452,4 +512,36 @@ TEST_F (Scene3DTests, TheProblemsOfTheComponentsThatAreGoneAreForgotten)
 
         EXPECT_EQ (Internals::getNumProblems (view), 1u);
     }
+}
+
+TEST_F (Scene3DTests, AnExposureThatExposesNothingIsReportedAndNotKept)
+{
+    YuiDocument document;
+    const auto result = document.loadFromString ("Scene3D {\n"
+                                                 "    id: view;\n"
+                                                 "    exposure: -1;\n"
+                                                 "}");
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics().front().message, "Scene3D.exposure: expected a multiplier that is not negative");
+    EXPECT_EQ (document.getDiagnostics().front().line, 3);
+
+    auto* view = document.findById<SceneComponent> ("view");
+    ASSERT_NE (view, nullptr);
+    EXPECT_FLOAT_EQ (view->getExposure(), 1.0f);
+
+    // A value that is not a number never equals the one the scene has: it is not kept either, and nothing is painted again
+    Internals::takeRepaintRequest (*view);
+    view->setExposure (std::numeric_limits<float>::quiet_NaN());
+
+    EXPECT_FLOAT_EQ (view->getExposure(), 1.0f);
+    EXPECT_FALSE (Internals::takeRepaintRequest (*view));
+    EXPECT_EQ (Internals::getNumProblems (*view), 1u);
+
+    // A multiplier it can have withdraws what was reported
+    view->setExposure (2.0f);
+
+    EXPECT_FLOAT_EQ (view->getExposure(), 2.0f);
+    EXPECT_EQ (Internals::getNumProblems (*view), 0u);
 }

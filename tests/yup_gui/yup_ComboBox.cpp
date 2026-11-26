@@ -349,6 +349,26 @@ TEST_F (ComboBoxTest, BoundsAndSizeWork)
     EXPECT_EQ (25, comboBox->getHeight());
 }
 
+TEST_F (ComboBoxTest, TellsWhereItsTextAndItsArrowAre)
+{
+    comboBox->setBounds (0, 0, 120, 30);
+
+    // The text is inset in the box and stops before the arrow, which is at its end
+    const Rectangle<float> textBounds (8.0f, 4.0f, 84.0f, 22.0f);
+    const Rectangle<float> arrowBounds (104.0f, 4.0f, 12.0f, 22.0f);
+
+    EXPECT_EQ (comboBox->getTextBounds(), textBounds);
+    EXPECT_EQ (comboBox->getArrowBounds(), arrowBounds);
+    EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (comboBox->getProperty (Identifier ("textBounds"))), textBounds);
+    EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (comboBox->getProperty (Identifier ("arrowBounds"))), arrowBounds);
+
+    // A drawing placing the text part without an area paints it where the box lays it out
+    const auto* textPart = ComboBox::getClassTypeInfo().findPart (Identifier ("text"));
+    ASSERT_NE (textPart, nullptr);
+    EXPECT_TRUE (textPart->isPlaceable);
+    EXPECT_EQ (textPart->getArea (*comboBox), textBounds);
+}
+
 TEST_F (ComboBoxTest, FunctionalCallbackIsInvoked)
 {
     comboBox->addItem (kTestText1, kTestId1);

@@ -24,16 +24,16 @@ namespace yup
 
 void registerAudioGuiComponentTypes()
 {
-    auto& registry = ComponentTypeRegistry::getInstance();
-
-    registry.registerType (MidiKeyboardComponent::getClassTypeInfo());
-    registry.registerType (PitchWheelComponent::getClassTypeInfo());
-    registry.registerType (ModWheelComponent::getClassTypeInfo());
-    registry.registerType (SpectrumAnalyzerComponent::getClassTypeInfo());
-    registry.registerType (SpectrogramComponent::getClassTypeInfo());
-    registry.registerType (KMeterComponent::getClassTypeInfo());
-    registry.registerType (AudioViewComponent::getClassTypeInfo());
-    registry.registerType (CartesianPlane::getClassTypeInfo());
+    ComponentTypeRegistry::getInstance().registerDefaultTypes ({
+        MidiKeyboardComponent::getClassTypeInfo(),
+        PitchWheelComponent::getClassTypeInfo(),
+        ModWheelComponent::getClassTypeInfo(),
+        SpectrumAnalyzerComponent::getClassTypeInfo(),
+        SpectrogramComponent::getClassTypeInfo(),
+        KMeterComponent::getClassTypeInfo(),
+        AudioViewComponent::getClassTypeInfo(),
+        CartesianPlane::getClassTypeInfo(),
+    });
 }
 
 } // namespace yup

@@ -42,6 +42,22 @@ and repaints on every display frame, which is what plays the
 [clips](animation.md) of a model. On the full tier it also keeps repainting by
 itself until the image has converged, see [Platform tiers](platform-tiers.md).
 
+A scene that stands still asks nothing of its window, which is then free to skip
+the frames it has nothing to paint in:
+
+- The component takes every display frame while it updates continuously, while
+  a clip of a `Model3D` plays, while a `Material3D` names a shader and while a
+  node shows [components on its mesh](components-in-a-scene.md).
+- Otherwise it takes the frames that follow a change of its components, and
+  the one that follows each of its paints, until nothing is left to do. A
+  change made to the `Scene` from code is found there, which is why it needs
+  the `repaint()`.
+- While it is not showing, itself or a component it is in being hidden, it
+  takes no frame: the scene is not updated, clips included, and the renderer
+  lets go of the textures it rendered into
+  (`SceneRenderer::releaseTargets()`). Shown again, it carries on from where it
+  was, and the full tier refines its image again.
+
 In a `.yui` document the component is the `Scene3D` element, and the scene is
 written inside it with no code: see [3D scenes](../ui/yui/scenes.md).
 
@@ -118,7 +134,10 @@ written in a `.yui` document.
   through. Opaque and masked materials are opaque.
 - The component follows the background: it is opaque while the background is,
   and not otherwise. It keeps `isOpaque()` up to date by itself, when the scene
-  is set and at every display frame, so do not call `setOpaque()` on it.
+  is set and at the display frames it takes, so do not call `setOpaque()` on
+  it. A color written to the `BackgroundNode` of a scene that stood still is
+  found by the frame after the paint that follows it: that paint still fills
+  the component, and the scene is painted once more.
 - A scene that is not opaque has its parent paint what is behind it each time
   the scene repaints, which an opaque one spares.
 - A visible environment (`EnvironmentNode::visible`) covers everything, and

@@ -94,7 +94,9 @@ enabledToggle.onClick = [&] { view.setEnabled (enabledToggle.getToggleState()); 
 ```
 
 To host the root another way, a `YuiDocument::Listener` hears about every load,
-successful or not, including the loads of undo and redo.
+successful or not, including the loads of undo and redo, and about each time
+the interface is built again without one, for a change made to its tree or to
+the range of a [`repeat`](#repeating-components).
 
 ## Reloading
 
@@ -129,6 +131,14 @@ undoManager.undo(); // back to the previous document, keeping the components
 `YuiTreeDiff::apply` is the patch behind this, usable on its own to update any
 `.yui` tree from another, optionally recording the changes in an
 `UndoManager`.
+
+The loaded tree, `document.getTree()`, can also be changed in place, as a
+visual editor does to write an edit without going through the text. The
+interface is built again once the changes are over, from the message loop,
+whatever their number, and the listeners are told as for a load. A tool or a
+test with no message loop calls `document.applyPendingChanges()` to have it
+done at once. Problems found after an element was added, removed or moved this
+way have no line and column until a text is loaded again.
 
 To load from files, reload when they change on disk, or load files embedded in
 the binary, use a `YuiLoader`, see [Hot reloading](hot-reload.md).
@@ -325,8 +335,10 @@ document.setAction ("changed", [this] (const Array<var>& args)
 });
 ```
 
-Don't load a document again synchronously from inside an action: the component
-emitting the signal would be destroyed while it runs.
+An action can change the tree of the document: the change is applied once the
+handler is over (see [Reloading](#reloading)). Don't load a document again
+synchronously from inside an action: it ends the handler, whose calls left are
+not run, and the component emitting the signal may be destroyed while it runs.
 
 ## Two-way bindings
 
@@ -551,7 +563,8 @@ Column {
 </p>
 
 A tool or a test with no message loop calls
-`document.applyPendingChanges()` to have the components made again at once.
+`document.applyPendingChanges()` to have the components made again at once. It
+applies the changes made to the tree of the document too.
 
 ## Exclusive buttons and steppers
 

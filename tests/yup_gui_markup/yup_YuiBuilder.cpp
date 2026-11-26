@@ -314,7 +314,64 @@ TEST_F (YuiBuilderTests, ReportsLinksToUnknownTargets)
     EXPECT_EQ (builder.getDiagnostics()[0].message, "Slider.value: unknown element 'model'");
 }
 
-TEST_F (YuiBuilderTests, TellsOnceAboutTheChangesOfATransaction)
+TEST_F (YuiBuilderTests, ReportsTheImportsAParseLeftUnresolved)
+{
+    // Parsing with no import resolver reads no file: what the import was for is missing, which is told where it is written
+    EXPECT_EQ (buildAndLocate ("style { }\nimport \"parts/knob.yui\";\nComponent { }", true),
+               StringArray ({ "2:1: Unresolved import 'parts/knob.yui'" }));
+}
+
+TEST_F (YuiBuilderTests, ReportsAnIdOrAClassThatIsNotWrittenAsNames)
+{
+    const auto parsed = YuiParser::parse (R"yui(Component {
+    Label { class: on ? "a" : "b"; }
+    Label { id: first + second; }
+    Label { id: caption; class: "big, bold title"; }
+    Label { id: "named"; class: plain; }
+})yui");
+
+    ASSERT_TRUE (parsed.wasOk()) << DataTreeDiagnostic::join (parsed.diagnostics);
+
+    YuiBuilder builder;
+    ASSERT_TRUE (builder.build (parsed.document).wasOk());
+
+    StringArray located;
+
+    for (const auto& diagnostic : builder.getDiagnostics())
+        located.add (parsed.sourceMap.locate (diagnostic).toString());
+
+    EXPECT_EQ (located, StringArray ({ "2:13: Label.class: expected a name or names in a string, such as \"knob large\"", "3:13: Label.id: expected a name, such as knob" }));
+
+    // A value that is not names gives the component none
+    auto* root = builder.getRoot();
+    ASSERT_EQ (root->getNumChildComponents(), 4);
+    EXPECT_TRUE (root->getChildComponent (0)->getStyleClasses().isEmpty());
+    EXPECT_EQ (root->getChildComponent (1)->getComponentID(), String());
+
+    auto* caption = builder.findById ("caption");
+    ASSERT_NE (caption, nullptr);
+    EXPECT_EQ (caption->getStyleClasses().size(), 3);
+
+    auto* named = builder.findById ("named");
+    ASSERT_NE (named, nullptr);
+    EXPECT_EQ (named->getStyleClasses().size(), 1);
+}
+
+TEST_F (YuiBuilderTests, ReportsDrawingsAndShadersDeclaredTwiceAndPropertiesDeclaredWithAnotherType)
+{
+    // The same property with the same type, as the two shaders declare it, is no problem
+    EXPECT_EQ (buildAndLocate (R"yui(drawing Dot { property size: number = 4; circle { radius: size; } }
+drawing Dot { property size: color = red; }
+shader Crt { fragment: "crt.frag"; property amount: number = 1; }
+shader Crt { fragment: "other.frag"; property amount: number = 2; }
+Component { })yui",
+                               true),
+               StringArray ({ "2:1: The drawing 'Dot' is already declared",
+                              "2:24: The property 'size' is already declared with another type",
+                              "4:1: The shader 'Crt' is already declared" }));
+}
+
+TEST_F (YuiBuilderTests, TellsOnceAboutTheChangesOfTheTreeWhenTheyAreApplied)
 {
     YuiBuilder builder;
     auto document = parse ("Component { id: panel; Label { id: caption; } }");
@@ -331,11 +388,7 @@ TEST_F (YuiBuilderTests, TellsOnceAboutTheChangesOfATransaction)
         transaction.setProperty ("first", 1);
         transaction.setProperty ("second", 2);
         transaction.addChild (DataTree ("extra"));
-
-        EXPECT_EQ (0, numMutations);
     }
-
-    EXPECT_EQ (1, numMutations);
 
     {
         DataTree::BatchTransaction batch;
@@ -343,7 +396,15 @@ TEST_F (YuiBuilderTests, TellsOnceAboutTheChangesOfATransaction)
         batch.edit (document.getChild (0)).setProperty ("third", 4);
     }
 
-    EXPECT_EQ (2, numMutations);
+    // The changes wait for the message loop, which a test does not have
+    EXPECT_EQ (0, numMutations);
+
+    builder.applyPendingChanges();
+    EXPECT_EQ (1, numMutations);
+
+    // With nothing changed there is nothing to tell
+    builder.applyPendingChanges();
+    EXPECT_EQ (1, numMutations);
 
     builder.setIgnoreTreeChanges (true);
 
@@ -352,7 +413,8 @@ TEST_F (YuiBuilderTests, TellsOnceAboutTheChangesOfATransaction)
         transaction.setProperty ("first", 5);
     }
 
-    EXPECT_EQ (2, numMutations);
+    builder.applyPendingChanges();
+    EXPECT_EQ (1, numMutations);
 }
 
 TEST_F (YuiBuilderTests, RebuildingReplacesTheTree)
@@ -430,7 +492,7 @@ TEST_F (YuiBuilderTests, RebuildingResetsWhatTheDocumentNoLongerWrites)
 
     auto* button = builder.findById<TextButton> ("button");
     ASSERT_NE (button, nullptr);
-    button->onClick();
+    EXPECT_TRUE (button->onClick == nullptr);
     EXPECT_EQ (presses, 0);
 }
 
@@ -1031,6 +1093,40 @@ TEST_F (YuiBuilderTests, NamesTheArgumentsOfASignalInItsHandler)
     EXPECT_EQ (received[1].toString(), "two");
 }
 
+TEST_F (YuiBuilderTests, AnArgumentOfAHandlerHidesTheIndexOfARepeatWithItsName)
+{
+    YuiBuilder builder;
+    Array<var> received;
+    builder.setAction ("set", [&] (const Array<var>& arguments) { received = arguments; });
+
+    const auto result = builder.build (parse (R"yui(
+        Column {
+            id: list;
+
+            repeat i in 0 .. 4 {
+                Slider { onValueChanged: (i) => action ("set", i); }
+                Slider { onValueChanged: (v) => action ("set", v, i); }
+            }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
+
+    auto* list = builder.findById ("list");
+    ASSERT_EQ (list->getNumChildComponents(), 8);
+
+    // The sliders of the last turn: the name is the value of the first, not the index 3
+    dynamic_cast<Slider*> (list->getChildComponent (6))->setValue (0.25);
+    ASSERT_EQ (received.size(), 1);
+    EXPECT_FLOAT_EQ (static_cast<float> (received[0]), 0.25f);
+
+    // The index is still read where no argument has its name
+    dynamic_cast<Slider*> (list->getChildComponent (7))->setValue (0.5);
+    ASSERT_EQ (received.size(), 2);
+    EXPECT_FLOAT_EQ (static_cast<float> (received[0]), 0.5f);
+    EXPECT_EQ (static_cast<int> (received[1]), 3);
+}
+
 TEST_F (YuiBuilderTests, RunsTheCallsOfAHandlerBlockInOrder)
 {
     YuiBuilder builder;
@@ -1064,6 +1160,109 @@ TEST_F (YuiBuilderTests, RunsTheCallsOfAHandlerBlockInOrder)
 
     // A call without arguments forwards the signal's, typed as the signal declares them
     EXPECT_EQ (log.joinIntoString ("\n"), "first\ndone\n2\nlast");
+}
+
+TEST_F (YuiBuilderTests, AChangeOfTheTreeMadeByAHandlerIsAppliedOnceTheHandlerIsOver)
+{
+    auto document = parse (R"yui(
+        Column {
+            TextButton { id: remove; onClick: { action ("remove"); action ("after", caption.text); } }
+            Label { id: caption; text: "One"; }
+        })yui");
+
+    YuiBuilder builder;
+    StringArray log;
+
+    // The handler running is the one of the element this removes
+    builder.setAction ("remove", [&] (const Array<var>&)
+    {
+        document.getChild (0).beginTransaction().removeChild (0);
+        log.add (builder.findById ("remove") != nullptr ? "kept" : "destroyed");
+    });
+
+    builder.setAction ("after", [&] (const Array<var>& arguments)
+    {
+        log.add ("after " + arguments[0].toString());
+    });
+
+    ASSERT_TRUE (builder.build (document).wasOk());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
+
+    builder.findById<TextButton> ("remove")->onClick();
+
+    // The components are as they were for as long as the handler runs, so it runs the calls it has left
+    EXPECT_EQ (log, StringArray ({ "kept", "after One" }));
+    EXPECT_NE (builder.findById ("remove"), nullptr);
+
+    builder.applyPendingChanges();
+    EXPECT_EQ (builder.findById ("remove"), nullptr);
+    EXPECT_EQ (builder.getRoot()->getNumChildComponents(), 1);
+}
+
+TEST_F (YuiBuilderTests, AHandlerRunsNoCallAfterTheOneBuildingTheDocumentAgain)
+{
+    auto document = parse (R"yui(
+        Column {
+            TextButton { id: reload; onClick: { action ("reload"); action ("after", caption.text); } }
+            Label { id: caption; text: "One"; }
+        })yui");
+
+    YuiBuilder builder;
+    StringArray log;
+
+    // Not what an action should do: the build gives the button another handler while this one runs
+    builder.setAction ("reload", [&] (const Array<var>&)
+    {
+        log.add ("reload");
+        EXPECT_TRUE (builder.build (document).wasOk());
+    });
+
+    builder.setAction ("after", [&] (const Array<var>&)
+    {
+        log.add ("after");
+    });
+
+    ASSERT_TRUE (builder.build (document).wasOk());
+
+    auto* reload = builder.findById<TextButton> ("reload");
+    ASSERT_NE (reload, nullptr);
+    reload->onClick();
+
+    // What the handler was made with is gone, so are the calls it had left
+    EXPECT_EQ (log, StringArray ({ "reload" }));
+    EXPECT_EQ (builder.findById ("reload"), reload);
+
+    reload->onClick();
+    EXPECT_EQ (log, StringArray ({ "reload", "reload" }));
+}
+
+TEST_F (YuiBuilderTests, AHandlerWhereAComponentIsUsedReplacesTheOneOfItsBlock)
+{
+    YuiBuilder builder;
+    StringArray log;
+    builder.setAction ("log", [&] (const Array<var>& arguments) { log.add (arguments[0].toString()); });
+
+    const auto result = builder.build (parse (R"yui(
+        component Picker : Column {
+            signal onPicked (index: integer);
+            onPicked: action ("log", "block");
+            TextButton { onClick: root.onPicked (1); }
+        }
+
+        Column {
+            Picker { id: plain; }
+            Picker { id: used; onPicked: action ("log", "use"); }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
+
+    dynamic_cast<TextButton*> (builder.findById ("plain")->getChildComponent (0))->onClick();
+    EXPECT_EQ (log, StringArray ({ "block" }));
+
+    // As for the signal of a widget, which has one handler, and as the values written there win over the ones of the block
+    dynamic_cast<TextButton*> (builder.findById ("used")->getChildComponent (0))->onClick();
+    EXPECT_EQ (log, StringArray ({ "block", "use" }));
 }
 
 TEST_F (YuiBuilderTests, RunsChangedHandlersWhenTheirPropertyChanges)
@@ -1923,6 +2122,11 @@ TEST_F (YuiBuilderTests, LiveDataTreeMutationsPatchBuiltComponentsWithoutManualR
 
     // 1. Property mutation updates Label in place without recreating Slider or losing user value.
     firstTree.beginTransaction().setProperty ("text", "\"Updated\"");
+
+    // The components follow once the change is over, from the message loop, which a test stands for
+    EXPECT_EQ (first->getText(), "One");
+    builder.applyPendingChanges();
+
     EXPECT_EQ (builder.findById<Slider> ("knob"), knob);
     EXPECT_DOUBLE_EQ (knob->getValue(), 0.75);
     EXPECT_EQ (builder.findById<Label> ("first"), first);
@@ -1936,6 +2140,7 @@ TEST_F (YuiBuilderTests, LiveDataTreeMutationsPatchBuiltComponentsWithoutManualR
         tx.setProperty ("text", "\"Three\"");
     }
     rootTree.beginTransaction().addChild (addedTree);
+    builder.applyPendingChanges();
 
     auto* third = builder.findById<Label> ("third");
     ASSERT_NE (third, nullptr);
@@ -1944,14 +2149,17 @@ TEST_F (YuiBuilderTests, LiveDataTreeMutationsPatchBuiltComponentsWithoutManualR
 
     // Mutating a property on the newly added child is also observed automatically.
     addedTree.beginTransaction().setProperty ("text", "\"Three!\"");
+    builder.applyPendingChanges();
     EXPECT_EQ (third->getText(), "Three!");
 
     // 3. Moving a child DataTree reorders the child Component in its parent.
     rootTree.beginTransaction().moveChild (3, 1);
+    builder.applyPendingChanges();
     EXPECT_EQ (rootCol->getChildComponent (1), third);
 
     // 4. Removing a child DataTree destroys only that child Component.
     rootTree.beginTransaction().removeChild (1);
+    builder.applyPendingChanges();
     EXPECT_EQ (builder.findById ("third"), nullptr);
     EXPECT_EQ (rootCol->getNumChildComponents(), 3);
     EXPECT_EQ (builder.findById<Slider> ("knob"), knob);

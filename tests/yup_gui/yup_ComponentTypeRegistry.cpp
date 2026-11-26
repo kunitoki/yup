@@ -95,3 +95,40 @@ TEST_F (ComponentTypeRegistryTest, RegisterCustomType)
     ASSERT_NE (registered, nullptr);
     EXPECT_NE (registered->createInstance(), nullptr);
 }
+
+TEST_F (ComponentTypeRegistryTest, ADefaultTypeLeavesTheOneRegisteredUnderItsName)
+{
+    auto& registry = ComponentTypeRegistry::getInstance();
+
+    // The registry points at them for as long as the process runs
+    static const auto first = ComponentTypeBuilder<Component> (Identifier ("TestDefaultType")).build();
+    static const auto second = ComponentTypeBuilder<Component> (Identifier ("TestDefaultType")).build();
+
+    registry.registerDefaultType (first);
+    EXPECT_EQ (registry.findType (Identifier ("TestDefaultType")), &first);
+
+    // What a module comes with does not take the place of what was registered before, as the built-in types are
+    registry.registerDefaultType (second);
+    EXPECT_EQ (registry.findType (Identifier ("TestDefaultType")), &first);
+
+    registry.registerType (second);
+    EXPECT_EQ (registry.findType (Identifier ("TestDefaultType")), &second);
+}
+
+TEST_F (ComponentTypeRegistryTest, DefaultTypesAreRegisteredTogetherAndLeaveTheOnesRegisteredUnderTheirNames)
+{
+    auto& registry = ComponentTypeRegistry::getInstance();
+
+    // The registry points at them for as long as the process runs
+    static const auto taken = ComponentTypeBuilder<Component> (Identifier ("TestDefaultTypesTaken")).build();
+    static const auto first = ComponentTypeBuilder<Component> (Identifier ("TestDefaultTypesFirst")).build();
+    static const auto second = ComponentTypeBuilder<Component> (Identifier ("TestDefaultTypesSecond")).build();
+    static const auto late = ComponentTypeBuilder<Component> (Identifier ("TestDefaultTypesTaken")).build();
+
+    registry.registerType (taken);
+    registry.registerDefaultTypes ({ first, late, second });
+
+    EXPECT_EQ (registry.findType (Identifier ("TestDefaultTypesFirst")), &first);
+    EXPECT_EQ (registry.findType (Identifier ("TestDefaultTypesSecond")), &second);
+    EXPECT_EQ (registry.findType (Identifier ("TestDefaultTypesTaken")), &taken);
+}

@@ -287,7 +287,15 @@ struct YuiToolViewOptions
     yup::ThemePalette::Mode mode = yup::ThemePalette::Mode::dark;
 };
 
-/** Reads a size written as `<width>x<height>`, both at least 1. */
+/** The most logical pixels a side of the size a file is shown at can have. */
+constexpr float maximumYuiToolSize = 4096.0f;
+
+/** Returns true for a number written with digits and at most one point, as the sizes, the regions
+    and the margins of the options are: with no sign, no exponent and nothing after it.
+*/
+bool isYuiToolNumber (const yup::String& text);
+
+/** Reads a size written as `<width>x<height>`, both from 1 to maximumYuiToolSize, and nothing else. */
 std::optional<yup::Size<float>> parseYuiToolSize (const yup::String& text);
 
 /** Reads the argument at an index when it is one of the options saying what to show of a file and

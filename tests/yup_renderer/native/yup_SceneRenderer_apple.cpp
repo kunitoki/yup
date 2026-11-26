@@ -561,6 +561,38 @@ TEST_P (SceneRendererTierTests, NewVerticesOfACasterDrawTheShadowMapsAgain)
     EXPECT_TRUE (renderer.waitForGPU().wasOk());
 }
 
+TEST_P (SceneRendererTierTests, ReleasedTargetsAreMadeAgainByTheNextRender)
+{
+    // A still scene keeps what it was rendered into, its shadow maps included, until it is told to let go of it
+    Scene scene;
+    buildLongGroundScene (scene, 2.0f);
+
+    SceneRenderer renderer;
+    setTier (renderer, GetParam());
+
+    // Nothing to let go of before the first render
+    renderer.releaseTargets();
+
+    for (int frame = 0; frame < 2; ++frame)
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 1);
+    EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor), nullptr);
+
+    renderer.releaseTargets();
+    EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor), nullptr);
+
+    // The next frame, of the same size, makes them again and draws the shadow maps anew
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor), nullptr);
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 2);
+
+    // Once: the frame after it is still again
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 2);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
 TEST_P (SceneRendererTierTests, TransparentBackgroundLeavesUncoveredTexelsEmpty)
 {
     // The returned texture is premultiplied by alpha: nothing where no surface was drawn, alpha 1

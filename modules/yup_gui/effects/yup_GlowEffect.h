@@ -31,6 +31,11 @@ namespace yup
     Blurs the rendered component subtree and additively blends the tinted bloom with the
     sharp subtree content.
 
+    The components the effect is set on show a change of its radius, intensity or color by
+    themselves, with nothing to call on them: they are drawn through the effect again,
+    without being painted again. Set them on the message thread, or with the message
+    manager locked.
+
     @see ComponentEffect, FilterEffect, BlurEffect, DropShadowEffect
 
     @tags{UI}
@@ -74,6 +79,9 @@ public:
     //==============================================================================
     /** @internal */
     void apply (Graphics& g, GpuTexture::Ptr inputTexture, Rectangle<float> bounds) override;
+
+    /** @internal */
+    void releaseResources() override;
 
 private:
     std::atomic<uint32> colorArgb { 0xffffffffu };

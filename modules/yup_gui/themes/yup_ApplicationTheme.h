@@ -291,6 +291,16 @@ public:
     */
     uint32 getPaletteGeneration() const noexcept { return paletteGeneration; }
 
+    /** Returns a number that changes whenever a theme changes, or another one becomes the global one.
+
+        It is one number for all the themes, and can be read from any thread without a lock: a
+        window polls it to tell, without stopping the message thread, that the stylesheets of its
+        components have to look at the theme again.
+
+        @see getPaletteGeneration
+    */
+    static uint32 getLastGeneration() noexcept;
+
     /** A function that assigns theme colors from the roles of a palette, by calling setPaletteColor(). */
     using PaletteMapping = std::function<void (const ThemePalette&, ApplicationTheme&)>;
 
@@ -403,6 +413,7 @@ public:
 private:
     static ApplicationTheme::Ptr& getGlobalThemeInstance();
     std::optional<Color> findPaletteColor (const ThemePalette& componentPalette, const Identifier& colorId) const;
+    static std::atomic<uint32>& getGenerationCounter() noexcept;
     static uint32 makeGeneration() noexcept;
 
     //==============================================================================

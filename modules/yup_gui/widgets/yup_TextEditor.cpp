@@ -99,6 +99,7 @@ TextEditor::TextEditor (StringRef componentID)
 {
     setWantsKeyboardFocus (true);
     setMouseCursor (MouseCursor::Text);
+    setOpaque (false);
 
     setText ("", dontSendNotification);
 }
@@ -771,7 +772,8 @@ void TextEditor::blinkCaret()
 {
     caretVisible = ! caretVisible;
 
-    repaint();
+    updateStyledTextIfNeeded();
+    repaint (getCaretBounds());
 }
 
 //==============================================================================

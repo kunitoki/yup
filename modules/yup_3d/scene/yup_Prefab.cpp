@@ -93,11 +93,20 @@ Entity Prefab::instantiate (Scene& scene, Entity parent) const
         const auto [part, partParent] = pending.back();
         pending.pop_back();
 
+        // An attach callback can destroy an entity of the tree: nothing is made of the parts it held
+        if (part != &root && ! partParent.isValid())
+            continue;
+
         auto entity = scene.createEntity (part->name, partParent);
         entities[static_cast<size_t> (part->index)] = entity;
 
         for (const auto& factory : part->factories)
+        {
+            if (! entity.isValid())
+                break;
+
             factory (entity);
+        }
 
         // Reversed, so siblings are made in order
         for (auto it = part->children.rbegin(); it != part->children.rend(); ++it)

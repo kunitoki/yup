@@ -36,6 +36,12 @@ namespace yup
     interpolated across the FFT bin domain and the outline is sampled once per pixel column, so the rendered curve
     stays continuous at any component width.
 
+    The analyzer works only while it has something to show. It takes the frames of its window while samples come
+    and while its curve is falling, and asks to be painted when a level moved. Once the audio has stopped and the
+    curve is at rest it leaves the frames alone, so that a window with nothing else to do stops running them, and
+    looks at its state ten times a second instead: it is back within a tenth of a second of new samples. A hidden
+    analyzer, or one without a state, does nothing until it shows or is given one.
+
     Example usage:
 
     @code
@@ -54,11 +60,14 @@ namespace yup
     The state can be given after construction with setState(), which is how an analyzer created by a `.yui` document
     as `SpectrumAnalyzer` gets it (see YuiDocument::setInitializer). Without a state the analyzer draws its grid alone.
 
-    @see SpectrumAnalyzerState, FFTProcessor, WindowFunctions
+    The FFT size and the overlap are the ones of the state and are set there, see SpectrumAnalyzerState::setFftSize
+    and SpectrumAnalyzerState::setOverlapFactor. This can be done at any time, also while the audio is running and
+    the analyzer is showing: the analyzer follows the state at its next update. It never sets the FFT size itself,
+    so it never goes beyond the largest one its state was made for, see SpectrumAnalyzerState::getMaxFftSize.
+
+    @see SpectrumAnalyzerState, SpectrumAnalysis, FFTProcessor, WindowFunctions
 */
-class YUP_API SpectrumAnalyzerComponent
-    : public Component
-    , public Timer
+class YUP_API SpectrumAnalyzerComponent : public Component
 {
 public:
     //==============================================================================
@@ -124,15 +133,15 @@ public:
     //==============================================================================
     /** Changes the state providing the audio data.
 
-        The analyzer takes the FFT size of the state and starts from an empty spectrum. Call it on the message thread.
-        The state must outlive the analyzer, or be removed first by setting a null one.
+        The analyzer takes the FFT size of the state, follows it when it changes, and starts from an empty spectrum.
+        Call it on the message thread. The state must outlive the analyzer, or be removed first by setting a null one.
 
         @param newState    the state to read, or nullptr for none
     */
     void setState (SpectrumAnalyzerState* newState);
 
     /** Returns the state providing the audio data, or nullptr if the analyzer has none. */
-    SpectrumAnalyzerState* getState() const noexcept { return analyzerState; }
+    SpectrumAnalyzerState* getState() const noexcept { return analysis.getState(); }
 
     //==============================================================================
     /** Returns the static type info describing the SpectrumAnalyzerComponent type, `SpectrumAnalyzer` in `.yui`. */
@@ -142,14 +151,8 @@ public:
     const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
     //==============================================================================
-    /** Sets the FFT size for analysis, which is the one of the analyzer state too.
-
-        @param size    FFT size (must be a power of 2)
-    */
-    void setFFTSize (int size);
-
-    /** Returns the current FFT size, the one of the analyzer state when there is one. */
-    int getFFTSize() const noexcept { return analyzerState != nullptr ? analyzerState->getFftSize() : fftSize; }
+    /** Returns the FFT size: the one of the analyzer state when there is one, which is where it is set. */
+    int getFFTSize() const noexcept { return analysis.getFftSize(); }
 
     //==============================================================================
     /** Sets the window function used for FFT processing.
@@ -159,22 +162,26 @@ public:
     void setWindowType (WindowType type);
 
     /** Returns the current window function type. */
-    WindowType getWindowType() const noexcept { return currentWindowType; }
+    WindowType getWindowType() const noexcept { return analysis.getWindowType(); }
 
     //==============================================================================
     /** Sets the display update rate in Hz.
 
-        By default the spectrum updates once per displayed frame, following the display refresh rate.
+        By default the spectrum updates once per displayed frame, following the display refresh rate. A fixed
+        rate takes the frames that come when an update is due and leaves the others out, so it goes no faster
+        than the display.
 
         @param hz    update rate (typical values: 15-60 Hz), or 0 to follow the display refresh rate
     */
     void setUpdateRate (int hz);
 
     /** Returns the current update rate in Hz, or 0 when following the display refresh rate. */
-    int getUpdateRate() const noexcept;
+    int getUpdateRate() const noexcept { return updateRate; }
 
     //==============================================================================
     /** Sets the frequency range for the display.
+
+        The range starts at 1 Hz or above and spans at least 1 Hz.
 
         @param minFreq    minimum frequency in Hz
         @param maxFreq    maximum frequency in Hz
@@ -182,13 +189,16 @@ public:
     void setFrequencyRange (float minFreq, float maxFreq);
 
     /** Returns the current minimum frequency. */
-    float getMinFrequency() const noexcept { return minFrequency; }
+    float getMinFrequency() const noexcept { return analysis.getMinFrequency(); }
 
     /** Returns the current maximum frequency. */
-    float getMaxFrequency() const noexcept { return maxFrequency; }
+    float getMaxFrequency() const noexcept { return analysis.getMaxFrequency(); }
 
     //==============================================================================
     /** Sets the decibel range for the display.
+
+        The range is kept between SpectrumAnalysis::lowestDecibels and SpectrumAnalysis::highestDecibels and
+        spans at least 1 dB.
 
         @param minDb    minimum decibel level
         @param maxDb    maximum decibel level
@@ -196,10 +206,10 @@ public:
     void setDecibelRange (float minDb, float maxDb);
 
     /** Returns the current minimum decibel level. */
-    float getMinDecibels() const noexcept { return minDecibels; }
+    float getMinDecibels() const noexcept { return analysis.getMinDecibels(); }
 
     /** Returns the current maximum decibel level. */
-    float getMaxDecibels() const noexcept { return maxDecibels; }
+    float getMaxDecibels() const noexcept { return analysis.getMaxDecibels(); }
 
     //==============================================================================
     /** Sets the sample rate for frequency calculations.
@@ -209,7 +219,7 @@ public:
     void setSampleRate (double sampleRate);
 
     /** Returns the current sample rate. */
-    double getSampleRate() const noexcept { return sampleRate; }
+    double getSampleRate() const noexcept { return analysis.getSampleRate(); }
 
     //==============================================================================
     /** Sets the display type.
@@ -232,10 +242,10 @@ public:
     LevelMode getLevelMode() const noexcept { return levelMode; }
 
     /** Returns the coherent gain of the current window. */
-    float getWindowCoherentGain() const noexcept { return windowCoherentGain; }
+    float getWindowCoherentGain() const noexcept { return analysis.getWindowCoherentGain(); }
 
     /** Returns the equivalent noise bandwidth of the current window in FFT bins. */
-    float getEquivalentNoiseBandwidthBins() const noexcept { return equivalentNoiseBandwidthBins; }
+    float getEquivalentNoiseBandwidthBins() const noexcept { return analysis.getEquivalentNoiseBandwidthBins(); }
 
     /** Returns the equivalent noise bandwidth of the current window in Hz. */
     float getEquivalentNoiseBandwidthHz() const noexcept;
@@ -243,7 +253,7 @@ public:
     //==============================================================================
     /** Sets the release time for spectrum falloff.
 
-        @param timeSeconds    release time in seconds (0.0 = immediate falloff, 5.0 = 5 second falloff)
+        @param timeSeconds    release time in seconds, at least 0.1 (5.0 = 5 second falloff)
     */
     void setReleaseTimeSeconds (float timeSeconds);
 
@@ -271,18 +281,6 @@ public:
     uint32 getLevelsRevision() const noexcept { return levelsRevision; }
 
     //==============================================================================
-    /** Sets the overlap factor of the analyzer state, for more responsive spectrum analysis.
-
-        It is ignored while the analyzer has no state.
-
-        @param overlapFactor    overlap factor (0.0 = no overlap, 0.75 = 75% overlap)
-    */
-    void setOverlapFactor (float overlapFactor);
-
-    /** Returns the overlap factor of the analyzer state, 0 while the analyzer has none. */
-    float getOverlapFactor() const noexcept;
-
-    //==============================================================================
     /** Returns the frequency for a given bin index.
 
         @param binIndex    the FFT bin index
@@ -303,31 +301,41 @@ public:
     /** @internal */
     void resized() override;
     /** @internal */
-    void refreshDisplay (double lastFrameTimeSeconds);
+    void visibilityChanged() override;
     /** @internal */
-    void timerCallback() override;
+    void parentHierarchyChanged() override;
+    /** @internal */
+    void refreshDisplay (double lastFrameTimeSeconds);
 
 private:
     //==============================================================================
-    void updateSpectrum();
-    void processFFT();
-    void updateTargets();
-    void levelsChanged() noexcept;
-    void generateWindow();
-    void initializeFFTBuffers();
-    void resizeFFT (int size);
-    void updateBinMapping();
-    Path createSpectrumPath (const Rectangle<float>& bounds, bool closePath) const;
-    void drawLinesSpectrum (Graphics& g, const Rectangle<float>& bounds);
-    void drawFilledSpectrum (Graphics& g, const Rectangle<float>& bounds);
-    void drawFrequencyGrid (Graphics& g, const Rectangle<float>& bounds);
-    void drawDecibelGrid (Graphics& g, const Rectangle<float>& bounds);
+    struct GridLabel
+    {
+        StyledText text;
+        Rectangle<float> bounds;
+    };
 
-    float getBinPeakAmplitude (int binIndex) const noexcept;
-    float getBinRMSAmplitude (int binIndex) const noexcept;
-    float getBinPower (int binIndex) const noexcept;
-    float getBinPowerSpectralDensity (int binIndex) const noexcept;
-    float getBinLinearLevel (int binIndex) const noexcept;
+    struct GridLine
+    {
+        float position = 0.0f; // The x of a frequency line, the y of a decibel line
+        float alpha = 1.0f;    // Multiplies the alpha of the grid color
+        float width = 1.0f;
+        GridLabel label;
+    };
+
+    //==============================================================================
+    void updateSpectrum (double elapsedSeconds);
+    void updateBinLevels();
+    bool updateTargets();
+    void levelsChanged() noexcept;
+    void updateRefreshing (bool hasWorkToDo);
+    void updateSpectrumPaths (const Rectangle<float>& bounds);
+    void updateGrid (const Rectangle<float>& bounds, const Font& defaultFont);
+    void drawLinesSpectrum (Graphics& g);
+    void drawFilledSpectrum (Graphics& g, const Rectangle<float>& bounds);
+    void drawGrid (Graphics& g, const Rectangle<float>& bounds);
+
+    float getBinLinearLevel (float peakAmplitude, bool isRealBin) const noexcept;
     float linearLevelToDecibels (float level) const noexcept;
     SpectrumBinMapping::BandAggregation getBandAggregation() const noexcept;
     bool isPowerMode() const noexcept;
@@ -338,43 +346,49 @@ private:
     float getDisplayLevelForPosition (float displayPoint) const noexcept;
 
     //==============================================================================
-    SpectrumAnalyzerState* analyzerState = nullptr;
-
-    // FFT processing (performed on UI thread)
-    std::unique_ptr<FFTProcessor<float>> fftProcessor;
-    std::vector<float> fftInputBuffer;  // Real input samples
-    std::vector<float> fftOutputBuffer; // Complex FFT output
-    std::vector<float> windowBuffer;    // Window function
-    std::vector<float> magnitudeBuffer; // Pre-computed magnitudes to avoid allocation
+    // The state, its FFT (performed on the UI thread), the window and the ranges
+    SpectrumAnalysis analysis { scopeSize };
 
     // Display data
     std::vector<float> scopeData;
     uint32 levelsRevision = 1;
     std::vector<float> targetData;     // Latest FFT level of every display point, the release target
-    std::vector<float> binLevelBuffer; // Calibrated linear level of every FFT bin
-    SpectrumBinMapping binMapping;     // Log-frequency > fractional FFT bin mapping
+    std::vector<float> binLevelBuffer; // Linear level of every FFT bin, in the level mode
+
+    // What is painted, kept from one paint to the next: the curve until the levels or the size change, the grid
+    // until the size, a range or the font do
+    Path spectrumPath;
+    Path spectrumFillPath;
+    Rectangle<float> pathBounds;
+    uint32 pathRevision = 0;
+    bool pathIsFilled = false;
+
+    std::vector<GridLine> frequencyLines;
+    std::vector<GridLine> decibelLines;
+    GridLabel hertzLabel;
+    GridLabel decibelLabel;
+    Rectangle<float> gridBounds;
+    Font gridFont;
+    bool gridNeedsUpdate = true;
 
     // Configuration
-    WindowType currentWindowType = WindowType::hann;
     DisplayType displayType = DisplayType::filled;
     LevelMode levelMode = LevelMode::peakDecibels;
-    int fftSize = 4096;
-    float minFrequency = 20.0f;
-    float maxFrequency = 20000.0f;
-    float logMinFrequency = std::log10 (minFrequency);
-    float logMaxFrequency = std::log10 (maxFrequency);
-    float minDecibels = -100.0f;
-    float maxDecibels = 0.0f;
-    double sampleRate = 44100.0;
     float releaseTimeSeconds = 1.0f;
-    double lastUpdateSeconds = 0.0;
-    double lastFFTSeconds = 0.0;
+    int updateRate = 0;
 
-    // Window compensation
-    float windowCoherentGain = 1.0f;
-    float equivalentNoiseBandwidthBins = 1.0f;
-    bool needsWindowUpdate = true;
-    FrameAttachment frameAttachment { *this, bindFront (&SpectrumAnalyzerComponent::refreshDisplay, this) };
+    // Timing, in the seconds its window tells between frames
+    double secondsSinceUpdate = 0.0;
+    double secondsUntilUpdate = 0.0;
+    double secondsSinceSpectrum = 0.0;
+    bool hasRecentSpectrum = false; // A spectrum was analyzed a moment ago: the audio is running
+
+    // The window calls refreshDisplay() at every frame while there is something to do, the timer at a low rate
+    // while there is not: the audio thread can't tell that it pushed samples
+    static constexpr int restingRefreshRate = 10;
+
+    FrameAttachment frameAttachment { *this, bindFront (&SpectrumAnalyzerComponent::refreshDisplay, this), false };
+    TimedCallback restingTimer { [this] { refreshDisplay (1.0 / restingRefreshRate); } };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SpectrumAnalyzerComponent)
 };

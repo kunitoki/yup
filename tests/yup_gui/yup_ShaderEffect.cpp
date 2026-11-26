@@ -130,6 +130,12 @@ void main()
     float pixels = 1.0 - step (0.01, abs (params.scale - 2.0));
     color = vec4 (size, reciprocal, pixels, 1.0);
 })";
+
+    /** A member of its own named as what an effect fills: two numbers where the effect writes the pixels of a unit. */
+    static constexpr const char* ownScaleFragment = R"(#version 450
+layout(set = 0, binding = 0) uniform Parameters { vec2 scale; } params;
+layout(location = 0) out vec4 color;
+void main() { color = vec4 (params.scale, 0.0, 1.0); })";
 #endif
 };
 
@@ -147,20 +153,34 @@ TEST_F (ShaderEffectTests, TellsHowManyScalarsAPropertyNeedsOfAMember)
         EXPECT_EQ (ShaderEffect::getNumUniformComponents (type), 0);
 }
 
-TEST_F (ShaderEffectTests, WithoutAGpuNothingIsDrawnAndNothingFails)
+TEST_F (ShaderEffectTests, WithoutAGpuTheComponentIsPaintedAsItIsAndNothingFails)
 {
+    struct Painted : Component
+    {
+        void paint (Graphics&) override { ++numPaints; }
+
+        int numPaints = 0;
+    };
+
     auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
     auto renderer = context->makeRenderer (64, 64);
     ASSERT_NE (renderer, nullptr);
     Graphics g (*context, *renderer);
 
-    Component screen ("screen");
+    Painted screen;
     screen.setBounds (0.0f, 0.0f, 64.0f, 64.0f);
+    screen.setVisible (true);
 
     const EffectPtr effect (new ShaderEffect (screen, nullptr, { { "tint", Type::color } }));
     screen.setComponentEffect (effect);
     EXPECT_EQ (effect->getShader(), nullptr);
+
+    // Without a shader the effect has nothing to draw the component with, which is painted directly
+    EXPECT_FALSE (effect->isActive());
+
+    yup::ComponentTestHelper<Component>::triggerPaint (screen, g, screen.getLocalBounds());
+    EXPECT_EQ (screen.numPaints, 1);
 
     // No shader, no picture and no GPU to make one with
     effect->apply (g, nullptr, screen.getLocalBounds());
@@ -170,6 +190,12 @@ TEST_F (ShaderEffectTests, WithoutAGpuNothingIsDrawnAndNothingFails)
     const auto shader = compile (tintFragment);
     effect->setShader (shader);
     EXPECT_EQ (effect->getShader(), shader);
+
+    // With a shader it has, but no GPU makes the picture the shader reads: the component is painted directly still
+    EXPECT_TRUE (effect->isActive());
+
+    yup::ComponentTestHelper<Component>::triggerPaint (screen, g, screen.getLocalBounds());
+    EXPECT_EQ (screen.numPaints, 2);
 
     effect->apply (g, nullptr, screen.getLocalBounds());
     EXPECT_FALSE (screen.snapshotToImage (*context, true).isValid());
@@ -295,16 +321,238 @@ TEST_F (ShaderEffectTests, AShaderGivenTheTimeRepaintsItsComponentAtEveryFrame)
         effect->setShader (still);
         EXPECT_FALSE (native.hasFrameListeners());
 
+        // An effect that is not the one of its component shows nothing, whatever its shader
+        effect->setShader (timed);
+        EXPECT_FALSE (native.hasFrameListeners());
+
+        screen.setComponentEffect (effect);
+        effect->setShader (still);
         effect->setShader (timed);
         EXPECT_TRUE (native.hasFrameListeners());
+
+        screen.setComponentEffect (nullptr);
     }
 
     // The frames go with the effect
     EXPECT_FALSE (native.hasFrameListeners());
 
     // A property named as the time takes its place: the component sets it, and no frame is asked for
-    const EffectPtr driven (new ShaderEffect (screen, timed, { { "time", Type::number } }));
+    const EffectPtr driven (new ShaderEffect (screen, still, { { "time", Type::number } }));
+    screen.setComponentEffect (driven);
+    driven->setShader (timed);
     EXPECT_FALSE (native.hasFrameListeners());
+}
+
+TEST_F (ShaderEffectTests, AShaderGivenTheTimeAsksForItsEffectAndNotForItsComponentToBePaintedAgain)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.setBounds (0.0f, 0.0f, 64.0f, 64.0f);
+    window.setVisible (true);
+
+    Component screen ("screen");
+    screen.setBounds (8.0f, 8.0f, 32.0f, 32.0f);
+    window.addAndMakeVisible (screen);
+
+    const auto timed = compile (timeFragment);
+    const auto still = compile (fillFragment);
+    ASSERT_NE (timed, nullptr);
+    ASSERT_NE (still, nullptr);
+
+    const EffectPtr effect (new ShaderEffect (screen, still));
+    screen.setComponentEffect (effect);
+    effect->setShader (timed);
+
+    // What was asked for so far is forgotten
+    yup::ComponentTestHelper<Component>::takeEffectDirtyRegion (screen, false);
+    native.repaintAreas.clearQuick();
+
+    native.callFrameListeners (0.25);
+
+    // The window draws the component again...
+    ASSERT_EQ (native.getRepaintAreas().getNumRectangles(), 1);
+    EXPECT_EQ (native.getRepaintAreas().getRectangle (0), screen.getBounds());
+
+    // ...from what it painted last: only the time the shader reads changed
+    const auto damage = yup::ComponentTestHelper<Component>::takeEffectDirtyRegion (screen, false);
+    ASSERT_TRUE (damage.has_value());
+    EXPECT_EQ (damage->getNumRectangles(), 0);
+}
+
+TEST_F (ShaderEffectTests, AShaderGivenTheTimeLeavesItsWindowIdleWhileNothingShowsIt)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.setBounds (0.0f, 0.0f, 64.0f, 64.0f);
+    window.setVisible (true);
+
+    Component screen ("screen");
+    screen.setBounds (8.0f, 8.0f, 32.0f, 32.0f);
+    window.addAndMakeVisible (screen);
+
+    const auto timed = compile (timeFragment);
+    const auto still = compile (fillFragment);
+    ASSERT_NE (timed, nullptr);
+    ASSERT_NE (still, nullptr);
+
+    // A shader that is set is taken as drawn until a paint tells otherwise
+    const EffectPtr effect (new ShaderEffect (screen, timed));
+
+    const auto setShaderAgain = [&]
+    {
+        effect->setShader (still);
+        effect->setShader (timed);
+    };
+
+    // An effect that is not set on its component shows nothing
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    setShaderAgain();
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    screen.setComponentEffect (effect);
+    setShaderAgain();
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    // Hidden by a parent, which nothing tells the effect: the frame that finds it so is the last one
+    window.setVisible (false);
+    native.callFrameListeners (0.25);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    // Shown again, the frames wait for the paint that draws the shader: none does here, without a GPU
+    window.setVisible (true);
+    native.callFrameListeners (0.25);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    // The same goes once the component was given another effect
+    setShaderAgain();
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    screen.setComponentEffect (nullptr);
+    native.callFrameListeners (0.25);
+    EXPECT_FALSE (native.hasFrameListeners());
+}
+
+TEST_F (ShaderEffectTests, AShaderThatIsNotDrawnAsksForNoMoreFrames)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.setBounds (0.0f, 0.0f, 64.0f, 64.0f);
+    window.setVisible (true);
+
+    Component screen ("screen");
+    screen.setOpaque (false);
+    screen.setBounds (0.0f, 0.0f, 32.0f, 32.0f);
+    window.addAndMakeVisible (screen);
+
+    const auto timed = compile (timeFragment);
+    ASSERT_NE (timed, nullptr);
+
+    const EffectPtr effect (new ShaderEffect (screen, timed));
+    screen.setComponentEffect (effect);
+
+    const auto countRepaintsOfAFrame = [&native]
+    {
+        native.repaintAreas.clearQuick();
+        native.callFrameListeners (0.25);
+        return native.getRepaintAreas().getNumRectangles();
+    };
+
+    const auto paintWithoutAGpu = [&screen]
+    {
+        auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+        auto renderer = context->makeRenderer (64, 64);
+        Graphics g (*context, *renderer);
+
+        yup::ComponentTestHelper<Component>::triggerPaint (screen, g, screen.getLocalBounds());
+    };
+
+    // The frames of a shader start with the paint that draws it, or with the shader that is set: until it was painted
+    // nothing tells that this one is not drawn, so a frame is asked for
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    effect->setShader (nullptr);
+    effect->setShader (timed);
+    EXPECT_GT (countRepaintsOfAFrame(), 0);
+
+    // The component was painted directly: the frame showed nothing of the shader, no other is asked for, and the window
+    // is left with no frame to run
+    paintWithoutAGpu();
+    EXPECT_EQ (countRepaintsOfAFrame(), 0);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    paintWithoutAGpu();
+    EXPECT_EQ (countRepaintsOfAFrame(), 0);
+
+    // A shader set again is tried again
+    effect->setShader (nullptr);
+    effect->setShader (timed);
+    EXPECT_GT (countRepaintsOfAFrame(), 0);
+}
+
+TEST_F (ShaderEffectTests, IsOnlyActiveWithAShaderItHasEveryPictureOf)
+{
+    const auto gated = compile (gateFragment);
+    const auto filling = compile (fillFragment);
+    ASSERT_NE (gated, nullptr);
+    ASSERT_NE (filling, nullptr);
+
+    Component screen ("screen");
+
+    // The texture an array names is filled from it, which leaves one picture to read: the component
+    const EffectPtr withSeries (new ShaderEffect (screen, gated, { { "gates", Type::array } }));
+    EXPECT_TRUE (withSeries->isActive());
+
+    // Without the property it is a second picture, which an effect doesn't have
+    const EffectPtr effect (new ShaderEffect (screen, gated));
+    EXPECT_FALSE (effect->isActive());
+
+    effect->setShader (filling);
+    EXPECT_TRUE (effect->isActive());
+
+    effect->setShader (nullptr);
+    EXPECT_FALSE (effect->isActive());
+}
+
+TEST_F (ShaderEffectTests, TellsWhatPreventsPropertiesFromFillingAShader)
+{
+    const auto shader = compile (typesFragment);
+    ASSERT_NE (shader, nullptr);
+
+    const auto failureOf = [] (const GpuImageShader::Ptr& checkedShader, const std::vector<ShaderEffect::Property>& properties)
+    {
+        const auto checked = ShaderEffect::checkProperties (*checkedShader, properties);
+        return checked.failed() ? checked.getErrorMessage() : String();
+    };
+
+    EXPECT_EQ (failureOf (shader, {}), String());
+    EXPECT_EQ (failureOf (shader, { { "tint", Type::color }, { "shade", Type::color }, { "area", Type::rectangle }, { "origin", Type::point }, { "amount", Type::number }, { "steps", Type::integer }, { "inverted", Type::boolean } }), String());
+
+    // A type no uniform takes, a name the block does not have, and a member holding fewer numbers than the type needs
+    EXPECT_TRUE (failureOf (shader, { { "amount", Type::string } }).contains ("'amount' has a type")) << failureOf (shader, { { "amount", Type::string } });
+    EXPECT_TRUE (failureOf (shader, { { "gain", Type::number } }).contains ("no member 'gain'")) << failureOf (shader, { { "gain", Type::number } });
+    EXPECT_TRUE (failureOf (shader, { { "origin", Type::rectangle } }).contains ("'origin'")) << failureOf (shader, { { "origin", Type::rectangle } });
+    EXPECT_TRUE (failureOf (shader, { { "tint", Type::color }, { "amount", Type::color } }).contains ("'amount'")) << failureOf (shader, { { "tint", Type::color }, { "amount", Type::color } });
+
+    // An array fills the texture of its name, which is no member of the block
+    const auto gated = compile (gateFragment);
+    ASSERT_NE (gated, nullptr);
+    EXPECT_EQ (failureOf (gated, { { "gates", Type::array } }), String());
+    EXPECT_TRUE (failureOf (gated, { { "gates", Type::number } }).contains ("no member 'gates'"));
+
+    // What the effect fills itself is checked too: declared as it is filled, it needs no property
+    const auto sized = compile (resolutionFragment);
+    const auto timed = compile (timeFragment);
+    ASSERT_NE (sized, nullptr);
+    ASSERT_NE (timed, nullptr);
+    EXPECT_EQ (failureOf (sized, {}), String());
+    EXPECT_EQ (failureOf (timed, {}), String());
+
+    // Declared as something else it is a value of the shader, which the effect would write over: a property has to fill it
+    const auto own = compile (ownScaleFragment);
+    ASSERT_NE (own, nullptr);
+    EXPECT_TRUE (failureOf (own, {}).contains ("'scale'")) << failureOf (own, {});
+    EXPECT_EQ (failureOf (own, { { "scale", Type::point } }), String());
 }
 
 #endif // YUP_ENABLE_SHADER_TRANSPILER
@@ -367,10 +615,9 @@ protected:
             GTEST_SKIP() << "No Metal GPU context available";
     }
 
-    /** Draws a component through its effect, and expects a color at a pixel of the picture. */
-    static void expectPixel (Component& component, int x, int y, Color expected, float scale = 1.0f)
+    /** Expects a color at a pixel of a picture. */
+    static void expectPixel (const Image& image, int x, int y, Color expected)
     {
-        const auto image = component.snapshotToImage (*gpuContext, true, scale);
         ASSERT_TRUE (image.isValid());
 
         const auto pixel = image.getPixelColor (x, y);
@@ -382,8 +629,55 @@ protected:
         EXPECT_NEAR (pixel.getAlpha(), expected.getAlpha(), 2) << "alpha at " << where;
     }
 
-    /** A shader that is given the time and that Metal can't draw: its bundle, made by hand, has a GLSL variant only. */
-    static GpuImageShader::Ptr makeShaderWithoutAVariantForMetal()
+    /** Draws a component through its effect, and expects a color at a pixel of the picture. */
+    static void expectPixel (Component& component, int x, int y, Color expected, float scale = 1.0f)
+    {
+        expectPixel (component.snapshotToImage (*gpuContext, true, scale), x, y, expected);
+    }
+
+    /** What a paint of a component gave: its picture, and whether a shader pass was drawn for it. */
+    struct Painted
+    {
+        Image image;
+        bool drewAPass = false;
+    };
+
+    /** Paints a component as its window does, which keeps what the component keeps from a paint to the next. The device
+        is given a failure for the next frame begun on it, which the frame of a pass takes: with no pass, the frame begun
+        after the paint is the one reporting it.
+    */
+    static Painted paintInWindow (Component& component)
+    {
+        Painted painted;
+
+        const auto device = gpuContext->getGpuDevice();
+        auto canvas = GpuCanvas::create (*gpuContext, roundToInt (component.getWidth()), roundToInt (component.getHeight()));
+
+        if (device == nullptr || canvas == nullptr)
+        {
+            ADD_FAILURE() << "there is no canvas to paint the component in";
+            return painted;
+        }
+
+        auto& g = canvas->beginDraw();
+
+        device->failNextFrameForTesting ("left by the paint");
+        yup::ComponentTestHelper<Component>::triggerPaint (component, g, component.getLocalBounds());
+        canvas->commit();
+
+        auto fence = GpuFrame::begin (device);
+        EXPECT_TRUE (fence.isValid());
+        painted.drewAPass = fence.waitForGPU().wasOk();
+
+        // Frames complete in order, so the one of a pass has by now: what it was made to fail with is for nobody
+        ignoreUnused (device->takeGpuFailure());
+
+        painted.image = canvas->asImage();
+        return painted;
+    }
+
+    /** The bundle of a shader that is given the time and that Metal can't draw: made by hand, it has a GLSL variant only. */
+    static ShaderBundle::Ptr makeBundleWithoutAVariantForMetal()
     {
         ShaderReflection::ResourceMember time;
         time.name = "time";
@@ -396,6 +690,12 @@ protected:
         block.members = { time };
         block.blockSize = 4;
 
+        ShaderReflection::ResourceBinding pixel;
+        pixel.name = "color";
+        pixel.type = ShaderReflection::ResourceType::stageOutput;
+        pixel.baseType = ShaderReflection::BaseType::float32;
+        pixel.vecSize = 4;
+
         ShaderBundle::Ptr bundle (new ShaderBundle());
 
         for (const auto stage : { ShaderStage::vertex, ShaderStage::fragment })
@@ -405,12 +705,20 @@ protected:
             info.source = "void main() {}";
 
             if (stage == ShaderStage::fragment)
+            {
                 info.reflection.uniformBuffers = { block };
+                info.reflection.stageOutputs = { pixel };
+            }
 
             bundle->addShader (std::move (info));
         }
 
-        const auto created = GpuImageShader::createFromBundle (bundle);
+        return bundle;
+    }
+
+    static GpuImageShader::Ptr makeShaderWithoutAVariantForMetal()
+    {
+        const auto created = GpuImageShader::createFromBundle (makeBundleWithoutAVariantForMetal());
         EXPECT_TRUE (created.wasOk()) << created.getErrorMessage();
         return created.wasOk() ? created.getValue() : nullptr;
     }
@@ -575,6 +883,98 @@ TEST_F (ShaderEffectMetalTests, TheTimeOfAShaderGoesByWithTheFramesOfItsWindow)
     expectPixel (screen, 16, 8, Colors::black);
 }
 
+TEST_F (ShaderEffectMetalTests, TheFramesOfAShaderGivenTheTimeStartOnceItIsDrawnAndStopWhileItIsHidden)
+{
+    const auto shader = compile (timeFragment);
+    ASSERT_NE (shader, nullptr);
+
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.setBounds (0.0f, 0.0f, 64.0f, 64.0f);
+    window.setVisible (true);
+
+    Filled screen ("screen", Colors::white);
+    window.addAndMakeVisible (screen);
+    screen.setComponentEffect (new ShaderEffect (screen, shader));
+
+    // Nothing showed the shader yet, so its window has no frame to run for it
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    expectPixel (screen, 16, 8, Colors::black);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    // Hidden by a parent, the first frame that finds it so is the last one
+    window.setVisible (false);
+    native.callFrameListeners (0.5);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    // Shown again, the paint that draws it starts the frames again, from the time they stopped at
+    window.setVisible (true);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    expectPixel (screen, 16, 8, Colors::black);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    native.callFrameListeners (0.5);
+    expectPixel (screen, 16, 8, Color (0xffff0000));
+}
+
+TEST_F (ShaderEffectMetalTests, TheShaderIsDrawnAgainOnlyWhenWhatItReadsChanged)
+{
+    const auto shader = compile (tintFragment);
+    ASSERT_NE (shader, nullptr);
+
+    // The tint is a value of the window, which the screen takes from it: setting it repaints nothing of the screen
+    Filled window ("window", Colors::black);
+    window.setVisible (true);
+    window.setProperty (Identifier ("tint"), VariantConverter<Color>::toVar (Colors::white));
+
+    Filled screen ("screen", Colors::white);
+    window.addAndMakeVisible (screen);
+
+    const EffectPtr effect (new ShaderEffect (screen, shader, { { "tint", Type::color } }));
+    screen.setComponentEffect (effect);
+
+    EXPECT_TRUE (paintInWindow (window).drewAPass);
+
+    // Painted again with nothing changed, as when something repaints around it, it is the picture drawn last
+    EXPECT_FALSE (paintInWindow (window).drewAPass);
+    EXPECT_FALSE (paintInWindow (window).drewAPass);
+
+    // A value the shader reads
+    window.setProperty (Identifier ("tint"), VariantConverter<Color>::toVar (Color (0xff00ff00)));
+
+    auto painted = paintInWindow (window);
+    EXPECT_TRUE (painted.drewAPass);
+    expectPixel (painted.image, 16, 8, Color (0xff00ff00));
+
+    painted = paintInWindow (window);
+    EXPECT_FALSE (painted.drewAPass);
+    expectPixel (painted.image, 16, 8, Color (0xff00ff00));
+
+    // What the component paints
+    screen.fill = Color (0xff0000ff);
+    screen.repaint();
+
+    painted = paintInWindow (window);
+    EXPECT_TRUE (painted.drewAPass);
+    expectPixel (painted.image, 16, 8, Colors::black);
+
+    painted = paintInWindow (window);
+    EXPECT_FALSE (painted.drewAPass);
+    expectPixel (painted.image, 16, 8, Colors::black);
+
+    // Another shader, given the same values: it fills the picture with the tint
+    const auto other = compile (fillFragment);
+    ASSERT_NE (other, nullptr);
+
+    effect->setShader (other);
+
+    painted = paintInWindow (window);
+    EXPECT_TRUE (painted.drewAPass);
+    expectPixel (painted.image, 16, 8, Color (0xff00ff00));
+}
+
 TEST_F (ShaderEffectMetalTests, AShaderThatCantBeDrawnStopsRepaintingItsComponent)
 {
     const auto undrawable = makeShaderWithoutAVariantForMetal();
@@ -590,8 +990,12 @@ TEST_F (ShaderEffectMetalTests, AShaderThatCantBeDrawnStopsRepaintingItsComponen
     Filled screen ("screen", Color (0xff0000ff));
     window.addAndMakeVisible (screen);
 
-    const EffectPtr effect (new ShaderEffect (screen, undrawable));
+    // The frames of a shader start with the paint that draws it, or with the shader that is set
+    const EffectPtr effect (new ShaderEffect (screen, timed));
     screen.setComponentEffect (effect);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    effect->setShader (undrawable);
     EXPECT_TRUE (native.hasFrameListeners());
 
     const auto countRepaintsOfAFrame = [&native]
@@ -604,9 +1008,10 @@ TEST_F (ShaderEffectMetalTests, AShaderThatCantBeDrawnStopsRepaintingItsComponen
     // Until it was painted nothing tells that the shader can't be drawn, so the time goes by
     EXPECT_GT (countRepaintsOfAFrame(), 0);
 
-    // The component is drawn as it is, and no frame repaints it for a shader that draws nothing
+    // The component is drawn as it is, and no frame repaints it for a shader that draws nothing: the window has none to run
     expectPixel (screen, 16, 8, Color (0xff0000ff));
     EXPECT_EQ (countRepaintsOfAFrame(), 0);
+    EXPECT_FALSE (native.hasFrameListeners());
 
     expectPixel (screen, 16, 8, Color (0xff0000ff));
     EXPECT_EQ (countRepaintsOfAFrame(), 0);
@@ -621,6 +1026,129 @@ TEST_F (ShaderEffectMetalTests, AShaderThatCantBeDrawnStopsRepaintingItsComponen
     EXPECT_GT (countRepaintsOfAFrame(), 0);
     expectPixel (screen, 16, 8, Color (0xff0000ff));
     EXPECT_EQ (countRepaintsOfAFrame(), 0);
+}
+
+TEST_F (ShaderEffectMetalTests, KeepsWhatTheDeviceRefusedUntilItsComponentLeavesItsWindow)
+{
+    const auto undrawable = makeShaderWithoutAVariantForMetal();
+    const auto filling = compile (fillFragment);
+    ASSERT_NE (undrawable, nullptr);
+    ASSERT_NE (filling, nullptr);
+
+    Component window ("window");
+    makeWindow (window);
+    window.setBounds (0.0f, 0.0f, 64.0f, 64.0f);
+    window.setVisible (true);
+
+    Filled screen ("screen", Color (0xff0000ff));
+    window.addAndMakeVisible (screen);
+
+    const EffectPtr effect (new ShaderEffect (screen, filling, { { "tint", Type::color } }));
+    screen.setComponentEffect (effect);
+    screen.setProperty (Identifier ("tint"), VariantConverter<Color>::toVar (Color (0xff00ff00)));
+
+    // A shader that is drawn has nothing to tell
+    expectPixel (screen, 16, 8, Color (0xff00ff00));
+    EXPECT_EQ (effect->getDrawError(), String());
+
+    // One Metal has no variant of tells why it was not drawn
+    effect->setShader (undrawable);
+    EXPECT_EQ (effect->getDrawError(), String());
+
+    expectPixel (screen, 16, 8, Color (0xff0000ff));
+    const auto error = effect->getDrawError();
+    EXPECT_TRUE (error.contains ("variant")) << error;
+
+    expectPixel (screen, 16, 8, Color (0xff0000ff));
+    EXPECT_EQ (effect->getDrawError(), error);
+
+    // Out of its window the effect keeps nothing of the device, nor what it refused: the next one is asked again
+    window.removeChildComponent (screen);
+    EXPECT_EQ (effect->getDrawError(), String());
+    EXPECT_TRUE (effect->isActive());
+
+    expectPixel (screen, 16, 8, Color (0xff0000ff));
+    EXPECT_EQ (effect->getDrawError(), error);
+
+    // Another shader has nothing wrong
+    effect->setShader (filling);
+    EXPECT_EQ (effect->getDrawError(), String());
+    expectPixel (screen, 16, 8, Color (0xff00ff00));
+}
+
+TEST_F (ShaderEffectMetalTests, AShaderTheDeviceCantDrawIsReportedOnceWhereItIsDeclared)
+{
+    // The bundle a build makes of the shader, for other graphics APIs than Metal
+    MemoryBlock bundle;
+    ASSERT_TRUE (makeBundleWithoutAVariantForMetal()->saveToMemoryBlock (bundle).wasOk());
+
+    YuiDocument document;
+    document.setAssetReader ([bundle] (const String& path) -> std::optional<MemoryBlock>
+    {
+        if (path == "fx/clock.frag.ysl")
+            return bundle;
+
+        return std::nullopt;
+    });
+
+    const auto loaded = document.loadFromString (R"yui(
+        shader Clock { fragment: "fx/clock.frag"; }
+
+        style {
+            #first { effect: Clock; }
+            #second { effect: Clock; }
+        }
+
+        Component { })yui");
+
+    ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
+
+    auto* root = document.getRoot();
+    auto* context = root->getStyleContext();
+
+    Filled first ("first", Color (0xff0000ff));
+    Filled second ("second", Color (0xff0000ff));
+    root->addAndMakeVisible (first);
+    root->addAndMakeVisible (second);
+    context->restyleNow();
+
+    // Loaded with no window to tell its graphics API, the shader has nothing wrong yet
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+
+    const auto* effect = dynamic_cast<ShaderEffect*> (first.getComponentEffect().get());
+    ASSERT_NE (effect, nullptr);
+    ASSERT_NE (dynamic_cast<ShaderEffect*> (second.getComponentEffect().get()), nullptr);
+
+    // Metal can't draw it: both components are drawn as they are, and nothing is reported while they are painted
+    expectPixel (first, 16, 8, Color (0xff0000ff));
+    expectPixel (second, 16, 8, Color (0xff0000ff));
+    EXPECT_TRUE (effect->getDrawError().contains ("variant")) << effect->getDrawError();
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+
+    // The restyle their paints asked for tells it once, where the shader is declared
+    context->restyleNow();
+
+    const auto diagnostics = document.getDiagnostics();
+    ASSERT_EQ (diagnostics.size(), 1u) << DataTreeDiagnostic::join (diagnostics);
+    EXPECT_EQ (diagnostics[0].message, "The shader 'Clock' can't be drawn: " + effect->getDrawError());
+    EXPECT_EQ (diagnostics[0].line, 2);
+    EXPECT_EQ (diagnostics[0].property, Identifier ("fragment"));
+    EXPECT_EQ (context->getDiagnostics().size(), 1u);
+
+    // Neither the next paints nor the next restyles tell it again
+    expectPixel (first, 16, 8, Color (0xff0000ff));
+    context->markDirty (*root);
+    context->restyleNow();
+
+    EXPECT_TRUE (context->getDiagnostics().empty()) << DataTreeDiagnostic::join (context->getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics().size(), 1u);
+
+    // It is told again with the problems of the stylesheet, as what prevents a shader from loading is
+    context->setComponentResolver (nullptr);
+    context->restyleNow();
+
+    ASSERT_EQ (context->getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (context->getDiagnostics());
+    EXPECT_EQ (context->getDiagnostics()[0].message, diagnostics[0].message);
 }
 
 #endif // YUP_MAC && YUP_ENABLE_SHADER_TRANSPILER

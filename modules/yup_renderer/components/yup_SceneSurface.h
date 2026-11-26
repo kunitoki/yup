@@ -58,11 +58,15 @@ public:
     //==============================================================================
     /** Finds the mesh and the material the surface is shown with. Not to be called while painting.
 
+        @param severity Set to a warning when what is returned does not prevent the components
+                        from being shown, left as it is otherwise.
+
         @returns What is to be reported about the node, once: that it draws no mesh to show the
-                 components on, or one whose texture coordinates span no area for them to lie
-                 over. Empty when there is nothing to tell, or when it was told already.
+                 components on, one whose texture coordinates span no area for them to lie
+                 over, or one of several primitives that the material of the surface repaints
+                 all. Empty when there is nothing to tell, or when it was told already.
     */
-    String update();
+    String update (DataTreeDiagnostic::Severity& severity);
 
     /** Has the components rendered again when the scene is next painted: what they show changed
         with something above them, which does not ask them to repaint.
@@ -122,12 +126,13 @@ private:
         Point<float> surfacePoint;
     };
 
-    /** What prevents the node from showing the components, as it was last reported. */
+    /** What is to be told about how the node shows the components, as it was last reported. */
     enum class Problem
     {
         none,
         noMesh,
-        noTextureArea
+        noTextureArea,
+        severalPrimitives
     };
 
     Mesh::Ptr findMesh() const;
@@ -148,12 +153,12 @@ private:
     Texture::Ptr replacedTexture;
     std::array<float, 3> replacedFactor { 1.0f, 1.0f, 1.0f };
 
-    // What was rendered, and the device it was rendered with: only compared
+    // What was rendered, and the device it was rendered with: kept, as another one could be made where it was once it is gone
     Texture::Ptr texture;
     GpuTexture::Ptr content;
     GpuCanvas::Ptr composite;
     std::vector<Layer> layers;
-    const GpuDevice* device = nullptr;
+    GpuDevice::Ptr device;
     bool areCanvasesOutdated = false;
 
     // The mesh the components lie over, as it was last looked at, and the mapper given its triangles when next asked

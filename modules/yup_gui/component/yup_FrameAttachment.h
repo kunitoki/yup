@@ -53,8 +53,10 @@ namespace yup
     };
     @endcode
 
-    To receive frames only for a while, such as during an animation, hold the attachment in a
-    std::optional and reset it when done. The function may destroy its own attachment.
+    To receive frames only for a while, such as during an animation, make the attachment inactive
+    with setActive() when done and active again when needed: a window in which no attachment is
+    active skips the frames it has nothing to paint in, without stalling the message thread. The
+    function may stop or destroy its own attachment.
 
     Threading: on platforms with a render thread the function runs on that thread while it holds
     the message manager lock, so it never runs at the same time as the message thread or as
@@ -76,14 +78,34 @@ public:
     //==============================================================================
     /** Creates an attachment calling a function for every frame of the window of a component.
 
-        @param component The component whose window drives the function. It may be deleted before
-                         the attachment, which then stops calling the function.
-        @param callback  The function to call, which must not be empty.
+        @param component      The component whose window drives the function. It may be deleted before
+                              the attachment, which then stops calling the function.
+        @param callback       The function to call, which must not be empty.
+        @param shouldBeActive Whether the function is called from the start, or only once
+                              setActive() says so.
     */
-    FrameAttachment (Component& component, Callback callback);
+    FrameAttachment (Component& component, Callback callback, bool shouldBeActive = true);
 
     /** Destructor, after which the function is no longer called. */
     ~FrameAttachment() override;
+
+    //==============================================================================
+    /** Starts or stops calling the function.
+
+        An attachment that is not active is not registered with the window of its component: it
+        costs nothing, and does not keep that window from skipping the frames it has nothing to
+        paint in. The first call after it is made active again is given the time of one frame, not
+        the time it was stopped for.
+
+        Call it on the message thread, or with the message manager locked, as from the function
+        itself.
+
+        @param shouldBeActive Whether the function is called for the frames of the window.
+    */
+    void setActive (bool shouldBeActive);
+
+    /** Returns true when the function is called for the frames of the window its component is in. */
+    bool isActive() const noexcept { return active; }
 
 private:
     //==============================================================================
@@ -97,6 +119,7 @@ private:
     Component* owner = nullptr;
     WeakReference<ComponentNative> native;
     std::shared_ptr<const Callback> callback;
+    bool active = true;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FrameAttachment)
 };

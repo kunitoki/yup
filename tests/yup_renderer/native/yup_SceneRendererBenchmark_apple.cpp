@@ -537,8 +537,9 @@ TEST_F (SceneRendererFrameStatsTests, HeavierPassMeasuresLonger)
 
     GTEST_ALSO_RUN_DISABLED_TESTS=1 just test Release "SceneRendererBenchmarkTests.*"
 
-    or one of them with "just perf run Release <filter>"; "just perf" alone runs the demo target,
-    DISABLED_DemoTargetFrameTimes (see tests/data/yup_3d/perf/README.md). The scene is the demo's: examples/graphics/data/gltf/mpc.glb seen from the top, the shadowed
+    or one of them with "just perf_3d run Release <filter>"; "just perf_3d" alone runs the target
+    benchmarks, the DISABLED_*TargetFrameTimes tests, whose rows share one baseline (see
+    tests/data/yup_3d/perf/README.md). The scene is the demo's: examples/graphics/data/gltf/mpc.glb seen from the top, the shadowed
     key light, the orbiting show lights and a dim environment. The "moving model" configurations
     also shift the model every frame, so the shadow maps are drawn again in each one, as while
     dragging it in the demo. The "orbiting camera" configurations turn the camera around the model
@@ -567,6 +568,8 @@ protected:
         float orbitPitch = 0.0f; // the camera orbits at this pitch when not 0
         Entity knob; // turned a little every frame when set, as by automation
         bool lightingClassification = true; // false shades every pixel of a frame with one LightingPass variant
+        bool still = false;        // nothing moves: animate() does nothing, and timeFrames() times the scene once its image converged
+        bool updatesScene = false; // Scene::update() runs before every frame, by a 120 Hz step, in the CPU time of the frame
         Quaternion knobRotation;
         double time = 0.0;
         int frame = 0;
@@ -748,9 +751,12 @@ protected:
         }
 
         /** Moves the show lights one 120 Hz frame further along the orbits of the demo's LightShowAnimator,
-            and the model by a hundredth of its size when moveModel is set. */
+            and the model by a hundredth of its size when moveModel is set. Nothing moves once still is set. */
         void animate()
         {
+            if (still)
+                return;
+
             time += 1.0 / 120.0;
 
             if (knob.isValid())
@@ -790,7 +796,7 @@ protected:
     struct FrameSamples
     {
         std::vector<double> gpu;                      // GpuFrameTimings::frameMilliseconds, one per frame whose stats arrived
-        std::vector<double> cpu;                      // the milliseconds of each timed render() call, all 120
+        std::vector<double> cpu;                      // the milliseconds of each timed render() call, with the Scene::update() before it when the show updates its scene, all 120
         std::map<String, std::vector<double>> scopes; // the milliseconds of each available scope, by name
         int drawItems = 0;                            // of the last frame whose stats arrived
         RenderCapabilities::Tier tier = RenderCapabilities::Tier::raster; // the tier the last frame whose stats arrived rendered with
@@ -807,7 +813,8 @@ protected:
         stats when @p frameStats or @p samples is set, and waits for its frames after every @p maxFramesInFlight
         ones when it is above 0. @p samples receives the stats of the timed frames, read after every
         render() and every wait: only the latest finished frame is kept, so a wait finishing two frames
-        leaves the first one out. */
+        leaves the first one out. A still show renders on after the warm-up until its image converged,
+        and fails when it does not within 256 frames. */
     double timeFrames (LightShow& show, int width, int height, int& shadowRedraws, int* casterDraws = nullptr,
                        bool frameStats = false, int maxFramesInFlight = 0, FrameSamples* samples = nullptr)
     {
@@ -849,6 +856,9 @@ protected:
             {
                 show.animate();
                 const auto renderStart = Time::getMillisecondCounterHiRes();
+                if (show.updatesScene)
+                    show.scene.update (1.0 / 120.0);
+
                 if (renderer.render (device, show.scene, width, height) == nullptr)
                     return false;
 
@@ -869,6 +879,13 @@ protected:
         };
 
         if (! renderFrames (30))
+            return -1.0;
+
+        for (int i = 0; show.still && ! renderer.isConverged() && i < 256; ++i)
+            if (! renderFrames (1))
+                return -1.0;
+
+        if (show.still && ! renderer.isConverged())
             return -1.0;
 
         timed = true;
@@ -934,6 +951,369 @@ protected:
         std::sort (values.begin(), values.end());
         return values[jmin (values.size() - 1, static_cast<size_t> (fraction * static_cast<double> (values.size())))];
     }
+
+    //==============================================================================
+    /** The size of the demo's 3D view in its default 1024 x 768 point window at 2x, which the target rows share. */
+    static constexpr int demoWidth = 1578;
+    static constexpr int demoHeight = 1404;
+
+    /** A round of a row of the target benchmarks: the timed frames of timeFrames(), and what it counted. */
+    struct Round
+    {
+        FrameSamples samples;
+        double wallMilliseconds = 0.0;
+        int shadowRedraws = 0;
+        int casterDraws = 0;
+        double shadowsMean = 0.0; // the shadows scope over every sampled frame, those that kept the maps reading 0
+        double load = 0.0;
+    };
+
+    /** A row of the target benchmarks (DISABLED_*TargetFrameTimes), timed in two rounds. */
+    struct TargetRow
+    {
+        String name;
+        bool gate = false; // a full tier row: it can't run on another tier, and warns about an A/A spread above 3%
+        std::vector<Round> rounds = {};
+    };
+
+    static const char* getTierName (RenderCapabilities::Tier tier)
+    {
+        return tier == RenderCapabilities::Tier::full ? "full" : "raster";
+    }
+
+    /** Times a round of @p row with timeFrames(), the frame stats on and waiting for each frame: with
+        more in flight, a frame's command buffer time also spans the frames it waited behind. Fails
+        without a timed frame, and skips the test when a gate row rendered on the raster tier. */
+    void timeRound (LightShow& show, int width, int height, TargetRow& row)
+    {
+        Round round;
+        double load[3] = {};
+        getloadavg (load, 3);
+        round.load = load[0];
+        round.wallMilliseconds = timeFrames (show, width, height, round.shadowRedraws, &round.casterDraws, false, 1, &round.samples);
+        ASSERT_GT (round.wallMilliseconds, 0.0) << row.name;
+        ASSERT_FALSE (round.samples.gpu.empty()) << row.name;
+
+        // A full row timed on the raster tier would gate the wrong renderer under the full label
+        if (row.gate && round.samples.tier != RenderCapabilities::Tier::full)
+            GTEST_SKIP() << row.name << " rendered on the " << getTierName (round.samples.tier) << " tier: this device has no full tier, so the gate rows cannot run";
+
+        if (const auto shadowTimes = round.samples.scopes.find ("shadows"); shadowTimes != round.samples.scopes.end())
+            round.shadowsMean = std::accumulate (shadowTimes->second.begin(), shadowTimes->second.end(), 0.0) / static_cast<double> (shadowTimes->second.size());
+
+        row.rounds.push_back (std::move (round));
+    }
+
+    /** Prints a table per row, writes the rows as JSON to the absolute path in the environment
+        variable YUP_PERF_OUTPUT when set, and compares their GPU and CPU medians with the JSON of an
+        earlier run named by YUP_PERF_BASELINE when set: it reports, it never fails on a regression.
+        The first test of a process to write starts the file, and the ones after it add their rows to
+        it, so a run of several target benchmarks leaves one file. @p load is the load average when
+        the test started. */
+    void reportTargetRows (const std::vector<TargetRow>& rows, const double* load)
+    {
+        const auto gpuName = SystemStats::getEnvironmentVariable ("YUP_PERF_GPU", "unknown");
+#if YUP_DEBUG
+        const String config ("Debug");
+#else
+        const String config ("Release");
+#endif
+
+        var json (new DynamicObject());
+        json.getDynamicObject()->setProperty ("gpu", gpuName);
+        json.getDynamicObject()->setProperty ("config", config);
+        json.getDynamicObject()->setProperty ("date", Time::getCurrentTime().toISO8601 (true));
+        json.getDynamicObject()->setProperty ("load", Array<var> { load[0], load[1], load[2] });
+
+        Array<var> rowsJson;
+        std::vector<double> gpuMedians, spreads, cpuMedians, cpuSpreads;
+
+        for (const auto& row : rows)
+        {
+            const auto& rounds = row.rounds;
+            const auto a = percentile (rounds[0].samples.gpu, 0.5);
+            const auto b = percentile (rounds[1].samples.gpu, 0.5);
+            gpuMedians.push_back ((a + b) * 0.5);
+            spreads.push_back (std::abs (a - b));
+
+            const auto cpuA = percentile (rounds[0].samples.cpu, 0.5);
+            const auto cpuB = percentile (rounds[1].samples.cpu, 0.5);
+            cpuMedians.push_back ((cpuA + cpuB) * 0.5);
+            cpuSpreads.push_back (std::abs (cpuA - cpuB));
+
+            std::cout << "\n"
+                      << String::formatted ("%s: GPU median %.3f ms (rounds %.3f and %.3f, A/A spread %.1f%%), CPU median %.3f ms, internal %dx%d",
+                                            row.name.toRawUTF8(), gpuMedians.back(), a, b, spreads.back() / gpuMedians.back() * 100.0, cpuMedians.back(),
+                                            rounds[0].samples.internalWidth, rounds[0].samples.internalHeight)
+                      << "\n"
+                      << String::formatted ("  %5s %8s %8s %8s %8s %8s %10s %13s %6s %6s", "round", "samples", "gpu med", "gpu p95", "wall", "cpu med", "draw items", "casters/frame", "load", "tier")
+                      << std::endl;
+
+            Array<var> roundsJson;
+            std::map<String, double> scopeOrder; // the sum of the round medians of each scope
+            for (size_t r = 0; r < rounds.size(); ++r)
+            {
+                const auto& round = rounds[r];
+                const auto& samples = round.samples;
+                const auto gpuMedian = percentile (samples.gpu, 0.5);
+                const auto casterDraws = round.casterDraws / 120.0;
+
+                std::cout << String::formatted ("  %5d %4d/120 %8.3f %8.3f %8.3f %8.3f %10d %13.1f %6.2f %6s",
+                                                static_cast<int> (r + 1), static_cast<int> (samples.gpu.size()), gpuMedian, percentile (samples.gpu, 0.95),
+                                                round.wallMilliseconds, percentile (samples.cpu, 0.5), samples.drawItems, casterDraws, round.load, getTierName (samples.tier))
+                          << std::endl;
+
+                var scopesJson (new DynamicObject());
+                for (const auto& [name, values] : samples.scopes)
+                {
+                    scopeOrder[name] += percentile (values, 0.5);
+                    scopesJson.getDynamicObject()->setProperty (name, percentile (values, 0.5));
+                }
+
+                var roundJson (new DynamicObject());
+                auto& properties = *roundJson.getDynamicObject();
+                properties.setProperty ("gpuMedian", gpuMedian);
+                properties.setProperty ("gpuP95", percentile (samples.gpu, 0.95));
+                properties.setProperty ("samples", static_cast<int> (samples.gpu.size()));
+                properties.setProperty ("frames", 120);
+                properties.setProperty ("wallMilliseconds", round.wallMilliseconds);
+                properties.setProperty ("cpuMedian", percentile (samples.cpu, 0.5));
+                properties.setProperty ("shadowsMean", round.shadowsMean);
+                properties.setProperty ("shadowRedraws", round.shadowRedraws);
+                properties.setProperty ("casterDrawsPerFrame", casterDraws);
+                properties.setProperty ("drawItems", samples.drawItems);
+                properties.setProperty ("internalWidth", samples.internalWidth);
+                properties.setProperty ("internalHeight", samples.internalHeight);
+                properties.setProperty ("tier", String (getTierName (samples.tier)));
+                properties.setProperty ("load", round.load);
+                properties.setProperty ("scopes", scopesJson);
+                roundsJson.add (roundJson);
+            }
+
+            std::vector<std::pair<double, String>> sortedScopes;
+            for (const auto& [name, sum] : scopeOrder)
+                sortedScopes.push_back ({ sum, name });
+
+            std::sort (sortedScopes.begin(), sortedScopes.end(), [] (const auto& x, const auto& y) { return x.first > y.first; });
+
+            std::cout << String::formatted ("  %-24s %8s %6s %8s %6s", "scope", "r1 med", "share", "r2 med", "share") << std::endl;
+            for (const auto& [sum, name] : sortedScopes)
+            {
+                String line = String::formatted ("  %-24s", name.toRawUTF8());
+                for (const auto& round : rounds)
+                {
+                    const auto& values = round.samples.scopes.count (name) != 0 ? round.samples.scopes.at (name) : std::vector<double>();
+                    const auto value = percentile (values, 0.5);
+                    line << String::formatted (" %8.3f %5.1f%%", value, value / percentile (round.samples.gpu, 0.5) * 100.0);
+                }
+
+                // Frames that keep the shadow maps read 0, so the median alone hides the cost of a redraw
+                if (name == "shadows")
+                    line << String::formatted ("  mean %.3f and %.3f ms, redrawn in %d and %d of 120 frames",
+                                               rounds[0].shadowsMean, rounds[1].shadowsMean,
+                                               rounds[0].shadowRedraws, rounds[1].shadowRedraws);
+
+                std::cout << line << std::endl;
+            }
+
+            if (row.gate && spreads.back() > gpuMedians.back() * 0.03)
+                std::cout << String::formatted ("  Warning: the A/A spread of this gate row is %.1f%%, above 3%%: the machine was not idle enough to trust it", spreads.back() / gpuMedians.back() * 100.0) << std::endl;
+
+            var rowJson (new DynamicObject());
+            rowJson.getDynamicObject()->setProperty ("name", row.name);
+            rowJson.getDynamicObject()->setProperty ("gpuMedian", gpuMedians.back());
+            rowJson.getDynamicObject()->setProperty ("spread", spreads.back() / gpuMedians.back());
+            rowJson.getDynamicObject()->setProperty ("spreadMilliseconds", spreads.back());
+            rowJson.getDynamicObject()->setProperty ("cpuMedian", cpuMedians.back());
+            rowJson.getDynamicObject()->setProperty ("cpuSpreadMilliseconds", cpuSpreads.back());
+            rowJson.getDynamicObject()->setProperty ("rounds", roundsJson);
+            rowsJson.add (rowJson);
+        }
+
+        const auto outputPath = SystemStats::getEnvironmentVariable ("YUP_PERF_OUTPUT", {});
+
+        // The rows the tests run before this one wrote stay in the file, but for the ones timed again
+        Array<var> allRows;
+        if (std::exchange (outputStarted, true) && File::isAbsolutePath (outputPath))
+        {
+            const auto written = JSON::parse (File (outputPath));
+            if (const auto* writtenRows = written["rows"].getArray(); writtenRows != nullptr)
+                for (const auto& writtenRow : *writtenRows)
+                    if (std::none_of (rows.begin(), rows.end(), [&writtenRow] (const TargetRow& row) { return writtenRow["name"].toString() == row.name; }))
+                        allRows.add (writtenRow);
+        }
+
+        allRows.addArray (rowsJson);
+        json.getDynamicObject()->setProperty ("rows", allRows);
+
+        if (outputPath.isNotEmpty())
+        {
+            if (! File::isAbsolutePath (outputPath))
+                ADD_FAILURE() << "YUP_PERF_OUTPUT is not an absolute path, nothing written: " << outputPath;
+            else if (File (outputPath).getParentDirectory().createDirectory().wasOk() && File (outputPath).replaceWithText (JSON::toString (json)))
+                std::cout << "\nWrote " << outputPath << std::endl;
+            else
+                ADD_FAILURE() << "Could not write " << outputPath;
+        }
+
+        const auto baselinePath = SystemStats::getEnvironmentVariable ("YUP_PERF_BASELINE", {});
+        if (baselinePath.isEmpty())
+            return;
+
+        if (! File::isAbsolutePath (baselinePath) || ! File (baselinePath).existsAsFile())
+        {
+            std::cout << "\nNo baseline to compare with at " << baselinePath << std::endl;
+            return;
+        }
+
+        const auto baseline = JSON::parse (File (baselinePath));
+        if (! baseline.isObject())
+        {
+            std::cout << "\nThe baseline is not a JSON object, not compared: " << baselinePath << std::endl;
+            return;
+        }
+
+        if (baseline["gpu"].toString() != gpuName || baseline["config"].toString() != config)
+        {
+            std::cout << "\nWarning: the baseline was recorded on " << baseline["gpu"].toString() << " in " << baseline["config"].toString()
+                      << ", this run is on " << gpuName << " in " << config << ": not compared" << std::endl;
+            return;
+        }
+
+        std::cout << "\nCompared with " << baselinePath << " (" << baseline["date"].toString() << "):" << std::endl;
+        for (size_t i = 0; i < rows.size(); ++i)
+        {
+            const struct
+            {
+                const char* key;
+                const char* label;
+                double current;
+                double spread;
+            } metrics[] = {
+                { "gpuMedian", "GPU", gpuMedians[i], spreads[i] },
+                { "cpuMedian", "CPU", cpuMedians[i], cpuSpreads[i] },
+            };
+
+            for (const auto& metric : metrics)
+            {
+                std::optional<double> baselineMedian;
+                if (const auto* baselineRows = baseline["rows"].getArray(); baselineRows != nullptr)
+                    for (const auto& baselineRow : *baselineRows)
+                        if (baselineRow["name"].toString() == rows[i].name && baselineRow.hasProperty (metric.key))
+                            baselineMedian = static_cast<double> (baselineRow[metric.key]);
+
+                const auto verdict = compareWithBaseline (baselineMedian, metric.current, metric.spread);
+                if (verdict == Verdict::newRow)
+                {
+                    std::cout << String::formatted ("  new        %s, %s: %.3f ms, not in the baseline", rows[i].name.toRawUTF8(), metric.label, metric.current) << std::endl;
+                    continue;
+                }
+
+                const auto before = baselineMedian.value_or (0.0);
+                std::cout << String::formatted ("  %-10s %s, %s: %.3f ms, baseline %.3f ms, %+.3f ms (%+.1f%%), A/A spread %.3f ms",
+                                                verdict == Verdict::pass ? "PASS" : (verdict == Verdict::regressed ? "REGRESSED" : "INVALID"),
+                                                rows[i].name.toRawUTF8(), metric.label, metric.current, before, metric.current - before,
+                                                before > 0.0 ? (metric.current / before - 1.0) * 100.0 : 0.0, metric.spread)
+                          << std::endl;
+            }
+        }
+    }
+
+    //==============================================================================
+    /** A ribbon of @p columns by @p rows quads, 1 wide and 2 high, facing a camera 4 units away under
+        a sun, on the full tier. Its foot follows a joint standing there and its top a joint bound
+        halfway up, which a looping clip turns a quarter turn about x and back in 2 seconds. The show
+        updates its scene, so every frame poses the joint and skins every vertex on the CPU (DeformNode). */
+    static void buildSkinnedScene (LightShow& show, int columns, int rows)
+    {
+        std::vector<Mesh::Vertex> vertices;
+        std::vector<Mesh::Influences> influences;
+        std::vector<uint32> indices;
+
+        for (int row = 0; row <= rows; ++row)
+        {
+            for (int column = 0; column <= columns; ++column)
+            {
+                const auto height = static_cast<float> (row) / static_cast<float> (rows);
+
+                auto& vertex = vertices.emplace_back();
+                vertex.position = { static_cast<float> (column) / static_cast<float> (columns), 2.0f * height, 0.0f };
+                vertex.normal = { 0.0f, 0.0f, 1.0f };
+
+                influences.push_back ({ { 0, 1, 0, 0 }, { 1.0f - height, height, 0.0f, 0.0f } });
+            }
+        }
+
+        for (int row = 0; row < rows; ++row)
+        {
+            for (int column = 0; column < columns; ++column)
+            {
+                const auto first = static_cast<uint32> (row * (columns + 1) + column);
+                const auto above = first + static_cast<uint32> (columns + 1);
+                indices.insert (indices.end(), { first, first + 1, above, first + 1, above + 1, above });
+            }
+        }
+
+        auto material = Material::Ptr (new Material());
+        material->metallicFactor = 0.0f;
+        material->doubleSided = true;
+
+        auto mesh = Mesh::Ptr (new Mesh ("ribbon"));
+        mesh->addPrimitive (std::move (vertices), std::move (indices), material, std::move (influences));
+
+        auto& scene = show.scene;
+        auto foot = scene.createEntity ("foot");
+        foot.attach<TransformNode>();
+        auto bend = foot.createChild ("bend");
+        bend.attach<TransformNode> (Vector3<float> { 0.0f, 1.0f, 0.0f });
+
+        const auto skin = Skin::Ptr (new Skin ("ribbon", { 0, 1 }, { Matrix4(), Matrix4::translation ({ 0.0f, -1.0f, 0.0f }) }));
+        auto ribbon = scene.createEntity ("ribbon");
+        ribbon.attach<MeshNode> (mesh);
+        ribbon.attach<DeformNode> (mesh, skin, std::vector<Entity> { foot, bend });
+
+        AnimationClip::Track track;
+        track.path = AnimationClip::Path::rotation;
+        track.times = { 0.0f, 1.0f, 2.0f };
+        track.values = { 0.0f, 0.0f, 0.0f, 1.0f, 0.70710678f, 0.0f, 0.0f, 0.70710678f, 0.0f, 0.0f, 0.0f, 1.0f };
+
+        auto clip = AnimationClip::Ptr (new AnimationClip ("bend"));
+        EXPECT_TRUE (clip->addTrack (std::move (track)).wasOk());
+
+        auto& player = scene.createEntity ("player").attach<AnimationNode> (std::vector<AnimationClip::Ptr> { clip }, std::vector<Entity> { bend });
+        player.setLooping (true);
+        player.setPlaying (true);
+
+        addCamera (scene, { 0.5f, 1.0f, 4.0f }, { 0.5f, 1.0f, 0.0f });
+        scene.createEntity ("sun").attach<LightNode>();
+
+        show.renderSettings.tier = RenderSettings::TierPreference::full;
+        show.updatesScene = true;
+    }
+
+    /** A grid of @p side by @p side boxes 0.4 wide and 1 apart, each a mesh of its own, facing a
+        camera 3 units away under a sun, on @p tier: at the demo size the camera sees the 16 boxes
+        around the center, and the others are outside of its view. */
+    static void buildScatteredScene (LightShow& show, int side, RenderSettings::TierPreference tier)
+    {
+        auto& scene = show.scene;
+        const auto material = makeWallMaterial();
+        const auto offset = 0.5f * static_cast<float> (side - 1);
+
+        for (int i = 0; i < side * side; ++i)
+        {
+            auto box = scene.createEntity ("box");
+            box.attach<MeshNode> (makeBox (0.2f, material));
+            box.getOrAttach<TransformNode>().setPosition ({ static_cast<float> (i % side) - offset, static_cast<float> (i / side) - offset, 0.0f });
+        }
+
+        addCamera (scene, { 0.0f, 0.0f, 3.0f }, {});
+        scene.createEntity ("sun").attach<LightNode>();
+
+        show.renderSettings.tier = tier;
+    }
+
+    static inline bool outputStarted = false; // a test of this process wrote its rows to YUP_PERF_OUTPUT
 };
 
 TEST_F (SceneRendererBenchmarkTests, CompareWithBaselinePassesEqualSmallAndFasterChanges)
@@ -1897,14 +2277,11 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_FeatureCostFrameTimes)
     from the top as the demo's free movement starts. Two sizes: the demo's 3D view in its default
     1024 x 768 point window at 2x, 1578 x 1404 pixels, and native Retina, 3456 x 2234 pixels. The
     full tier rows are the gate, the raster ones context, and the full tier also runs upscaled from
-    0.75 and 0.5 of each size (RenderSettings::upscaling). Each row runs twice, interleaved (A/A), with
-    the frame stats on, waiting for each frame: with more in flight, a frame's command buffer time
-    also spans the frames it waited behind.
+    0.75 and 0.5 of each size (RenderSettings::upscaling). Each row runs twice, interleaved (A/A), as
+    timeRound() times it.
 
-    Prints a table per row, writes the same as JSON to the absolute path in the environment variable
-    YUP_PERF_OUTPUT when set, and compares the rows with the JSON of an earlier run named by
-    YUP_PERF_BASELINE when set: it reports, it never fails on a regression. Run it with "just perf",
-    see tests/data/yup_3d/perf/README.md.
+    Prints, writes and compares its rows as reportTargetRows() does. Run it with "just perf_3d", which
+    runs every DISABLED_*TargetFrameTimes into one file, see tests/data/yup_3d/perf/README.md.
 */
 TEST_F (SceneRendererBenchmarkTests, DISABLED_DemoTargetFrameTimes)
 {
@@ -1930,18 +2307,9 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_DemoTargetFrameTimes)
         { "full retina 3456x2234 px scale 0.5", RenderSettings::TierPreference::full, 64, 3456, 2234, 0.5f },
     };
 
-    struct Round
-    {
-        FrameSamples samples;
-        double wallMilliseconds = 0.0;
-        int shadowRedraws = 0;
-        int casterDraws = 0;
-        double shadowsMean = 0.0; // the shadows scope over every sampled frame, those that kept the maps reading 0
-        double load = 0.0;
-    };
-
-    const auto tierName = [] (RenderCapabilities::Tier tier) { return tier == RenderCapabilities::Tier::full ? "full" : "raster"; };
-    std::vector<std::vector<Round>> results (std::size (rows));
+    std::vector<TargetRow> results;
+    for (const auto& row : rows)
+        results.push_back ({ row.name, row.tier == RenderSettings::TierPreference::full });
 
     double load[3] = {};
     getloadavg (load, 3);
@@ -1967,194 +2335,137 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_DemoTargetFrameTimes)
                 show.renderSettings = settings;
             }
 
-            Round result;
-            double roundLoad[3] = {};
-            getloadavg (roundLoad, 3);
-            result.load = roundLoad[0];
-            result.wallMilliseconds = timeFrames (show, row.width, row.height, result.shadowRedraws, &result.casterDraws, false, 1, &result.samples);
-            ASSERT_GT (result.wallMilliseconds, 0.0) << row.name;
-            ASSERT_FALSE (result.samples.gpu.empty()) << row.name;
-
-            // A full row timed on the raster tier would gate the wrong renderer under the full label
-            if (row.tier == RenderSettings::TierPreference::full && result.samples.tier != RenderCapabilities::Tier::full)
-                GTEST_SKIP() << row.name << " rendered on the " << tierName (result.samples.tier) << " tier: this device has no full tier, so the gate rows cannot run";
-
-            if (const auto shadowTimes = result.samples.scopes.find ("shadows"); shadowTimes != result.samples.scopes.end())
-                result.shadowsMean = std::accumulate (shadowTimes->second.begin(), shadowTimes->second.end(), 0.0) / static_cast<double> (shadowTimes->second.size());
-
-            results[i].push_back (std::move (result));
+            ASSERT_NO_FATAL_FAILURE (timeRound (show, row.width, row.height, results[i]));
+            if (IsSkipped())
+                return;
         }
     }
 
-    const auto gpuName = SystemStats::getEnvironmentVariable ("YUP_PERF_GPU", "unknown");
-#if YUP_DEBUG
-    const String config ("Debug");
-#else
-    const String config ("Release");
-#endif
+    reportTargetRows (results, load);
+}
 
-    var json (new DynamicObject());
-    json.getDynamicObject()->setProperty ("gpu", gpuName);
-    json.getDynamicObject()->setProperty ("config", config);
-    json.getDynamicObject()->setProperty ("date", Time::getCurrentTime().toISO8601 (true));
-    json.getDynamicObject()->setProperty ("load", Array<var> { load[0], load[1], load[2] });
+/** The demo's scene on the full tier at the demo size with nothing moving: its show lights stand
+    where their first frame put them and the camera stays at the top. The rounds are timed once the
+    image converged, so every timed frame renders an image that is already final. Printed, written
+    and compared as DISABLED_DemoTargetFrameTimes, which "just perf_3d" runs it with.
+*/
+TEST_F (SceneRendererBenchmarkTests, DISABLED_StillSceneTargetFrameTimes)
+{
+    if (! device->isFrameTimingAvailable())
+        GTEST_SKIP() << "Frame timing is unavailable on this device";
 
-    Array<var> rowsJson;
-    std::vector<double> gpuMedians, spreads;
+    std::vector<TargetRow> rows { { "full demo 1578x1404 px still", true } };
 
-    for (size_t i = 0; i < std::size (rows); ++i)
+    double load[3] = {};
+    getloadavg (load, 3);
+
+    for (int round = 0; round < 2; ++round)
     {
-        const auto& row = rows[i];
-        const auto& rounds = results[i];
-        const auto a = percentile (rounds[0].samples.gpu, 0.5);
-        const auto b = percentile (rounds[1].samples.gpu, 0.5);
-        gpuMedians.push_back ((a + b) * 0.5);
-        spreads.push_back (std::abs (a - b));
+        LightShow show;
+        if (! show.build (64, 0.5f, 0.08f, RenderSettings::TierPreference::full, static_cast<float> (demoWidth) / static_cast<float> (demoHeight)))
+            GTEST_SKIP() << "mpc.glb is missing";
 
-        std::cout << "\n"
-                  << String::formatted ("%s: GPU median %.3f ms (rounds %.3f and %.3f, A/A spread %.1f%%), internal %dx%d",
-                                        row.name, gpuMedians.back(), a, b, spreads.back() / gpuMedians.back() * 100.0,
-                                        rounds[0].samples.internalWidth, rounds[0].samples.internalHeight)
-                  << "\n"
-                  << String::formatted ("  %5s %8s %8s %8s %8s %8s %10s %13s %6s %6s", "round", "samples", "gpu med", "gpu p95", "wall", "cpu med", "draw items", "casters/frame", "load", "tier")
-                  << std::endl;
+        ASSERT_TRUE (show.matchDemo());
+        show.animate();
+        show.still = true;
 
-        Array<var> roundsJson;
-        std::map<String, double> scopeOrder; // the sum of the round medians of each scope
-        for (size_t r = 0; r < rounds.size(); ++r)
+        ASSERT_NO_FATAL_FAILURE (timeRound (show, demoWidth, demoHeight, rows[0]));
+        if (IsSkipped())
+            return;
+    }
+
+    reportTargetRows (rows, load);
+}
+
+/** A skinned mesh of 20301 vertices playing a clip on the full tier at the demo size
+    (buildSkinnedScene()): every frame updates the scene, which skins the mesh on the CPU, then
+    renders it. The CPU median of the row is the update and the render() of a frame. Printed, written
+    and compared as DISABLED_DemoTargetFrameTimes, which "just perf_3d" runs it with.
+*/
+TEST_F (SceneRendererBenchmarkTests, DISABLED_SkinnedModelTargetFrameTimes)
+{
+    if (! device->isFrameTimingAvailable())
+        GTEST_SKIP() << "Frame timing is unavailable on this device";
+
+    std::vector<TargetRow> rows { { "full skinned ribbon 20301 vertices 1578x1404 px", true } };
+
+    double load[3] = {};
+    getloadavg (load, 3);
+
+    for (int round = 0; round < 2; ++round)
+    {
+        LightShow show;
+        buildSkinnedScene (show, 100, 200);
+
+        ASSERT_NO_FATAL_FAILURE (timeRound (show, demoWidth, demoHeight, rows[0]));
+        if (IsSkipped())
+            return;
+    }
+
+    reportTargetRows (rows, load);
+}
+
+/** The demo target on the full tier at the demo size, every mesh of the model colored by the stock
+    MaterialShader instead of its material. Printed, written and compared as
+    DISABLED_DemoTargetFrameTimes, which "just perf_3d" runs it with.
+*/
+TEST_F (SceneRendererBenchmarkTests, DISABLED_MaterialShaderTargetFrameTimes)
+{
+    if (! device->isFrameTimingAvailable())
+        GTEST_SKIP() << "Frame timing is unavailable on this device";
+
+    std::vector<TargetRow> rows { { "full demo 1578x1404 px material shader", true } };
+
+    double load[3] = {};
+    getloadavg (load, 3);
+
+    for (int round = 0; round < 2; ++round)
+    {
+        LightShow show;
+        if (! show.build (64, 0.5f, 0.08f, RenderSettings::TierPreference::full, static_cast<float> (demoWidth) / static_cast<float> (demoHeight)))
+            GTEST_SKIP() << "mpc.glb is missing";
+
+        ASSERT_TRUE (show.matchDemo());
+        show.orbitPitch = 1.56f;
+        show.modelRoot.attach<MaterialShaderNode> (MaterialShader::createDefault());
+
+        ASSERT_NO_FATAL_FAILURE (timeRound (show, demoWidth, demoHeight, rows[0]));
+        if (IsSkipped())
+            return;
+    }
+
+    reportTargetRows (rows, load);
+}
+
+/** 400 small meshes of which the camera sees 16 (buildScatteredScene()), on both tiers at the demo
+    size: what the meshes outside of the view cost a frame. Printed, written and compared as
+    DISABLED_DemoTargetFrameTimes, which "just perf_3d" runs it with.
+*/
+TEST_F (SceneRendererBenchmarkTests, DISABLED_ScatteredMeshesTargetFrameTimes)
+{
+    if (! device->isFrameTimingAvailable())
+        GTEST_SKIP() << "Frame timing is unavailable on this device";
+
+    std::vector<TargetRow> rows {
+        { "full 400 boxes 16 in view 1578x1404 px", true },
+        { "raster 400 boxes 16 in view 1578x1404 px", false },
+    };
+
+    double load[3] = {};
+    getloadavg (load, 3);
+
+    for (int round = 0; round < 2; ++round)
+    {
+        for (auto& row : rows)
         {
-            const auto& round = rounds[r];
-            const auto& samples = round.samples;
-            const auto gpuMedian = percentile (samples.gpu, 0.5);
-            const auto casterDraws = round.casterDraws / 120.0;
+            LightShow show;
+            buildScatteredScene (show, 20, row.gate ? RenderSettings::TierPreference::full : RenderSettings::TierPreference::raster);
 
-            std::cout << String::formatted ("  %5d %4d/120 %8.3f %8.3f %8.3f %8.3f %10d %13.1f %6.2f %6s",
-                                            static_cast<int> (r + 1), static_cast<int> (samples.gpu.size()), gpuMedian, percentile (samples.gpu, 0.95),
-                                            round.wallMilliseconds, percentile (samples.cpu, 0.5), samples.drawItems, casterDraws, round.load, tierName (samples.tier))
-                      << std::endl;
-
-            var scopesJson (new DynamicObject());
-            for (const auto& [name, values] : samples.scopes)
-            {
-                scopeOrder[name] += percentile (values, 0.5);
-                scopesJson.getDynamicObject()->setProperty (name, percentile (values, 0.5));
-            }
-
-            var roundJson (new DynamicObject());
-            auto& properties = *roundJson.getDynamicObject();
-            properties.setProperty ("gpuMedian", gpuMedian);
-            properties.setProperty ("gpuP95", percentile (samples.gpu, 0.95));
-            properties.setProperty ("samples", static_cast<int> (samples.gpu.size()));
-            properties.setProperty ("frames", 120);
-            properties.setProperty ("wallMilliseconds", round.wallMilliseconds);
-            properties.setProperty ("cpuMedian", percentile (samples.cpu, 0.5));
-            properties.setProperty ("shadowsMean", round.shadowsMean);
-            properties.setProperty ("shadowRedraws", round.shadowRedraws);
-            properties.setProperty ("casterDrawsPerFrame", casterDraws);
-            properties.setProperty ("drawItems", samples.drawItems);
-            properties.setProperty ("internalWidth", samples.internalWidth);
-            properties.setProperty ("internalHeight", samples.internalHeight);
-            properties.setProperty ("tier", String (tierName (samples.tier)));
-            properties.setProperty ("load", round.load);
-            properties.setProperty ("scopes", scopesJson);
-            roundsJson.add (roundJson);
+            ASSERT_NO_FATAL_FAILURE (timeRound (show, demoWidth, demoHeight, row));
+            if (IsSkipped())
+                return;
         }
-
-        std::vector<std::pair<double, String>> sortedScopes;
-        for (const auto& [name, sum] : scopeOrder)
-            sortedScopes.push_back ({ sum, name });
-
-        std::sort (sortedScopes.begin(), sortedScopes.end(), [] (const auto& x, const auto& y) { return x.first > y.first; });
-
-        std::cout << String::formatted ("  %-24s %8s %6s %8s %6s", "scope", "r1 med", "share", "r2 med", "share") << std::endl;
-        for (const auto& [sum, name] : sortedScopes)
-        {
-            String line = String::formatted ("  %-24s", name.toRawUTF8());
-            for (const auto& round : rounds)
-            {
-                const auto& values = round.samples.scopes.count (name) != 0 ? round.samples.scopes.at (name) : std::vector<double>();
-                const auto value = percentile (values, 0.5);
-                line << String::formatted (" %8.3f %5.1f%%", value, value / percentile (round.samples.gpu, 0.5) * 100.0);
-            }
-
-            // Frames that keep the shadow maps read 0, so the median alone hides the cost of a redraw
-            if (name == "shadows")
-                line << String::formatted ("  mean %.3f and %.3f ms, redrawn in %d and %d of 120 frames",
-                                           rounds[0].shadowsMean, rounds[1].shadowsMean,
-                                           rounds[0].shadowRedraws, rounds[1].shadowRedraws);
-
-            std::cout << line << std::endl;
-        }
-
-        if (row.tier == RenderSettings::TierPreference::full && spreads.back() > gpuMedians.back() * 0.03)
-            std::cout << String::formatted ("  Warning: the A/A spread of this gate row is %.1f%%, above 3%%: the machine was not idle enough to trust it", spreads.back() / gpuMedians.back() * 100.0) << std::endl;
-
-        var rowJson (new DynamicObject());
-        rowJson.getDynamicObject()->setProperty ("name", String (row.name));
-        rowJson.getDynamicObject()->setProperty ("gpuMedian", gpuMedians.back());
-        rowJson.getDynamicObject()->setProperty ("spread", spreads.back() / gpuMedians.back());
-        rowJson.getDynamicObject()->setProperty ("spreadMilliseconds", spreads.back());
-        rowJson.getDynamicObject()->setProperty ("rounds", roundsJson);
-        rowsJson.add (rowJson);
     }
 
-    json.getDynamicObject()->setProperty ("rows", rowsJson);
-
-    if (const auto outputPath = SystemStats::getEnvironmentVariable ("YUP_PERF_OUTPUT", {}); outputPath.isNotEmpty())
-    {
-        if (! File::isAbsolutePath (outputPath))
-            ADD_FAILURE() << "YUP_PERF_OUTPUT is not an absolute path, nothing written: " << outputPath;
-        else if (File (outputPath).getParentDirectory().createDirectory().wasOk() && File (outputPath).replaceWithText (JSON::toString (json)))
-            std::cout << "\nWrote " << outputPath << std::endl;
-        else
-            ADD_FAILURE() << "Could not write " << outputPath;
-    }
-
-    const auto baselinePath = SystemStats::getEnvironmentVariable ("YUP_PERF_BASELINE", {});
-    if (baselinePath.isEmpty())
-        return;
-
-    if (! File::isAbsolutePath (baselinePath) || ! File (baselinePath).existsAsFile())
-    {
-        std::cout << "\nNo baseline to compare with at " << baselinePath << std::endl;
-        return;
-    }
-
-    const auto baseline = JSON::parse (File (baselinePath));
-    if (! baseline.isObject())
-    {
-        std::cout << "\nThe baseline is not a JSON object, not compared: " << baselinePath << std::endl;
-        return;
-    }
-
-    if (baseline["gpu"].toString() != gpuName || baseline["config"].toString() != config)
-    {
-        std::cout << "\nWarning: the baseline was recorded on " << baseline["gpu"].toString() << " in " << baseline["config"].toString()
-                  << ", this run is on " << gpuName << " in " << config << ": not compared" << std::endl;
-        return;
-    }
-
-    std::cout << "\nCompared with " << baselinePath << " (" << baseline["date"].toString() << "):" << std::endl;
-    for (size_t i = 0; i < std::size (rows); ++i)
-    {
-        std::optional<double> baselineMedian;
-        if (const auto* baselineRows = baseline["rows"].getArray(); baselineRows != nullptr)
-            for (const auto& baselineRow : *baselineRows)
-                if (baselineRow["name"].toString() == rows[i].name)
-                    baselineMedian = static_cast<double> (baselineRow["gpuMedian"]);
-
-        const auto current = gpuMedians[i];
-        const auto verdict = compareWithBaseline (baselineMedian, current, spreads[i]);
-        if (verdict == Verdict::newRow)
-        {
-            std::cout << String::formatted ("  new        %s: %.3f ms, not in the baseline", rows[i].name, current) << std::endl;
-            continue;
-        }
-
-        const auto before = baselineMedian.value_or (0.0);
-        std::cout << String::formatted ("  %-10s %s: %.3f ms, baseline %.3f ms, %+.3f ms (%+.1f%%), A/A spread %.3f ms",
-                                        verdict == Verdict::pass ? "PASS" : (verdict == Verdict::regressed ? "REGRESSED" : "INVALID"),
-                                        rows[i].name, current, before, current - before, before > 0.0 ? (current / before - 1.0) * 100.0 : 0.0, spreads[i])
-                  << std::endl;
-    }
+    reportTargetRows (rows, load);
 }

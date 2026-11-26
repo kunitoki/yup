@@ -94,9 +94,10 @@ struct SceneMaterialComponent::ShaderProblem
 SceneMaterialComponent::SceneMaterialComponent (StringRef componentID)
     : Component (componentID)
 {
-    // It paints nothing and takes no room in a layout
+    // It paints nothing, takes no room in a layout and leaves the pointer to the nodes, whatever size it is given
     setOpaque (false);
     setExcludedFromParentLayout (true);
+    setWantsMouseEvents (false, false);
 }
 
 SceneMaterialComponent::~SceneMaterialComponent()
@@ -203,7 +204,7 @@ void SceneMaterialComponent::assetChanged (const String& path)
 void SceneMaterialComponent::repaintScene()
 {
     if (auto* view = SceneComponent::findFor (*this))
-        view->repaint();
+        view->repaintScene();
 }
 
 //==============================================================================
@@ -231,7 +232,7 @@ void SceneMaterialComponent::updateHost (Component& hostToUpdate)
         view = SceneComponent::findFor (hostToUpdate);
 
     if (view != nullptr)
-        view->repaint();
+        view->repaintScene();
 }
 
 void SceneMaterialComponent::attachTo (Entity newTarget, bool isUsed)
@@ -381,8 +382,24 @@ bool SceneMaterialComponent::updateShaders (Scene& shownScene, double elapsedSec
     return changed;
 }
 
+bool SceneMaterialComponent::hasShadersIn (Scene& shownScene)
+{
+    return ! shownScene.view<ShaderLink>().isEmpty();
+}
+
 bool SceneMaterialComponent::refreshShader (double elapsedSeconds, std::vector<ShaderProblem>& problems)
 {
+    // Out of the tree of its scene with a node that may only be on its way to another parent, the material is styled
+    // by nothing: its shader is left as it is, and looked at again once the node is back
+    if (! target.isActive())
+    {
+        for (const auto* parent = getParentComponent(); parent != nullptr; parent = parent->getParentComponent())
+        {
+            if (const auto* node = dynamic_cast<const SceneNodeComponent*> (parent); node != nullptr && node->getLeftScene() != nullptr)
+                return false;
+        }
+    }
+
     const auto* context = findStyleContext();
     const auto* document = ComponentDocument::findFor (this);
 
@@ -395,12 +412,46 @@ bool SceneMaterialComponent::refreshShader (double elapsedSeconds, std::vector<S
     if (sheet != shaderSheet || load != shaderLoad.lock())
     {
         shaderLoad = load;
+        rendererProblem.clear();
         updateShader (std::move (sheet), problems);
     }
 
-    // Hidden, the meshes are not drawn: the values are read again once they show
     auto* node = target.get<MaterialShaderNode>();
-    return node != nullptr && target.isActive() && updateUniforms (*node, elapsedSeconds);
+    if (node == nullptr)
+        return false;
+
+    // What the renderer found of the shader when the scene was last painted: known a frame after it was first drawn with
+    updateRendererProblem (*node, problems);
+
+    // Hidden, the meshes are not drawn: the values are read again once they show
+    return target.isActive() && updateUniforms (*node, elapsedSeconds);
+}
+
+void SceneMaterialComponent::updateRendererProblem (const MaterialShaderNode& node, std::vector<ShaderProblem>& problems)
+{
+    auto* view = SceneComponent::findFor (*this);
+
+    if (view == nullptr || node.getShader() == nullptr)
+        return;
+
+    // Told once for as long as it stands, and again after each load: the renderer finds it at every frame it paints
+    auto cause = view->getRenderer().getMaterialShaderError (*node.getShader());
+
+    if (cause == rendererProblem)
+        return;
+
+    rendererProblem = std::move (cause);
+
+    if (rendererProblem.isEmpty())
+        return;
+
+    // A problem of the block, as what prevents its material from loading is: once, whatever the number of materials naming it
+    const auto block = shaderSheet != nullptr ? shaderSheet->findShader (shaderName) : DataTree();
+
+    addShaderProblem (problems,
+                      block,
+                      block.isValid() ? Identifier ("material") : sceneMaterialShaderId,
+                      "shader " + shaderName + ": the renderer can't draw with it, which leaves the meshes to their material: " + rendererProblem);
 }
 
 void SceneMaterialComponent::addShaderProblem (std::vector<ShaderProblem>& problems, const DataTree& element, const Identifier& property, const String& message)

@@ -68,7 +68,7 @@ public:
     {
         step,       ///< The value of a key holds until the next key.
         linear,     ///< Values blend linearly, rotations at a constant speed the shorter way round.
-        cubicSpline ///< Values follow a cubic Hermite spline through the tangents of the keys.
+        cubicSpline ///< Values follow a cubic Hermite spline through the tangents of the keys, rotations the shorter way round.
     };
 
     /** The keys animating one path of one target. */
@@ -123,7 +123,7 @@ public:
     /** Adds a track, if it can be played.
 
         A track needs a target that is not negative, at least one key, times that are finite,
-        not negative and never decreasing, and as many values as its keys take.
+        not negative and never decreasing, and as many values as its keys take, all finite.
 
         @param track The track to add.
 

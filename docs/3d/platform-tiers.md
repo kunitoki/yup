@@ -59,7 +59,9 @@ shadows, at the cost of more frames before the image is final.
   trace of the image before the change. After a large change, such as a cut to another
   shot, call `restartAccumulation()`.
 - Changing the size of the view, the tier, `taaSamples`, `upscaling` or
-  `renderScale` discards the history, and the image starts over.
+  `renderScale` discards the history, and the image starts over. So does
+  hiding the `SceneComponent`, which lets go of what the renderer drew into
+  (`SceneRenderer::releaseTargets()`): the image is refined again once it shows.
 - Tone mapping, the bloom, depth of field and motion blur settings, the depth
   of field fields of the camera and the debug view are applied after the
   accumulation, so changing them neither restarts nor discards it. Repaint

@@ -255,6 +255,9 @@ struct StyleContext::ShaderEntry
     std::vector<StyleSheet::Declaration> defaults;
     std::vector<DataTreeDiagnostic> problems;
 
+    // What a device refused of the shader loaded, found by the paints of the components drawn with it: each is told once
+    std::vector<DataTreeDiagnostic> drawProblems;
+
     // Set when a file of the shader changed, for the next restyle to load it again
     bool isStale = false;
 
@@ -423,6 +426,9 @@ void StyleContext::resetCompiledValues()
 
 void StyleContext::markDirty (Component& component)
 {
+    // The frame that follows restyles the component before it is painted
+    frameAttachment.setActive (true);
+
     if (! dirtyComponents.isEmpty() && dirtyComponents.getLast().get() == &component)
         return;
 
@@ -471,6 +477,14 @@ void StyleContext::refresh (double elapsedSeconds)
             showAnimatedValue (component, storageId, value);
         });
     }
+
+    // With every style applied and nothing left running, the window is free to skip its frames
+    frameAttachment.setActive (! dirtyComponents.isEmpty() || animator.isAnimating());
+}
+
+void StyleContext::themeChanged()
+{
+    frameAttachment.setActive (true);
 }
 
 void StyleContext::restyleNow()
@@ -646,6 +660,9 @@ void StyleContext::collectDeclarations (Component& component, DeclarationMap& di
 
 void StyleContext::applyToComponent (Component& component, const DeclarationMap& inherited, DeclarationMap& inheritedForChildren)
 {
+    // What its last paint found of the shaders the component is drawn with, before any of them is replaced
+    reportShaderFailures (component);
+
     DeclarationMap direct, qualified;
     collectDeclarations (component, direct, qualified);
 
@@ -1548,8 +1565,19 @@ bool StyleContext::loadShader (const String& name, ShaderEntry& entry)
         return fail ({ .message = message, .element = block, .property = "fragment" });
     }
 
+    // A bundle built for other graphics APIs than the one of the window is told now when the window is known, and else
+    // by the first paint drawing the shader
+    if (const auto device = detail::findWindowDevice (&root);
+        device != nullptr && device->isGpuAvailable() && ! created.getReference()->canDrawWith (device->getPlatform()))
+    {
+        return fail ({ .message = "The shader '" + name + "' has no variant for the graphics API of its window: compile it for every language yup_shader_bundler targets",
+                       .element = block,
+                       .property = "fragment" });
+    }
+
     const auto uniforms = created.getReference()->createUniforms();
     std::vector<ShaderEffect::Property> properties;
+    StringArray declared;
 
     for (const auto& property : block)
     {
@@ -1557,6 +1585,8 @@ bool StyleContext::loadShader (const String& name, ShaderEntry& entry)
 
         if (property.getType().toString() != "property" || propertyName.isEmpty())
             continue;
+
+        declared.add (propertyName);
 
         const auto typeName = property.getProperty ("type").toString().trim();
         const auto type = ComponentProperty::getTypeFromName (typeName);
@@ -1587,11 +1617,25 @@ bool StyleContext::loadShader (const String& name, ShaderEntry& entry)
             fail ({ .message = problem, .element = property });
     }
 
+    // What a shader is given beside its properties fills the members of their names, whatever the shader means by them:
+    // one declared as something else is a value of its own, which a property has to set
+    for (const auto& given : detail::shaderStandardUniforms)
+    {
+        if (declared.contains (given.name) || ! detail::isShaderStandardUniformMismatched (uniforms, given))
+            continue;
+
+        fail ({ .message = String ("The member '") + given.name + "' of the uniform block of the shader '" + name + "' is not " + given.shape
+                               + ", which is what a shader is given there: declare a property '" + given.name + "' to set it",
+                .element = block,
+                .property = "fragment" });
+    }
+
     if (! entry.problems.empty())
         return false;
 
     entry.loaded.shader = created.getValue();
     entry.loaded.properties = std::move (properties);
+    entry.drawProblems.clear();
     return true;
 }
 
@@ -1604,6 +1648,9 @@ void StyleContext::refreshShaders()
             if (std::exchange (entry.reportsAgain, false))
             {
                 for (const auto& problem : entry.problems)
+                    report (problem);
+
+                for (const auto& problem : entry.drawProblems)
                     report (problem);
             }
 
@@ -1629,6 +1676,53 @@ void StyleContext::refreshShaders()
             else
                 cache.effectName = {};
         }
+    }
+}
+
+/* Tells what a device refused of the shaders of the sheet a component is drawn with. It was found while the component was
+   painted, where nothing is reported, and had the component restyled: it is told here, at the block declaring the shader,
+   once for as long as that shader is loaded and however many components it could not be drawn for. And again with the
+   problems of the sheet when they are told again, as what prevents a shader from loading is. */
+void StyleContext::reportShaderFailures (const Component& component)
+{
+    if (shaders->empty())
+        return;
+
+    const auto reportFailure = [this] (const GpuImageShader* shader, const String& error)
+    {
+        if (shader == nullptr || error.isEmpty())
+            return;
+
+        for (auto& [name, entry] : *shaders)
+        {
+            if (entry.loaded.shader.get() != shader)
+                continue;
+
+            const DataTreeDiagnostic problem { .message = "The shader '" + name + "' can't be drawn: " + error, .element = entry.loaded.block, .property = "fragment" };
+
+            const bool isKnown = std::any_of (entry.drawProblems.begin(), entry.drawProblems.end(), [&problem] (const DataTreeDiagnostic& known)
+            {
+                return known.message == problem.message;
+            });
+
+            // Kept before it is told: who hears about it may have the shaders loaded again
+            if (! isKnown)
+            {
+                entry.drawProblems.push_back (problem);
+                report (problem);
+            }
+
+            return;
+        }
+    };
+
+    if (const auto* effect = dynamic_cast<const ShaderEffect*> (component.getComponentEffect().get()))
+        reportFailure (effect->getShader().get(), effect->getDrawError());
+
+    if (const auto* drawing = dynamic_cast<const DrawingStyle*> (component.getStyle().get()))
+    {
+        for (const auto& failure : drawing->getShaderFailures())
+            reportFailure (failure.shader.shader.get(), failure.message);
     }
 }
 

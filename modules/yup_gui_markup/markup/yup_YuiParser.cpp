@@ -553,14 +553,16 @@ private:
         {
             const auto start = position;
             const auto label = parseRawUntil ('{');
+            const auto percentage = label.endsWithChar ('%') ? label.dropLastCharacters (1).trim() : String();
             double at = 0.0;
 
+            // A percentage is digits, around one point at most
             if (label == "from")
                 at = 0.0;
             else if (label == "to")
                 at = 1.0;
-            else if (label.endsWithChar ('%') && label.dropLastCharacters (1).trim().containsOnly ("0123456789."))
-                at = label.dropLastCharacters (1).getDoubleValue() / 100.0;
+            else if (percentage.containsAnyOf ("0123456789") && percentage.containsOnly ("0123456789.") && percentage.indexOfChar ('.') == percentage.lastIndexOfChar ('.'))
+                at = percentage.getDoubleValue() / 100.0;
             else
                 throw Error { start, "Expected 'from', 'to' or a percentage" };
 
@@ -702,8 +704,8 @@ private:
     {
         const ScopedValueSetter<int> nesting (nestingDepth, nestingDepth + 1);
 
-        if (nestingDepth > maxNestingDepth)
-            throw Error { position, "Elements are nested more than " + String (maxNestingDepth) + " deep" };
+        if (nestingDepth > detail::maxYuiNestingDepth)
+            throw Error { position, "Elements are nested more than " + String (detail::maxYuiNestingDepth) + " deep" };
 
         expect ("{");
 
@@ -1013,9 +1015,6 @@ private:
     int position = 0;
     int nestingDepth = 0;
     bool insideDrawing = false;
-
-    // Each body is a call inside the one around it: this keeps the stack of any platform
-    static constexpr int maxNestingDepth = 128;
 };
 
 //==============================================================================
@@ -1054,6 +1053,20 @@ DataTreeSourceMap makeSourceMap (const std::vector<DataTreeDiagnostic>& position
     return sourceMap;
 }
 
+// Where an element was written, as a diagnostic without a message, which has no position for an element that was not marked
+DataTreeDiagnostic findPosition (const std::vector<DataTreeDiagnostic>& positions, const DataTree& element)
+{
+    const auto found = std::find_if (positions.begin(), positions.end(), [&element] (const DataTreeDiagnostic& position)
+    {
+        return position.element == element && ! position.property.isValid();
+    });
+
+    if (found == positions.end())
+        return {};
+
+    return { .source = found->source, .line = found->line, .column = found->column };
+}
+
 } // namespace
 
 //==============================================================================
@@ -1066,6 +1079,11 @@ YuiParser::ParseResult YuiParser::parse (const String& text)
 
 YuiParser::ParseResult YuiParser::parse (const String& text, const ImportResolver& resolveImport)
 {
+    return parse (text, resolveImport, {});
+}
+
+YuiParser::ParseResult YuiParser::parse (const String& text, const ImportResolver& resolveImport, const String& mainPath)
+{
     auto parsed = parseText (text, {});
 
     if (! parsed.result.wasOk())
@@ -1074,6 +1092,10 @@ YuiParser::ParseResult YuiParser::parse (const String& text, const ImportResolve
     StringArray imported;
     std::vector<DataTree> elements;
     auto positions = std::move (parsed.positions);
+
+    // The text itself is a file imported already, for the ones importing it back
+    if (const auto ownPath = detail::normalizeYuiPath (mainPath); ownPath.isNotEmpty())
+        imported.add (ownPath);
 
     std::function<std::optional<DataTreeDiagnostic> (const DataTree&, const String&)> collect = [&] (const DataTree& document, const String& currentSource) -> std::optional<DataTreeDiagnostic>
     {
@@ -1099,13 +1121,11 @@ YuiParser::ParseResult YuiParser::parse (const String& text, const ImportResolve
             if (! importedText.has_value())
             {
                 // Every block is marked, so the import has a position
-                const auto importPosition = std::find_if (positions.begin(), positions.end(), [&] (const auto& position)
-                {
-                    return position.element == element;
-                });
+                auto diagnostic = findPosition (positions, element);
+                jassert (diagnostic.line > 0);
 
-                jassert (importPosition != positions.end());
-                return DataTreeDiagnostic { .message = "Can't import '" + path + "'", .source = importPosition->source, .line = importPosition->line, .column = importPosition->column };
+                diagnostic.message = "Can't import '" + path + "'";
+                return diagnostic;
             }
 
             auto importedResult = parseText (*importedText, path);
@@ -1124,6 +1144,27 @@ YuiParser::ParseResult YuiParser::parse (const String& text, const ImportResolve
 
     if (auto diagnostic = collect (parsed.result.document, {}))
         return { .diagnostics = { *diagnostic } };
+
+    // Each text was checked to have one root as it was parsed, which leaves the roots of different texts
+    const auto isRoot = [] (const DataTree& element)
+    {
+        return detail::isYuiComponentElement (element);
+    };
+
+    const auto firstRoot = std::find_if (elements.begin(), elements.end(), isRoot);
+    const auto secondRoot = firstRoot != elements.end() ? std::find_if (firstRoot + 1, elements.end(), isRoot) : elements.end();
+
+    if (secondRoot != elements.end())
+    {
+        const auto firstSource = findPosition (positions, *firstRoot).source;
+
+        auto diagnostic = findPosition (positions, *secondRoot);
+        diagnostic.message = "A document can only have one root component: "
+                           + (firstSource.isNotEmpty() ? "'" + firstSource + "'" : String ("the main text"))
+                           + " has one already";
+
+        return { .diagnostics = { diagnostic } };
+    }
 
     // The elements move to the merged document, keeping the identities their positions refer to
     DataTree merged ("yui");

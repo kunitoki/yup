@@ -347,6 +347,16 @@ struct PyComponentEffect : Base
         PYBIND11_OVERRIDE_PURE (void, Base, apply, g, inputTexture, bounds);
     }
 
+    bool isActive() const override
+    {
+        PYBIND11_OVERRIDE (bool, Base, isActive);
+    }
+
+    void releaseResources() override
+    {
+        PYBIND11_OVERRIDE (void, Base, releaseResources);
+    }
+
     std::optional<yup::Point<float>> displayToContent (yup::Point<float> displayPoint, yup::Rectangle<float> bounds) const override
     {
         PYBIND11_OVERRIDE (std::optional<yup::Point<float>>, Base, displayToContent, displayPoint, bounds);

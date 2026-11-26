@@ -30,21 +30,12 @@ using namespace yup;
 namespace
 {
 
+// The file is replaced once the image is whole, so one that can't be written leaves what was there
 bool writePng (const Image& image, const File& file)
 {
-    file.deleteFile();
+    MemoryBlock data;
 
-    auto stream = std::make_unique<FileOutputStream> (file);
-    if (stream->failedToOpen())
-        return false;
-
-    PngImageFormatWriter writer (stream.release(), image.getPixelFormat());
-    return writer.writeImage (image);
-}
-
-bool isNumber (const String& text)
-{
-    return text.isNotEmpty() && text.containsOnly ("0123456789.") && text.indexOfChar ('.') == text.lastIndexOfChar ('.');
+    return encodeYuiToolPng (image, data) && file.replaceWithData (data.getData(), data.getSize());
 }
 
 // Reads a part of an interface written as `<x>,<y>,<width>,<height>`
@@ -56,7 +47,7 @@ std::optional<Rectangle<float>> parseRegion (const String& text)
         return std::nullopt;
 
     for (const auto& number : numbers)
-        if (! isNumber (number.trim()))
+        if (! isYuiToolNumber (number.trim()))
             return std::nullopt;
 
     return Rectangle<float> (numbers[0].getFloatValue(), numbers[1].getFloatValue(), numbers[2].getFloatValue(), numbers[3].getFloatValue());
@@ -99,7 +90,7 @@ int runYuiRenderCommand (int argc, char** argv)
         {
             const String value (argv[++i]);
 
-            if (! isNumber (value))
+            if (! isYuiToolNumber (value))
             {
                 std::cerr << "invalid margin, expected logical pixels around the element: " << value << "\n";
                 return 2;
@@ -170,15 +161,18 @@ int runYuiRenderCommand (int argc, char** argv)
 
     const auto problems = view.findProblems();
 
+    // What is wrong with the document is told whether loading it or drawing it found it, its warnings included
     for (const auto& problem : problems)
-        if (problem.isError)
-            problem.print();
+        problem.print();
 
     if (shown.needsHost)
         std::cerr << "hint: a drawing reading the properties of a widget needs it as its host, for example --as Slider\n";
 
     if (! view.hasInterface())
         return 1;
+
+    // The interface was styled before it had its size
+    view.settle();
 
     // All of the interface, or the part asked for, or the one a drawing or a type shown in context is framed on
     const auto whole = view.getComponent()->getLocalBounds();

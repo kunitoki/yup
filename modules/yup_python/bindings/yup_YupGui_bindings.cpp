@@ -675,6 +675,15 @@ void registerYupGuiBindings (py::module_& m)
         .def ("apply", &ComponentEffect::apply, "g"_a, "inputTexture"_a, "bounds"_a,
               "Composites the effect. The component subtree has already been rendered into\n"
               "inputTexture, and the result must be drawn into g at bounds.")
+        .def ("isActive", &ComponentEffect::isActive,
+              "Whether the component has to be drawn through apply(). An effect that is not active\n"
+              "costs nothing: the component is painted as one that has no effect.")
+        .def ("releaseResources", &ComponentEffect::releaseResources,
+              "Releases the GPU objects the effect keeps of the window it was last applied in.\n"
+              "Called for the effect of a component that leaves its window.")
+        .def ("invalidate", &ComponentEffect::invalidate,
+              "Tells the components the effect is set on that what it draws changed: each is drawn through\n"
+              "apply() again without being painted again. The setters of an effect call it.")
         .def ("displayToContent", &ComponentEffect::displayToContent, "displayPoint"_a, "bounds"_a,
               "Maps a displayed point to the content point the effect sampled it from, or None.\n"
               "Called on the message thread: read the parameters published by the last apply().")
@@ -924,7 +933,7 @@ void registerYupGuiBindings (py::module_& m)
     py::class_<FrameAttachment> classFrameAttachment (m, "FrameAttachment");
 
     classFrameAttachment
-        .def (py::init ([] (Component& component, py::function callback)
+        .def (py::init ([] (Component& component, py::function callback, bool shouldBeActive)
         {
             // The attachment usually is an attribute of the object whose method it calls: holding that
             // method strongly would be a reference cycle the garbage collector cannot see through
@@ -937,10 +946,14 @@ void registerYupGuiBindings (py::module_& m)
                 });
             }
 
-            return std::make_unique<FrameAttachment> (component, callback.cast<FrameAttachment::Callback>());
-        }), "component"_a, "callback"_a,
+            return std::make_unique<FrameAttachment> (component, callback.cast<FrameAttachment::Callback>(), shouldBeActive);
+        }), "component"_a, "callback"_a, "shouldBeActive"_a = true,
               "Calls callback (elapsedSeconds) once per frame of the window showing the component, before it is painted.\n"
               "A bound method is held weakly, so an object can keep the attachment calling one of its own methods.")
+        .def ("setActive", &FrameAttachment::setActive, "shouldBeActive"_a,
+              "Starts or stops calling the function. A window in which no attachment is active skips the frames\n"
+              "it has nothing to paint in.")
+        .def ("isActive", &FrameAttachment::isActive)
     ;
 
     // ============================================================================================ yup::DragAndDropTarget
@@ -1392,8 +1405,6 @@ void registerYupGuiBindings (py::module_& m)
         .value ("IncDecButtons", Slider::IncDecButtons)
         .value ("TwoValueHorizontal", Slider::TwoValueHorizontal)
         .value ("TwoValueVertical", Slider::TwoValueVertical)
-        .value ("ThreeValueHorizontal", Slider::ThreeValueHorizontal)
-        .value ("ThreeValueVertical", Slider::ThreeValueVertical)
         .export_values();
 
     // Make SliderType accessible as Slider.SliderType via the class
@@ -2855,6 +2866,8 @@ void registerYupGuiBindings (py::module_& m)
         .def ("setUndoManager", &YuiDocument::setUndoManager, "undoManagerToUse"_a, py::keep_alive<1, 2>(),
               "Records each successful load as a transaction of an undo manager, or stops when None.")
         .def ("getTree", &YuiDocument::getTree)
+        .def ("applyPendingChanges", &YuiDocument::applyPendingChanges,
+              "Applies the changes made to the tree of the document and to the ranges of its repeats now, rather than from the message loop.")
 
         // The document owns its components: Python borrows them, and keeps the document alive meanwhile
         .def ("getRoot", [toBorrowedComponent] (const YuiDocument& self)

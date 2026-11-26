@@ -106,10 +106,15 @@ bool isGrammarNodeType (const Identifier& type) noexcept
     return grammarTypes.contains (type.toString());
 }
 
-std::optional<DataTreeDiagnostic> validateGrammarNodes (const DataTreeSchema& schema, const DataTree& node, bool isAmongComponents = false)
+std::optional<DataTreeDiagnostic> validateGrammarNodes (const DataTreeSchema& schema, const DataTree& node, bool isAmongComponents = false, int depth = 0)
 {
     if (! node.isValid())
         return DataTreeDiagnostic { .message = "Invalid DataTree" };
+
+    // A tree built in code is held to the depth of a text, as what reads it goes down one call for each level too. A
+    // text nests its elements that deep inside a `component` block too, and they hold their bindings and handlers there
+    if (depth > detail::maxYuiNestingDepth + 2)
+        return DataTreeDiagnostic { .message = "Elements are nested more than " + String (detail::maxYuiNestingDepth) + " deep", .element = node };
 
     const auto nodeType = node.getType();
     static const Identifier repeatType ("repeat");
@@ -160,7 +165,7 @@ std::optional<DataTreeDiagnostic> validateGrammarNodes (const DataTreeSchema& sc
     const auto holdsComponents = repeatsComponents || detail::isYuiComponentElement (node);
 
     for (int i = 0; i < node.getNumChildren(); ++i)
-        if (auto problem = validateGrammarNodes (schema, node.getChild (i), holdsComponents))
+        if (auto problem = validateGrammarNodes (schema, node.getChild (i), holdsComponents, depth + 1))
             return problem;
 
     return std::nullopt;
@@ -405,7 +410,11 @@ DataTreeSchema::Ptr YuiDocument::createSchema()
 
 YuiDocument::YuiDocument()
 {
-    registerDocument();
+    // The root knows its document as soon as it is made, for the components made under it
+    builder.onRootCreated = [this] (Component&)
+    {
+        attachToRoot();
+    };
 
     builder.onDiagnostic = [this] (const DataTreeDiagnostic& diagnostic)
     {
@@ -415,21 +424,27 @@ YuiDocument::YuiDocument()
 
     builder.onTreeMutated = [this]
     {
-        if (! isLoading && lastLoadSucceeded && tree.isValid())
-            handleLiveTreeMutation();
+        if (isLoading || ! tree.isValid())
+            return;
+
+        // After a load that failed the interface kept does not follow its tree, only the ranges that changed with it
+        if (lastLoadSucceeded)
+            notifyLoaded (handleLiveTreeMutation());
+        else
+            builder.applyPendingChanges();
     };
 
     builder.onRangeChanged = [this]
     {
         if (! isLoading && tree.isValid())
-            handleRangeChange();
+            notifyLoaded (handleRangeChange());
     };
 }
 
 YuiDocument::~YuiDocument()
 {
     // First: the components destroyed below may look for their document
-    unregisterDocument();
+    detachFromRoot();
 
     resetState();
 }
@@ -437,19 +452,6 @@ YuiDocument::~YuiDocument()
 YuiDocument* YuiDocument::findDocumentFor (const Component* component)
 {
     return dynamic_cast<YuiDocument*> (findFor (component));
-}
-
-std::vector<YuiDocument*> YuiDocument::getAllDocuments()
-{
-    std::vector<YuiDocument*> documents;
-
-    for (auto* registered : getRegisteredDocuments())
-    {
-        if (auto* document = dynamic_cast<YuiDocument*> (registered))
-            documents.push_back (document);
-    }
-
-    return documents;
 }
 
 //==============================================================================
@@ -512,8 +514,11 @@ void YuiDocument::reportDiagnostic (DataTreeDiagnostic diagnostic, const Compone
 
 Result YuiDocument::loadFromString (const String& text, YuiParser::ImportResolver resolveImport)
 {
-    const auto parsed = YuiParser::parse (text, resolveImport);
+    return load (YuiParser::parse (text, resolveImport));
+}
 
+Result YuiDocument::load (const YuiParser::ParseResult& parsed)
+{
     if (! parsed.wasOk())
     {
         diagnostics = parsed.diagnostics;
@@ -611,6 +616,9 @@ Result YuiDocument::fail (const String& message)
 
 Result YuiDocument::notifyLoaded (Result result)
 {
+    // Whatever the load left as the root, or none, is the one the document is found from
+    attachToRoot();
+
     // A listener may destroy the document
     const WeakReference<YuiDocument> self (this);
 
@@ -755,13 +763,17 @@ void YuiDocument::attachStyleContext (Component& root)
     context.restyleNow();
 }
 
-void YuiDocument::handleLiveTreeMutation()
+Result YuiDocument::handleLiveTreeMutation()
 {
-    const WeakReference<Component> previousRoot (builder.getRoot());
     const ScopedValueSetter<bool> loading (isLoading, true);
     const auto previousIgnore = builder.isIgnoringTreeChanges();
     builder.setIgnoreTreeChanges (true);
     diagnostics.clear();
+
+    // The map places an element by its index among its siblings: with elements added, removed or moved it would tell the
+    // line of a neighbor, so the problems have no position until a text is loaded
+    if (builder.hasTreeStructureChanged())
+        sourceMap.reset();
 
     if (const auto schema = createSchema(); schema != nullptr)
     {
@@ -769,7 +781,7 @@ void YuiDocument::handleLiveTreeMutation()
         {
             report (sourceMap, *problem);
             builder.setIgnoreTreeChanges (previousIgnore);
-            return;
+            return Result::fail (diagnostics.back().toString());
         }
     }
 
@@ -779,7 +791,7 @@ void YuiDocument::handleLiveTreeMutation()
     {
         report (sourceMap, failure);
         builder.setIgnoreTreeChanges (previousIgnore);
-        return;
+        return Result::fail (diagnostics.back().toString());
     }
 
     if (builder.build (tree).failed())
@@ -788,7 +800,7 @@ void YuiDocument::handleLiveTreeMutation()
             report (sourceMap, diagnostic);
 
         builder.setIgnoreTreeChanges (previousIgnore);
-        return;
+        return Result::fail (diagnostics.back().toString());
     }
 
     builder.setIgnoreTreeChanges (previousIgnore);
@@ -801,15 +813,16 @@ void YuiDocument::handleLiveTreeMutation()
         report (sourceMap, diagnostic);
 
     attachStyleContext (root);
-
-    // Whoever shows the root has another one to show
-    if (previousRoot.get() != &root)
-        notifyLoaded (Result::ok());
+    return Result::ok();
 }
 
-void YuiDocument::handleRangeChange()
+Result YuiDocument::handleRangeChange()
 {
     const ScopedValueSetter<bool> loading (isLoading, true);
+
+    // The changes made to the tree after a load that failed are only built here, see handleLiveTreeMutation
+    if (builder.hasTreeStructureChanged())
+        sourceMap.reset();
 
     // After a load that failed the interface kept still follows its ranges, and the problems shown stay those of the load.
     // Else the builder tells its own again. What the others told since the load still holds, the document being as it
@@ -836,6 +849,12 @@ void YuiDocument::handleRangeChange()
 
     if (built.wasOk())
         attachStyleContext (*builder.getRoot());
+
+    // The problems shown after a load that failed stay those of the load, so its failure is the one told again
+    if (! lastLoadSucceeded && ! diagnostics.empty())
+        return Result::fail (diagnostics.back().toString());
+
+    return built;
 }
 
 void YuiDocument::resetState()

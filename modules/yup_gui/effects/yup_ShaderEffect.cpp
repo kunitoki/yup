@@ -74,6 +74,32 @@ inline void setShaderStandardUniforms (ShaderUniforms& uniforms,
         uniforms.set ("time", static_cast<float> (time));
 }
 
+/* A member a shader is given beside its properties, with what its uniform block has to declare it as. */
+struct ShaderStandardUniform
+{
+    const char* name;
+    bool isSize;
+    const char* shape;
+};
+
+inline constexpr ShaderStandardUniform shaderStandardUniforms[] = { { "resolution", true, "a vec2 or a vec4" },
+                                                                    { "scale", false, "a float" },
+                                                                    { "time", false, "a float" } };
+
+/* Returns whether a uniform block declares a member of the name of what a shader is given as something else: the size of
+   the picture fills a vec2, or a vec4 with the reciprocals of both, and the others a float. Such a member is a value of
+   the author, which what the shader is given would overwrite unless a property of its name fills it. */
+inline bool isShaderStandardUniformMismatched (const ShaderUniforms& uniforms, const ShaderStandardUniform& given)
+{
+    if (! uniforms.hasMember (given.name))
+        return false;
+
+    const auto numComponents = uniforms.getNumComponents (given.name);
+    const bool hasRoom = given.isSize ? (numComponents == 2 || numComponents == 4) : numComponents == 1;
+
+    return ! hasRoom || uniforms.getMemberType (given.name) != ShaderReflection::BaseType::float32;
+}
+
 /* Returns the property a texture of a shader is filled from: the array of numbers that has its name. Returns -1
    for a texture no property names, which is a picture the shader reads. */
 inline int findShaderSeriesProperty (const std::vector<ShaderEffect::Property>& properties, const String& textureName)
@@ -192,13 +218,41 @@ inline GpuTexture::Ptr updateShaderSeriesTexture (ShaderSeriesTexture& kept,
     return kept.texture;
 }
 
+/* Returns whether an effect has what a shader reads: at most one picture, which is its component. */
+inline bool isShaderDrawnByAnEffect (const GpuImageShader* shader, const std::vector<ShaderEffect::Property>& properties)
+{
+    return shader != nullptr && ShaderEffect::getNumPictures (*shader, properties) <= 1;
+}
+
+/* Returns the device of the window a component is in, or nullptr when it is in none. */
+inline GpuDevice::Ptr findWindowDevice (Component* component)
+{
+    auto* native = component != nullptr ? component->getNativeComponent() : nullptr;
+    auto* context = native != nullptr ? native->getGraphicsContext() : nullptr;
+
+    return context != nullptr ? context->getGpuDevice() : nullptr;
+}
+
+/* Has the stylesheet of a component tell what a device refused of a shader it was painted with. That is found while the
+   window is painted, where nothing is reported: the component is marked for the next restyle, which tells it. */
+inline void requestShaderFailureReport (Component* component)
+{
+    if (component == nullptr)
+        return;
+
+    if (auto* context = component->findStyleContext())
+        context->markDirty (*component);
+}
+
 /* Draws an image shader into a target kept at a size for a device, and returns its texture, or
-   nullptr when there is none. A shader that could not be drawn is not tried again with that device
-   until `failed` is cleared: it keeps no target, and no frame is begun for it. */
+   nullptr when there is none. A shader the device refuses is not tried again with it until `error`,
+   which keeps why, is cleared: it keeps no target, and no frame is begun for it. What else a draw
+   needs may be there at the next one, so its lack sets nothing: a GPU, a texture for each input, a
+   target and a frame. */
 inline GpuTexture::Ptr runImageShader (GraphicsContext& context,
                                        GpuDevice::Ptr& targetDevice,
                                        GpuTarget::Ptr& target,
-                                       bool& failed,
+                                       String& error,
                                        const GpuImageShader& shader,
                                        const ShaderUniforms& uniforms,
                                        int width,
@@ -212,11 +266,20 @@ inline GpuTexture::Ptr runImageShader (GraphicsContext& context,
     {
         targetDevice = device;
         target = nullptr;
-        failed = false;
+        error.clear();
     }
 
-    if (device == nullptr || failed)
+    if (device == nullptr || error.isNotEmpty() || ! device->isGpuAvailable() || device->isDeviceLost())
         return nullptr;
+
+    const auto numInputs = static_cast<size_t> (shader.getNumInputTextures());
+
+    if (inputs.size() < numInputs)
+        return nullptr;
+
+    for (size_t i = 0; i < numInputs; ++i)
+        if (inputs[i] == nullptr || ! inputs[i]->isValid())
+            return nullptr;
 
     if (! ensureComponentEffectTarget (device, target, width, height))
         return nullptr;
@@ -225,11 +288,17 @@ inline GpuTexture::Ptr runImageShader (GraphicsContext& context,
     if (! frame.isValid())
         return nullptr;
 
-    failed = shader.draw (device, frame, *target, uniforms, inputs).failed();
+    // With all it needs at hand, a draw only fails for what the device refuses of the shader: a pipeline it can't compile
+    const auto drawn = shader.draw (device, frame, *target, uniforms, inputs);
     frame.submit();
 
-    if (failed)
+    if (drawn.failed())
+    {
+        error = drawn.getErrorMessage();
         target = nullptr;
+
+        YUP_DBG ("An image shader can't be drawn by the device, what it is drawn for is left without it: " << error);
+    }
 
     return target != nullptr ? target->asTexture() : nullptr;
 }
@@ -238,7 +307,7 @@ inline GpuTexture::Ptr runImageShader (GraphicsContext& context,
 inline GpuTexture::Ptr runImageShader (GraphicsContext& context,
                                        GpuDevice::Ptr& targetDevice,
                                        GpuTarget::Ptr& target,
-                                       bool& failed,
+                                       String& error,
                                        const GpuImageShader& shader,
                                        const ShaderUniforms& uniforms,
                                        int width,
@@ -247,7 +316,7 @@ inline GpuTexture::Ptr runImageShader (GraphicsContext& context,
 {
     const GpuTexture::Ptr inputs[] = { input };
 
-    return runImageShader (context, targetDevice, target, failed, shader, uniforms, width, height, Span<const GpuTexture::Ptr> (inputs, 1));
+    return runImageShader (context, targetDevice, target, error, shader, uniforms, width, height, Span<const GpuTexture::Ptr> (inputs, 1));
 }
 
 } // namespace detail
@@ -269,8 +338,9 @@ ShaderEffect::ShaderEffect (Component& componentToUse, GpuImageShader::Ptr shade
     , shader (std::move (shaderToUse))
     , properties (std::move (propertiesToUse))
     , series (std::make_unique<SeriesTextures>())
+    , canDraw (detail::isShaderDrawnByAnEffect (shader.get(), properties))
+    , isGivenTime (canDraw && detail::isShaderGivenTime (*shader, properties))
 {
-    updateFrameAttachment();
 }
 
 ShaderEffect::~ShaderEffect() = default;
@@ -283,12 +353,30 @@ void ShaderEffect::setShader (GpuImageShader::Ptr newShader)
         return;
 
     shader = std::move (newShader);
-    drawFailed = false;
+    canDraw = detail::isShaderDrawnByAnEffect (shader.get(), properties);
+    isGivenTime = canDraw && detail::isShaderGivenTime (*shader, properties);
+    drawError.clear();
+    isStalled = false;
     series->textures.clear();
+    drawnInput = nullptr;
     updateFrameAttachment();
+    invalidate();
+}
 
-    if (auto* shown = component.get())
-        shown->repaint();
+bool ShaderEffect::isActive() const
+{
+    // What a device refused is asked again of another one: the component may be in another window by now
+    return canDraw && (drawError.isEmpty() || detail::findWindowDevice (component.get()) != targetDevice);
+}
+
+void ShaderEffect::releaseResources()
+{
+    // With the device goes what it refused: the shader is asked of the device of the next window
+    target = nullptr;
+    drawnInput = nullptr;
+    series->textures.clear();
+    targetDevice = nullptr;
+    drawError.clear();
 }
 
 //==============================================================================
@@ -365,16 +453,52 @@ bool ShaderEffect::setUniform (ShaderUniforms& uniforms, const Property& propert
     }
 }
 
+Result ShaderEffect::checkProperties (const GpuImageShader& shader, const std::vector<Property>& properties)
+{
+    const auto uniforms = shader.createUniforms();
+
+    for (const auto& property : properties)
+    {
+        const auto& name = property.name.toString();
+        const auto numComponents = getNumUniformComponents (property.type);
+
+        if (numComponents == 0)
+            return Result::fail ("The property '" + name + "' has a type a shader can't take: it takes a number, an integer, a boolean, a color, a point, a rectangle or an array of numbers");
+
+        // An array named as a texture of the shader fills that texture, not a member of the block
+        if (property.type == ComponentProperty::Type::array && shader.getInputTextureNames().contains (name))
+            continue;
+
+        if (! uniforms.hasMember (name))
+            return Result::fail ("The uniform block of the shader has no member '" + name + "'");
+
+        if (uniforms.getNumComponents (name) < numComponents)
+            return Result::fail ("The member '" + name + "' of the uniform block of the shader is too small for the property");
+    }
+
+    for (const auto& given : detail::shaderStandardUniforms)
+    {
+        if (! detail::hasShaderProperty (properties, given.name) && detail::isShaderStandardUniformMismatched (uniforms, given))
+            return Result::fail (String ("The member '") + given.name + "' of the uniform block of the shader is not " + given.shape
+                                 + ", which is what a shader is given there: a property of that name has to fill it");
+    }
+
+    return Result::ok();
+}
+
 //==============================================================================
 
 void ShaderEffect::updateFrameAttachment()
 {
     auto* shown = component.get();
 
-    // Only a shader that is given the time needs every frame of the window
-    const bool isAnimated = shown != nullptr
-                         && shader != nullptr
-                         && detail::isShaderGivenTime (*shader, properties);
+    // Only a shader that is given the time needs the frames of the window, and only while they show it: once it was
+    // drawn, in a component that is showing with this effect. Without them the window is left to idle
+    const bool isAnimated = isGivenTime
+                         && ! isStalled
+                         && shown != nullptr
+                         && shown->isShowing()
+                         && shown->getComponentEffect().get() == this;
 
     if (! isAnimated)
         frameAttachment.reset();
@@ -384,22 +508,28 @@ void ShaderEffect::updateFrameAttachment()
 
 void ShaderEffect::advance (double elapsedSeconds)
 {
-    auto* shown = component.get();
+    // The time stands still while the component is hidden, once it was given another effect, and while the shader
+    // is not drawn: the frame asked for last showed nothing of it. The paint that draws it starts the frames again
+    updateFrameAttachment();
 
-    // The time stands still while the component is hidden, once it was given another effect, and
-    // while the shader can't be drawn: repainting would show nothing new
-    if (shown == nullptr || ! shown->isShowing() || shown->getComponentEffect().get() != this || drawFailed)
+    if (! frameAttachment.has_value())
         return;
 
     time = detail::advanceShaderTime (time, elapsedSeconds);
-    shown->repaint();
+
+    // Another frame is asked for once the shader was drawn in this one, over what the component painted last
+    isStalled = true;
+    invalidate();
 }
 
 //==============================================================================
 
 GpuTexture::Ptr ShaderEffect::render (Graphics& g, const GpuTexture::Ptr& input)
 {
-    if (shader == nullptr)
+    const auto device = g.getGraphicsContext().getGpuDevice();
+
+    // What the device refused is not asked of it again, and nothing is read for it
+    if (! canDraw || (drawError.isNotEmpty() && device == targetDevice))
         return nullptr;
 
     auto uniforms = shader->createUniforms();
@@ -429,11 +559,9 @@ GpuTexture::Ptr ShaderEffect::render (Graphics& g, const GpuTexture::Ptr& input)
     }
 
     // The textures of the shader are filled in the order it declares them: a series for the ones an array property
-    // names, and what the component painted for the first of the others. A second picture is left without a
-    // texture, which the shader can't be drawn without
+    // names, and what the component painted for the other one, as a shader that is drawn reads one picture at most
     std::array<GpuTexture::Ptr, GpuImageShader::maxInputTextures> inputs;
-    const auto device = g.getGraphicsContext().getGpuDevice();
-    bool isPictureGiven = false;
+    bool isSameSeries = true;
 
     series->textures.resize (static_cast<size_t> (textureNames.size()));
 
@@ -443,9 +571,7 @@ GpuTexture::Ptr ShaderEffect::render (Graphics& g, const GpuTexture::Ptr& input)
 
         if (property < 0)
         {
-            if (! std::exchange (isPictureGiven, true))
-                inputs[static_cast<size_t> (i)] = input;
-
+            inputs[static_cast<size_t> (i)] = input;
             continue;
         }
 
@@ -453,17 +579,34 @@ GpuTexture::Ptr ShaderEffect::render (Graphics& g, const GpuTexture::Ptr& input)
         bool changed = false;
 
         inputs[static_cast<size_t> (i)] = detail::updateShaderSeriesTexture (series->textures[static_cast<size_t> (i)], device, numbers.first, numbers.second, changed);
+
+        // A series written again, or one with no texture to be in, leaves nothing of the picture drawn last
+        isSameSeries = isSameSeries && ! changed && inputs[static_cast<size_t> (i)] != nullptr;
     }
 
-    return detail::runImageShader (g.getGraphicsContext(),
-                                   targetDevice,
-                                   target,
-                                   drawFailed,
-                                   *shader,
-                                   uniforms,
-                                   input->getWidth(),
-                                   input->getHeight(),
-                                   Span<const GpuTexture::Ptr> (inputs.data(), static_cast<size_t> (textureNames.size())));
+    // The picture drawn last is the one to draw while nothing it was made of changed: the uniforms, the series and what
+    // the component painted, which is given as another texture each time it is painted again
+    if (target != nullptr && device == targetDevice && input == drawnInput && uniforms == drawnUniforms && isSameSeries)
+        return target->asTexture();
+
+    auto output = detail::runImageShader (g.getGraphicsContext(),
+                                          targetDevice,
+                                          target,
+                                          drawError,
+                                          *shader,
+                                          uniforms,
+                                          input->getWidth(),
+                                          input->getHeight(),
+                                          Span<const GpuTexture::Ptr> (inputs.data(), static_cast<size_t> (textureNames.size())));
+
+    // Only the draw above leaves an error: what the device refused is told where the shader is declared
+    if (drawError.isNotEmpty())
+        detail::requestShaderFailureReport (component.get());
+
+    drawnInput = output != nullptr ? input : GpuTexture::Ptr();
+    drawnUniforms = std::move (uniforms);
+
+    return output;
 }
 
 /* Returns the numbers of an array property of a component with their revision: where the component keeps them when
@@ -495,7 +638,13 @@ void ShaderEffect::apply (Graphics& g, GpuTexture::Ptr inputTexture, Rectangle<f
     if (inputTexture == nullptr || ! inputTexture->isValid() || bounds.isEmpty())
         return;
 
-    if (const auto output = render (g, inputTexture))
+    const auto output = render (g, inputTexture);
+
+    // A shader given the time takes the frames of its window once it is drawn, and none while it is not
+    isStalled = output == nullptr;
+    updateFrameAttachment();
+
+    if (output != nullptr)
         g.drawTexture (output, bounds);
     else
         g.drawTexture (inputTexture, bounds);

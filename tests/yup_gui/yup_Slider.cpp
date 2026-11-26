@@ -539,6 +539,28 @@ TEST_F (SliderTest, EdgeCasesStepSnapping)
     EXPECT_NEAR (0.56, slider->getValue(), tolerance);
 }
 
+TEST_F (SliderTest, AnEmptyOrReversedRangeIsRefused)
+{
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
+    GTEST_SKIP() << "A range that is empty or reversed triggers an assertion when assertions are enabled or logged";
+#endif
+
+    slider->setRange (0.0, 10.0);
+    slider->setValue (5.0);
+
+    // With no length the range would tell its values as NaN
+    slider->setRange (5.0, 5.0);
+    EXPECT_DOUBLE_EQ (0.0, slider->getRange().start);
+    EXPECT_DOUBLE_EQ (10.0, slider->getRange().end);
+
+    slider->setRange (10.0, 0.0);
+    EXPECT_DOUBLE_EQ (0.0, slider->getRange().start);
+    EXPECT_DOUBLE_EQ (10.0, slider->getRange().end);
+
+    EXPECT_DOUBLE_EQ (5.0, slider->getValue());
+    EXPECT_DOUBLE_EQ (0.5, slider->getValueNormalised());
+}
+
 //==============================================================================
 class SliderStepperTest : public ::testing::Test
 {
@@ -671,6 +693,40 @@ TEST_F (SliderTwoValueTest, EachThumbIsDraggedOnItsOwnAndStopsAtTheOther)
     EXPECT_NEAR (slider.getMaxValue(), 0.9, 1.0e-4);
 }
 
+TEST_F (SliderTwoValueTest, TellsTheThumbUnderThePointerAndTheOneDragged)
+{
+    const auto minThumb = slider.getMinThumbBounds();
+    const auto maxThumb = slider.getMaxThumbBounds();
+
+    // Each thumb is centered where its value is along the track, and the value itself has none
+    EXPECT_FLOAT_EQ (minThumb.getCenterX(), 60.0f);
+    EXPECT_FLOAT_EQ (maxThumb.getCenterX(), 160.0f);
+    EXPECT_FLOAT_EQ (minThumb.getWidth(), 16.0f);
+    EXPECT_TRUE (slider.getThumbBounds().isEmpty());
+    EXPECT_EQ (slider.getHoveredThumb(), Slider::Thumb::none);
+
+    pointer.moveTo (minThumb.getCenter());
+    EXPECT_EQ (slider.getHoveredThumb(), Slider::Thumb::minValue);
+
+    pointer.moveTo (maxThumb.getCenter());
+    EXPECT_EQ (slider.getHoveredThumb(), Slider::Thumb::maxValue);
+
+    pointer.moveTo ({ 110.0f, 15.0f });
+    EXPECT_EQ (slider.getHoveredThumb(), Slider::Thumb::none);
+
+    // A press between them drags the nearest one, which is the one told until the release
+    pointer.moveTo ({ 100.0f, 15.0f });
+    pointer.press();
+    EXPECT_EQ (slider.getHoveredThumb(), Slider::Thumb::minValue);
+
+    pointer.moveTo ({ 120.0f, 15.0f });
+    EXPECT_EQ (slider.getHoveredThumb(), Slider::Thumb::minValue);
+    pointer.release();
+
+    pointer.leave();
+    EXPECT_EQ (slider.getHoveredThumb(), Slider::Thumb::none);
+}
+
 TEST_F (SliderStepperTest, AButtonStepsByTheInterval)
 {
     const auto decrement = stepper.getDecrementButtonBounds().getCenter();
@@ -738,7 +794,43 @@ TEST_F (SliderStepperTest, AButtonHeldKeepsStepping)
     MessageManager::getInstance()->runDispatchLoopUntil (200);
     EXPECT_DOUBLE_EQ (stepper.getValue(), reached);
 }
+
+TEST_F (SliderStepperTest, AButtonHeldStopsSteppingWhenTheStepperIsDisabled)
+{
+    pointer.moveTo (stepper.getIncrementButtonBounds().getCenter());
+    pointer.press();
+    EXPECT_DOUBLE_EQ (stepper.getValue(), 6.0);
+
+    stepper.setEnabled (false);
+
+    MessageManager::getInstance()->runDispatchLoopUntil (700);
+    EXPECT_DOUBLE_EQ (stepper.getValue(), 6.0);
+
+    pointer.release();
+}
 #endif
+
+TEST_F (SliderStepperTest, AButtonHeldIsReleasedWhenTheStepperIsDisabledOrHidden)
+{
+    pointer.moveTo (stepper.getIncrementButtonBounds().getCenter());
+
+    pointer.press();
+    ASSERT_EQ (stepper.getPressedStep(), 1);
+
+    stepper.setEnabled (false);
+    EXPECT_EQ (stepper.getPressedStep(), 0);
+
+    pointer.release();
+    stepper.setEnabled (true);
+
+    pointer.press();
+    ASSERT_EQ (stepper.getPressedStep(), 1);
+
+    stepper.setVisible (false);
+    EXPECT_EQ (stepper.getPressedStep(), 0);
+
+    pointer.release();
+}
 
 TEST_F (SliderStepperTest, TheValueIsDraggedUpAndDownBetweenTheButtons)
 {
@@ -750,6 +842,165 @@ TEST_F (SliderStepperTest, TheValueIsDraggedUpAndDownBetweenTheButtons)
     const auto raised = stepper.getValue();
     pointer.drag (middle, middle.translated (0.0f, 24.0f));
     EXPECT_LT (stepper.getValue(), raised);
+}
+
+//==============================================================================
+/** A linear slider under a pointer: its thumb is where the value is along the track, and is what a press grabs. */
+class SliderLinearTest : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        panel.setVisible (true);
+        panel.setBounds (0.0f, 0.0f, 200.0f, 40.0f);
+
+        slider.setBounds (0.0f, 0.0f, 200.0f, 40.0f);
+        panel.addAndMakeVisible (slider);
+    }
+
+    Component panel;
+    Slider slider { Slider::LinearHorizontal };
+    PointerSimulator pointer { panel };
+};
+
+TEST_F (SliderLinearTest, TheThumbIsCenteredWhereTheValueIsAlongTheTrack)
+{
+    slider.setValue (0.25, dontSendNotification);
+
+    const auto track = slider.getSliderBounds();
+    const auto thumb = slider.getThumbBounds();
+
+    EXPECT_FLOAT_EQ (thumb.getCenterX(), track.getX() + 0.25f * track.getWidth());
+    EXPECT_FLOAT_EQ (thumb.getCenterY(), track.getCenterY());
+    EXPECT_FLOAT_EQ (thumb.getWidth(), 16.0f);
+    EXPECT_FLOAT_EQ (thumb.getHeight(), 16.0f);
+    EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (slider.getProperty (Identifier ("thumbBounds"))), thumb);
+
+    // It is as large as it is styled
+    slider.setProperty (Identifier ("thumbSize"), 24.0);
+    EXPECT_FLOAT_EQ (slider.getThumbBounds().getWidth(), 24.0f);
+    EXPECT_FLOAT_EQ (slider.getThumbBounds().getCenterX(), slider.getSliderBounds().getX() + 0.25f * slider.getSliderBounds().getWidth());
+
+    // On a vertical slider it rises with the value
+    Slider vertical (Slider::LinearVertical);
+    vertical.setBounds (0.0f, 0.0f, 40.0f, 200.0f);
+    vertical.setValue (0.25, dontSendNotification);
+    EXPECT_FLOAT_EQ (vertical.getThumbBounds().getCenterX(), vertical.getSliderBounds().getCenterX());
+    EXPECT_FLOAT_EQ (vertical.getThumbBounds().getCenterY(), vertical.getSliderBounds().getBottom() - 0.25f * vertical.getSliderBounds().getHeight());
+
+    // A slider that is not linear has no such thumb
+    Slider dial (Slider::Rotary);
+    dial.setBounds (0.0f, 0.0f, 40.0f, 40.0f);
+    EXPECT_TRUE (dial.getThumbBounds().isEmpty());
+}
+
+TEST_F (SliderLinearTest, APressOnTheTrackBringsTheThumbUnderThePointer)
+{
+    // The track goes from 10 to 190: a press at 46 is a fifth of the way along it
+    pointer.moveTo ({ 46.0f, 20.0f });
+    pointer.press();
+    EXPECT_NEAR (slider.getValue(), 0.2, 1.0e-6);
+    EXPECT_NEAR (slider.getThumbBounds().getCenterX(), 46.0f, 1.0e-4f);
+    EXPECT_EQ (slider.getHoveredThumb(), Slider::Thumb::value);
+
+    // And the thumb follows the pointer from there
+    pointer.moveTo ({ 100.0f, 20.0f });
+    EXPECT_NEAR (slider.getValue(), 0.5, 1.0e-6);
+    EXPECT_NEAR (slider.getThumbBounds().getCenterX(), 100.0f, 1.0e-4f);
+
+    pointer.release();
+}
+
+TEST_F (SliderLinearTest, TheThumbIsGrabbedByWhatOfItIsOutsideTheTrack)
+{
+    // At the lowest value the thumb is around the start of the track: from 2 to 18, the track starting at 10
+    ASSERT_LT (slider.getThumbBounds().getX(), slider.getSliderBounds().getX());
+
+    pointer.moveTo ({ 5.0f, 20.0f });
+    EXPECT_EQ (slider.getHoveredThumb(), Slider::Thumb::value);
+
+    pointer.press();
+    EXPECT_TRUE (slider.isCurrentlyBeingDragged());
+
+    // Grabbed, it does not jump: it moves as far as the pointer does
+    EXPECT_DOUBLE_EQ (slider.getValue(), 0.0);
+
+    pointer.moveTo ({ 95.0f, 20.0f });
+    EXPECT_NEAR (slider.getValue(), 0.5, 1.0e-6);
+    pointer.release();
+
+    // Beside the track, with the thumb at its other end, a press does nothing
+    slider.setValue (1.0, dontSendNotification);
+
+    pointer.moveTo ({ 5.0f, 20.0f });
+    EXPECT_EQ (slider.getHoveredThumb(), Slider::Thumb::none);
+
+    pointer.press();
+    EXPECT_FALSE (slider.isCurrentlyBeingDragged());
+    EXPECT_DOUBLE_EQ (slider.getValue(), 1.0);
+    pointer.release();
+}
+
+TEST_F (SliderLinearTest, APressOnATrackNoLongerThanTheThumbGoesTowardsThePointer)
+{
+    // 36 wide, the slider has 16 of track from 10 to 26, less than its thumb is wide
+    slider.setBounds (0.0f, 0.0f, 36.0f, 40.0f);
+    slider.setValue (1.0, dontSendNotification);
+
+    // Near the start of the track and above the thumb: the value comes down to where the pointer is
+    pointer.click ({ 12.0f, 4.0f });
+    EXPECT_NEAR (slider.getValue(), 0.125, 1.0e-6);
+
+    // 40 wide, the track is as long as the thumb the slider leaves room for
+    slider.setBounds (0.0f, 0.0f, 40.0f, 40.0f);
+    slider.setValue (1.0, dontSendNotification);
+
+    pointer.click ({ 20.0f, 4.0f });
+    EXPECT_NEAR (slider.getValue(), 0.5, 1.0e-6);
+}
+
+TEST_F (SliderLinearTest, ADragEndsWhenTheSliderIsHiddenDisabledOrChangesType)
+{
+    int numDragEnds = 0;
+    slider.onDragEnd = [&numDragEnds] (const MouseEvent&)
+    {
+        ++numDragEnds;
+    };
+
+    pointer.moveTo ({ 100.0f, 20.0f });
+
+    pointer.press();
+    ASSERT_TRUE (slider.isCurrentlyBeingDragged());
+
+    slider.setVisible (false);
+    EXPECT_FALSE (slider.isCurrentlyBeingDragged());
+    EXPECT_EQ (numDragEnds, 1);
+
+    // The release that follows has nothing left to end
+    pointer.release();
+    EXPECT_EQ (numDragEnds, 1);
+
+    slider.setVisible (true);
+
+    pointer.press();
+    ASSERT_TRUE (slider.isCurrentlyBeingDragged());
+
+    slider.setEnabled (false);
+    EXPECT_FALSE (slider.isCurrentlyBeingDragged());
+    EXPECT_EQ (numDragEnds, 2);
+
+    pointer.release();
+    slider.setEnabled (true);
+
+    pointer.press();
+    ASSERT_TRUE (slider.isCurrentlyBeingDragged());
+
+    slider.setSliderType (Slider::LinearBarHorizontal);
+    EXPECT_FALSE (slider.isCurrentlyBeingDragged());
+    EXPECT_EQ (numDragEnds, 3);
+
+    pointer.release();
+    EXPECT_EQ (numDragEnds, 3);
 }
 
 //==============================================================================
@@ -852,4 +1103,36 @@ TEST_F (SliderGpuTest, ARotaryDialIsRoundInBoundsThatAreNotSquare)
     // A square one is the circle it always was, to its sides
     EXPECT_TRUE (paints (48.0f, 48.0f, 7, 24));
     EXPECT_TRUE (paints (48.0f, 48.0f, 24, 7));
+}
+
+TEST_F (SliderGpuTest, TheThumbTakesItsPressedColorWhileItIsDragged)
+{
+    Slider slider (Slider::LinearHorizontal);
+    slider.setBounds (0.0f, 0.0f, 96.0f, 32.0f);
+    slider.setValue (0.5, dontSendNotification);
+
+    // The same color idle and under the pointer, so only the press tells the thumb apart
+    slider.setColor (Slider::Style::thumbColorId, Colors::red);
+    slider.setColor (Slider::Style::thumbOverColorId, Colors::red);
+    slider.setColor (Slider::Style::thumbDownColorId, Colors::blue);
+
+    const auto thumb = slider.getThumbBounds().getCenter();
+    const auto thumbColor = [&slider, &thumb]
+    {
+        const auto image = slider.snapshotToImage (*gpuContext);
+        EXPECT_TRUE (image.isValid());
+
+        return image.isValid() ? image.getPixelColor (roundToInt (thumb.getX()), roundToInt (thumb.getY())) : Color();
+    };
+
+    const auto idle = thumbColor();
+
+    slider.mouseDown (MouseEvent (MouseEvent::leftButton, KeyModifiers(), thumb));
+    ASSERT_TRUE (slider.isCurrentlyBeingDragged());
+
+    const auto dragged = thumbColor();
+    EXPECT_NE (dragged, idle);
+
+    slider.mouseUp (MouseEvent (MouseEvent::noButtons, KeyModifiers(), thumb));
+    EXPECT_EQ (thumbColor(), idle);
 }

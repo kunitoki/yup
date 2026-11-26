@@ -131,6 +131,10 @@ true.
 Call `advanceAndApply` directly only when driving it manually (in tests, or for
 a fixed-step render). It returns true when the artboard needs to be drawn again.
 
+An artboard with no file, a paused one, and one that is hidden (unless it is told
+to keep advancing) asks its window for no frame, so a window with nothing else to
+do stays idle.
+
 ```cpp
 artboard->setPaused (true);              // stop advancing
 artboard->shouldPauseWhenHidden (false); // keep advancing while off-screen

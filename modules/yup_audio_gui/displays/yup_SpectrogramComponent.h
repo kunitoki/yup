@@ -124,7 +124,28 @@ private:
     created by a `.yui` document as `Spectrogram` gets it (see YuiDocument::setInitializer).
     Without a state the spectrogram draws its grid alone.
 
-    @see SpectrumAnalyzerState, SpectrumAnalyzerComponent, SpectrogramColorMap
+    The waterfall is rendered on the GPU. Where the graphics context has none (see
+    GraphicsContext::isGpuAvailable) the spectrogram draws its grid alone too, and the rows of
+    its state are dropped.
+
+    The FFT size and the overlap are the ones of the state and are set there, see
+    SpectrumAnalyzerState::setFftSize and SpectrumAnalyzerState::setOverlapFactor. This can be
+    done at any time, also while the audio is running and the spectrogram is showing: the
+    spectrogram follows the state at its next frame, starting from an empty history when the
+    FFT size changed. It never sets the FFT size itself, so it never goes beyond the largest one
+    its state was made for, see SpectrumAnalyzerState::getMaxFftSize.
+
+    The levels are the ones of the peak level mode of SpectrumAnalyzerComponent: a full-scale
+    sine reads 0 dBFS in both.
+
+    The spectrogram works only while it has something to show. It takes the frames of its
+    window while samples come and while the waterfall scrolls. Once the audio has stopped and
+    the last row is in place it leaves the frames alone, so that a window with nothing else to
+    do stops running them, and looks at its state ten times a second instead: it is back
+    within a tenth of a second of new samples. A hidden spectrogram, or one without a state,
+    does nothing until it shows or is given one.
+
+    @see SpectrumAnalyzerState, SpectrumAnalysis, SpectrumAnalyzerComponent, SpectrogramColorMap
 */
 class YUP_API SpectrogramComponent : public Component
 {
@@ -155,16 +176,16 @@ public:
     //==============================================================================
     /** Changes the state providing the audio data.
 
-        The spectrogram takes the FFT size of the state and starts from an empty history.
-        Call it on the message thread. The state must outlive the spectrogram, or be removed
-        first by setting a null one.
+        The spectrogram takes the FFT size of the state, follows it when it changes, and starts
+        from an empty history. Call it on the message thread. The state must outlive the
+        spectrogram, or be removed first by setting a null one.
 
         @param newState    the state to read, or nullptr for none
     */
     void setState (SpectrumAnalyzerState* newState);
 
     /** Returns the state providing the audio data, or nullptr if the spectrogram has none. */
-    SpectrumAnalyzerState* getState() const noexcept { return analyzerState; }
+    SpectrumAnalyzerState* getState() const noexcept { return analysis.getState(); }
 
     //==============================================================================
     /** Returns the static type info describing the SpectrogramComponent type, `Spectrogram` in `.yui`. */
@@ -174,14 +195,8 @@ public:
     const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
     //==============================================================================
-    /** Sets the FFT size for analysis, which is the one of the analyzer state too.
-
-        @param size    FFT size (must be a power of 2)
-    */
-    void setFFTSize (int size);
-
-    /** Returns the current FFT size. */
-    int getFFTSize() const noexcept { return analyzerState != nullptr ? analyzerState->getFftSize() : fftSize; }
+    /** Returns the FFT size: the one of the analyzer state when there is one, which is where it is set. */
+    int getFFTSize() const noexcept { return analysis.getFftSize(); }
 
     //==============================================================================
     /** Sets the window function used for FFT processing.
@@ -191,7 +206,7 @@ public:
     void setWindowType (WindowType type);
 
     /** Returns the current window function type. */
-    WindowType getWindowType() const noexcept { return currentWindowType; }
+    WindowType getWindowType() const noexcept { return analysis.getWindowType(); }
 
     //==============================================================================
     /** Sets the waterfall scroll speed, as a multiplier of the realtime FFT
@@ -212,19 +227,24 @@ public:
     //==============================================================================
     /** Sets the frequency range for the display.
 
+        The range starts at 1 Hz or above and spans at least 1 Hz.
+
         @param minFreq    minimum frequency in Hz
         @param maxFreq    maximum frequency in Hz
     */
     void setFrequencyRange (float minFreq, float maxFreq);
 
     /** Returns the current minimum frequency. */
-    float getMinFrequency() const noexcept { return minFrequency; }
+    float getMinFrequency() const noexcept { return analysis.getMinFrequency(); }
 
     /** Returns the current maximum frequency. */
-    float getMaxFrequency() const noexcept { return maxFrequency; }
+    float getMaxFrequency() const noexcept { return analysis.getMaxFrequency(); }
 
     //==============================================================================
     /** Sets the decibel range used to normalize FFT magnitudes.
+
+        The range is kept between SpectrumAnalysis::lowestDecibels and
+        SpectrumAnalysis::highestDecibels and spans at least 1 dB.
 
         @param minDb    minimum decibel level
         @param maxDb    maximum decibel level
@@ -232,10 +252,10 @@ public:
     void setDecibelRange (float minDb, float maxDb);
 
     /** Returns the current minimum decibel level. */
-    float getMinDecibels() const noexcept { return minDecibels; }
+    float getMinDecibels() const noexcept { return analysis.getMinDecibels(); }
 
     /** Returns the current maximum decibel level. */
-    float getMaxDecibels() const noexcept { return maxDecibels; }
+    float getMaxDecibels() const noexcept { return analysis.getMaxDecibels(); }
 
     //==============================================================================
     /** Sets the sample rate for frequency calculations.
@@ -245,7 +265,7 @@ public:
     void setSampleRate (double sampleRate);
 
     /** Returns the current sample rate. */
-    double getSampleRate() const noexcept { return sampleRate; }
+    double getSampleRate() const noexcept { return analysis.getSampleRate(); }
 
     //==============================================================================
     /** Sets the color map used for the spectrogram.
@@ -263,24 +283,12 @@ public:
         This determines how many past FFT frames are visible in the display.
         The history canvases are resized to match this value.
 
-        @param numFrames    number of history frames (minimum: 4, default: matches component height)
+        @param numFrames    number of history frames (minimum: 4, default: 256)
     */
     void setNumHistoryFrames (int numFrames);
 
     /** Returns the number of history frames. */
     int getNumHistoryFrames() const noexcept { return numHistoryFrames; }
-
-    //==============================================================================
-    /** Sets the overlap factor of the analyzer state, for more responsive spectrum analysis.
-
-        It is ignored while the spectrogram has no state.
-
-        @param overlapFactor    overlap factor (0.0 = no overlap, 0.75 = 75% overlap)
-    */
-    void setOverlapFactor (float overlapFactor);
-
-    /** Returns the overlap factor of the analyzer state, 0 while the spectrogram has none. */
-    float getOverlapFactor() const noexcept;
 
     //==============================================================================
     /** Clears the spectrogram history, resetting the display. */
@@ -294,7 +302,8 @@ public:
         rendering from the component's cached GPU texture (via paint()); prefer
         painting the component directly when possible. The image is invalid
         until the component has a live GPU render context and its history
-        canvases have been created (e.g. after the first paint).
+        canvases have been created (e.g. after the first paint), and from a
+        call that clears the history until the next paint.
 
         @returns the current spectrogram image.
     */
@@ -306,48 +315,53 @@ public:
     /** @internal */
     void resized() override;
     /** @internal */
+    void visibilityChanged() override;
+    /** @internal */
+    void parentHierarchyChanged() override;
+    /** @internal */
     void refreshDisplay (double lastFrameTimeSeconds);
 
 private:
     //==============================================================================
-    void processFFT();
-    void updateFrequencyMapping();
+    void queueRow();
+    float* getPendingRow (int index) noexcept;
+    void dropPendingRows (int numRows) noexcept;
     bool ensureGpuTargets (GraphicsContext& context);
+    void clearGpuTargets();
     void ensureWaterfallPipeline();
     void applyPendingRows();
     void advanceScroll();
     bool isAnimationRunning() const noexcept;
     float getRowRate() const noexcept;
-    void initializeFFTBuffers();
-    void resizeFFT (int size);
-    void generateWindow();
+    void updateRefreshing (bool hasWorkToDo);
 
     float frequencyToX (float frequency, float width) const noexcept;
     void drawFrequencyGrid (Graphics& g, const Rectangle<float>& bounds);
     void drawFrequencyGridCached (Graphics& g, const Rectangle<float>& bounds);
 
     //==============================================================================
-    SpectrumAnalyzerState* analyzerState = nullptr;
-
-    std::unique_ptr<FFTProcessor<float>> fftProcessor;
-    std::vector<float> fftInputBuffer;
-    std::vector<float> fftOutputBuffer;
-    std::vector<float> windowBuffer;
-    std::vector<float> magnitudeBuffer;
-    std::vector<float> displayMagnitudes;
+    // The state, its FFT, the window and the ranges
+    SpectrumAnalysis analysis { defaultSpectrogramWidth };
 
     // Spectrogram color map
     SpectrogramColorMap colorMap;
-
-    // Precomputed log-frequency > fractional FFT bin mapping
-    SpectrumBinMapping binMapping;
 
     // GPU waterfall state
     GpuDevice::Ptr gpuDevice;
     GpuPipeline::Ptr waterfallPipeline;
     GpuTarget::Ptr gpuTargets[2];
     GpuTexture::Ptr displayTexture;
-    std::vector<std::vector<float>> pendingRows;
+
+    // The rows waiting for the next paint: a ring of maxPendingRows rows of spectrogramWidth magnitudes
+    static constexpr int maxPendingRows = 16;
+
+    std::vector<float> pendingRows;
+    int firstPendingRow = 0;
+    int numPendingRows = 0;
+
+    // The targets are cleared by the next paint, which is where the GPU is at hand
+    bool historyNeedsClearing = false;
+
     std::vector<float> rowDataCache;  // Reused uniform buffer (shader mags[defaultSpectrogramMagnitudes])
     std::vector<uint32> lutDataCache; // Reused color LUT (shader lut[defaultColorLutSize])
     bool lutNeedsRefresh = true;      // Re-fill lutDataCache on the next apply
@@ -359,26 +373,21 @@ private:
     // Cached frequency grid (frequency lines + labels).
     GpuCanvas::Ptr gridCanvas;
     Rectangle<float> gridCacheBounds;
+    float gridCacheScale = 1.0f;
     bool gridNeedsRedraw = true;
+    bool droppedRowsWereLogged = false;
 
     // Configuration
-    WindowType currentWindowType = WindowType::hann;
-    int fftSize = 4096;
     int spectrogramWidth = defaultSpectrogramWidth;
     int numHistoryFrames = 256;
-    float minFrequency = 20.0f;
-    float maxFrequency = 20000.0f;
-    float logMinFrequency = std::log10 (20.0f);
-    float logMaxFrequency = std::log10 (20000.0f);
-    float minDecibels = -100.0f;
-    float maxDecibels = 0.0f;
-    double sampleRate = 44100.0;
     float scrollSpeedMultiplier = 1.0f;
 
-    // Window compensation
-    float windowGain = 1.0f;
-    bool needsWindowUpdate = true;
-    FrameAttachment frameAttachment { *this, bindFront (&SpectrogramComponent::refreshDisplay, this) };
+    // The window calls refreshDisplay() at every frame while there is something to do, the timer at a low rate
+    // while there is not: the audio thread can't tell that it pushed samples
+    static constexpr int restingRefreshRate = 10;
+
+    FrameAttachment frameAttachment { *this, bindFront (&SpectrogramComponent::refreshDisplay, this), false };
+    TimedCallback restingTimer { [this] { refreshDisplay (1.0 / restingRefreshRate); } };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SpectrogramComponent)
 };

@@ -108,7 +108,8 @@ public:
     /** Returns the area of the switch in the component.
 
         The switch keeps the thickness its style gives it (Style::thumbSizeId) and is twice as long, whatever the
-        size of the component: it is centered in it, and only gets smaller in a component with less room.
+        size of the component: it is centered in it, and only gets smaller in a component with less room. It is
+        what the pointer hits: a press beside it in a larger component is not a press of the switch.
     */
     Rectangle<float> getSwitchBounds() const;
 
@@ -118,17 +119,24 @@ public:
     Rectangle<float> getSwitchCircleBounds() const;
 
     /** @internal */
+    bool hitTest (float x, float y) override;
+    /** @internal */
     void refreshDisplay (double lastFrameTimeSeconds);
     /** @internal */
     void paintButton (Graphics& g) override;
     /** @internal */
     void resized() override;
     /** @internal */
+    void visibilityChanged() override;
+    /** @internal */
+    void parentHierarchyChanged() override;
+    /** @internal */
     void clicked() override;
 
 private:
     //==============================================================================
     void updateSwitchCirclePosition();
+    void updateFrameAttachment();
 
     //==============================================================================
     bool toggleState = false;
@@ -140,9 +148,9 @@ private:
 
     // Animation state
     float animationStartPosition = 0.0f;
-    Time animationStartTime;
+    double animationSeconds = 0.0;
     bool isAnimating = false;
-    FrameAttachment frameAttachment { *this, bindFront (&SwitchButton::refreshDisplay, this) };
+    FrameAttachment frameAttachment { *this, bindFront (&SwitchButton::refreshDisplay, this), false };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SwitchButton)
 };

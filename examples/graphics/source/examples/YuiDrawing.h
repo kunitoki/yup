@@ -291,7 +291,7 @@ private:
         // analyzer having one of its own
         document.setInitializer<yup::SpectrumAnalyzerComponent> ([this] (yup::SpectrumAnalyzerComponent& analyzer)
         {
-            analyzer.setState (analyzerStates.emplace_back (std::make_unique<yup::SpectrumAnalyzerState>()).get());
+            analyzer.setState (analyzerStates.emplace_back (std::make_unique<yup::SpectrumAnalyzerState> (2048, 2048)).get());
             analyzer.setSampleRate (sampleRate);
         });
 

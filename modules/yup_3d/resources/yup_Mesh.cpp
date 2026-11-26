@@ -59,7 +59,7 @@ Mesh::~Mesh() = default;
 
 //==============================================================================
 
-void Mesh::addPrimitive (std::vector<Vertex> vertices, std::vector<uint32> indices, Material::Ptr material, std::vector<Influences> influences, std::vector<MorphTarget> morphTargets)
+Result Mesh::addPrimitive (std::vector<Vertex> vertices, std::vector<uint32> indices, Material::Ptr material, std::vector<Influences> influences, std::vector<MorphTarget> morphTargets)
 {
     if (indices.empty())
     {
@@ -68,10 +68,17 @@ void Mesh::addPrimitive (std::vector<Vertex> vertices, std::vector<uint32> indic
     }
 
     const auto numVertices = vertices.size();
+
+    if (numVertices < 3 || indices.size() < 3 || indices.size() % 3 != 0)
+        return Result::fail ("A primitive needs at least three vertices and three indices for each triangle");
+
     const auto indicesValid = std::all_of (indices.begin(), indices.end(), [numVertices] (uint32 index)
     {
         return index < numVertices;
     });
+
+    if (! indicesValid)
+        return Result::fail ("The indices of a primitive must be those of its vertices");
 
     // What comes with the vertices holds one element for each of them, or none
     const auto fitsVertices = [numVertices] (const auto& perVertex)
@@ -79,15 +86,33 @@ void Mesh::addPrimitive (std::vector<Vertex> vertices, std::vector<uint32> indic
         return perVertex.empty() || perVertex.size() == numVertices;
     };
 
+    if (! fitsVertices (influences))
+        return Result::fail ("A primitive needs the influences of each of its vertices, or none");
+
     const auto targetsValid = std::all_of (morphTargets.begin(), morphTargets.end(), [&fitsVertices] (const MorphTarget& target)
     {
         return fitsVertices (target.positions) && fitsVertices (target.normals) && fitsVertices (target.tangents);
     });
 
-    if (vertices.size() < 3 || indices.size() < 3 || indices.size() % 3 != 0 || ! indicesValid || ! fitsVertices (influences) || ! targetsValid)
+    if (! targetsValid)
+        return Result::fail ("A morph target needs a delta for each vertex of its primitive, or none");
+
+    // The weights of a vertex add up to 1, which skinning takes for granted. A negative one counts for
+    // nothing, and a vertex left without any, or with weights adding up to no number, follows no joint
+    for (auto& vertex : influences)
     {
-        jassertfalse; // Primitives need at least one triangle, three indices per triangle, all in range, and influences and morph deltas for every vertex
-        return;
+        auto total = 0.0f;
+
+        for (auto& weight : vertex.weights)
+        {
+            weight = weight > 0.0f ? weight : 0.0f;
+            total += weight;
+        }
+
+        const auto hasWeights = total > 0.0f && std::isfinite (total);
+
+        for (auto& weight : vertex.weights)
+            weight = hasWeights ? weight / total : 0.0f;
     }
 
     const auto hasNormals = std::any_of (vertices.begin(), vertices.end(), [] (const Vertex& vertex)
@@ -171,6 +196,16 @@ void Mesh::addPrimitive (std::vector<Vertex> vertices, std::vector<uint32> indic
 
     cachedDevice = nullptr;
     gpuBuffers.clear();
+    return Result::ok();
+}
+
+void Mesh::addDrawnCopy (const Primitive& primitive)
+{
+    primitives.push_back ({ primitive.vertices, primitive.indices, primitive.material, primitive.bounds, {}, {} });
+    bounds.expand (primitives.back().bounds);
+
+    cachedDevice = nullptr;
+    gpuBuffers.clear();
 }
 
 const Mesh::Primitive& Mesh::getPrimitive (int index) const noexcept
@@ -179,17 +214,23 @@ const Mesh::Primitive& Mesh::getPrimitive (int index) const noexcept
     return primitives[static_cast<size_t> (index)];
 }
 
-void Mesh::setVertices (int primitiveIndex, Span<const Vertex> vertices)
+int Mesh::findMorphTarget (StringRef targetName) const noexcept
 {
+    const auto index = morphTargetNames.indexOf (targetName);
+    return index < numMorphTargets ? index : -1;
+}
+
+Result Mesh::setVertices (int primitiveIndex, Span<const Vertex> vertices)
+{
+    if (! isPositiveAndBelow (primitiveIndex, getNumPrimitives()))
+        return Result::fail ("The mesh has no primitive " + String (primitiveIndex));
+
     const auto index = static_cast<size_t> (primitiveIndex);
-
-    if (! isPositiveAndBelow (primitiveIndex, getNumPrimitives()) || vertices.size() != primitives[index].vertices.size())
-    {
-        jassertfalse; // The primitive must exist and keep its number of vertices, which its indices refer to
-        return;
-    }
-
     auto& primitive = primitives[index];
+
+    if (vertices.size() != primitive.vertices.size())
+        return Result::fail ("A primitive keeps its number of vertices, which its indices refer to: it has " + String (primitive.vertices.size()) + " and was given " + String (vertices.size()));
+
     std::copy (vertices.begin(), vertices.end(), primitive.vertices.begin());
     updateBounds (primitive);
 
@@ -198,6 +239,7 @@ void Mesh::setVertices (int primitiveIndex, Span<const Vertex> vertices)
         gpuBuffers[index].verticesStale = true;
 
     ++changeCount;
+    return Result::ok();
 }
 
 void Mesh::updateBounds (Primitive& changed)
@@ -268,13 +310,14 @@ GpuBuffer::Ptr Mesh::getVertexBuffer (const GpuDevice::Ptr& device, int primitiv
 
     auto& buffers = gpuBuffers[static_cast<size_t> (primitiveIndex)];
 
-    if (std::exchange (buffers.verticesStale, false))
+    if (buffers.verticesStale)
     {
         // Rewritten in place, the size being the same. Frames in flight still draw the vertices
         // they bound: a buffer bound since its last update is written through another backing
-        // (OpenGL orders the write after the draws instead)
+        // (OpenGL orders the write after the draws instead). A device that could not take them
+        // is asked again the next time
         const auto& vertices = primitives[static_cast<size_t> (primitiveIndex)].vertices;
-        device->updateBuffer (buffers.vertices, vertices.data(), vertices.size() * sizeof (Vertex));
+        buffers.verticesStale = ! device->updateBuffer (buffers.vertices, vertices.data(), vertices.size() * sizeof (Vertex));
     }
 
     return buffers.vertices;

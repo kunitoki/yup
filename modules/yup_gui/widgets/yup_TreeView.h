@@ -88,6 +88,10 @@ public:
         root item set before, under a root that has no row, and those holding others start open. This is what the
         `items` property of `.yui` sets, so that a tree of texts is shown without writing its items.
 
+        A path names one item: given twice, it is still one item, and two items of the same text cannot share a
+        parent. As `/` separates the levels, the text of an item cannot hold one. A tree needing either is made
+        of TreeViewItem objects, with setRootItem().
+
         @param newItems  The paths of the items, in the order they are shown
     */
     void setItems (const StringArray& newItems);
@@ -302,6 +306,10 @@ public:
     /** @internal */
     void resized() override;
     /** @internal */
+    void visibilityChanged() override;
+    /** @internal */
+    void parentHierarchyChanged() override;
+    /** @internal */
     void paintOverChildren (Graphics& g) override;
     /** @internal */
     void refreshDisplay (double lastFrameTimeSeconds);
@@ -404,6 +412,7 @@ private:
     std::optional<DropTarget> findDropTarget (const DragAndDropSourceDetails& details) const;
     void updateDragState (const DragAndDropSourceDetails& details);
     void clearDragState();
+    void updateFrameAttachment();
 
     //==============================================================================
     std::unique_ptr<TreeListModel> model;
@@ -449,7 +458,7 @@ private:
     TreeViewItem* notifyingHoverItem = nullptr;
     double hoverExpandSeconds = 0.0;
     float autoScrollSpeed = 0.0f;
-    FrameAttachment frameAttachment { *this, bindFront (&TreeView::refreshDisplay, this) };
+    FrameAttachment frameAttachment { *this, bindFront (&TreeView::refreshDisplay, this), false };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TreeView)
 };

@@ -43,13 +43,8 @@ void YuiView::resized()
 
 void YuiView::documentLoaded (YuiDocument&, const Result&)
 {
+    // A root that was replaced is destroyed by now, which took it out of the view: the other children are the application's
     auto* root = document.getRoot();
-
-    for (int i = getNumChildComponents(); --i >= 0;)
-    {
-        if (auto* child = getChildComponent (i); child != root)
-            removeChildComponent (i);
-    }
 
     if (root == nullptr)
     {

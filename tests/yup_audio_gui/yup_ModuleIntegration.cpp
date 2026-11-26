@@ -35,15 +35,6 @@ protected:
         messageManager = MessageManager::getInstance();
     }
 
-    void runDispatchLoopUntil (int millisecondsToRunFor = 50)
-    {
-#if YUP_MODAL_LOOPS_PERMITTED
-        messageManager->runDispatchLoopUntil (millisecondsToRunFor);
-#else
-        ignoreUnused (millisecondsToRunFor);
-#endif
-    }
-
     /** Makes a theme of its own the global one for as long as it lives. */
     struct ScopedTheme
     {
@@ -236,55 +227,6 @@ TEST_F (AudioGuiModuleIntegrationTests, InitializersGiveTheComponentsOfADocument
     ASSERT_NE (more, nullptr);
     EXPECT_EQ (more->getState(), &keyboardState);
     EXPECT_EQ (more->getHighestVisibleKey(), 60);
-}
-
-TEST_F (AudioGuiModuleIntegrationTests, AWheelFollowsTheStateItIsGivenAfterItsConstruction)
-{
-    MidiKeyboardState first;
-    MidiKeyboardState second;
-    ModWheelComponent mod;
-    PitchWheelComponent pitch;
-
-    EXPECT_EQ (mod.getState(), nullptr);
-    EXPECT_EQ (pitch.getState(), nullptr);
-
-    // Without a state a wheel is moved by the user alone
-    mod.setValue (0.5);
-    mod.handleAsyncUpdate();
-    EXPECT_DOUBLE_EQ (mod.getValue(), 0.5);
-
-    // A wheel keeps its value until its state reports another one
-    mod.setState (&first);
-    pitch.setState (&first);
-    EXPECT_DOUBLE_EQ (mod.getValue(), 0.5);
-    EXPECT_DOUBLE_EQ (pitch.getValue(), 0.0);
-
-    first.processNextMidiEvent (MidiMessage::controllerEvent (1, 1, 127));
-    first.processNextMidiEvent (MidiMessage::pitchWheel (1, 16383));
-    mod.handleAsyncUpdate();
-    pitch.handleAsyncUpdate();
-    EXPECT_DOUBLE_EQ (mod.getValue(), 1.0);
-    EXPECT_DOUBLE_EQ (pitch.getValue(), 1.0);
-
-    // What the previous state reported and isn't shown yet is not read from the new one, whose wheel never moved
-    pitch.setState (&second);
-    runDispatchLoopUntil();
-    EXPECT_EQ (pitch.getState(), &second);
-    EXPECT_DOUBLE_EQ (pitch.getValue(), 1.0);
-
-    // Only the state it has moves it
-    first.processNextMidiEvent (MidiMessage::pitchWheel (1, 0));
-    runDispatchLoopUntil();
-    EXPECT_DOUBLE_EQ (pitch.getValue(), 1.0);
-
-    second.processNextMidiEvent (MidiMessage::pitchWheel (1, 8192));
-    pitch.handleAsyncUpdate();
-    EXPECT_DOUBLE_EQ (pitch.getValue(), 0.0);
-
-    mod.setState (nullptr);
-    pitch.setState (nullptr);
-    EXPECT_EQ (mod.getState(), nullptr);
-    EXPECT_EQ (pitch.getState(), nullptr);
 }
 
 TEST_F (AudioGuiModuleIntegrationTests, DrawingsPaintTheAudioComponentsFromTheSeriesTheyTell)

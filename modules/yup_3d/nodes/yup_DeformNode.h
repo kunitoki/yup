@@ -28,7 +28,10 @@ namespace yup
     The node is given a mesh in its bind pose, the one every instance of a model shares, and
     draws a copy of it in its place: it makes the copy, with the same indices and materials, and
     hands it to the MeshNode of its entity. The copy is what it deforms, with
-    Mesh::setVertices(), so instances deform apart and the shared mesh is never written.
+    Mesh::setVertices(), so instances deform apart and the shared mesh is never written. A
+    MeshNode that is given the shared mesh again while the node is attached, by being attached
+    anew for example, takes the copy back at the next update. Given another mesh it draws that
+    one, and the node deforms a copy that nothing draws.
 
     Each vertex starts from its bind pose. The morph targets of its primitive come first, their
     deltas added for the weight each target has here (Mesh::MorphTarget, setWeights()). Then, if
@@ -37,14 +40,15 @@ namespace yup
     the entity that draws it doesn't move it.
 
     Scene::update() brings the copy up to date, and only when there is something to do: a weight
-    that changed, a joint that is no longer where it was for the entity, or new vertices given
-    to the mesh the node was made with, see Mesh::setVertices(). A mesh that stands still costs
-    a comparison per joint, and one that moves along with its joints, as an instance turning as
-    a whole does, stays as it is. Joints are plain entities, so an AnimationNode, a binding or
-    code moving their TransformNode are all the same to the node, which only looks at where they
-    are. A scene that has a DeformNode updates its AnimationNodes before them, so that a pose is
-    drawn by the frame that made it. A custom node moving joints from its update() asks for the
-    same with Scene::addSystemRule<MyNode, yup::DeformNode>().
+    that changed, a joint that is no longer where it was for the entity, or new vertices or
+    another primitive given to the mesh the node was made with, see Mesh::setVertices() and
+    Mesh::addPrimitive(). A mesh that stands still costs a comparison per joint, and one that
+    moves along with its joints, as an instance turning as a whole does, stays as it is. Joints
+    are plain entities, so an AnimationNode, a binding or code moving their TransformNode are
+    all the same to the node, which only looks at where they are. A scene that has a DeformNode
+    updates its AnimationNodes before them, so that a pose is drawn by the frame that made it.
+    A custom node moving joints from its update() asks for the same with
+    Scene::addSystemRule<MyNode, yup::DeformNode>().
 
     GltfModel attaches one to every entity whose mesh a skin or morph targets deform:
 
@@ -76,8 +80,8 @@ public:
 
         @param meshToDeform   The mesh in its bind pose, with the influences and the morph
                               targets of its primitives. It is shared, and stays as it is. The
-                              vertices it is given later, with Mesh::setVertices(), show in the
-                              copy from the next update.
+                              vertices it is given later, with Mesh::setVertices(), and the
+                              primitives it takes later show in the copy from the next update.
         @param skinToFollow   The skin the influences of the mesh refer to, or nullptr for a
                               mesh that only has morph targets. A skin with fewer joints than
                               the mesh refers to, see Mesh::getNumJoints(), asserts and is not
@@ -136,6 +140,7 @@ public:
     void detachedFromEntity() override;
 
 private:
+    bool copyAddedPrimitives();
     void deform();
     bool updateJointMatrices (bool deformsAnyway);
     void morphVertices (const Mesh::Primitive& primitive);

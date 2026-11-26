@@ -237,7 +237,7 @@ protected:
             accessors.add (toBlock<float> ({ 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f }), 5126, "VEC3", 4);
             accessors.add (joints, jointsType, "VEC4", 4);
             accessors.add (weights, weightsType, "VEC4", 4, weightsNormalized ? R"(, "normalized": true)" : "");
-            accessors.add (toBlock<float> ({ 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f }), 5126, "MAT4", numInverseBindMatrices);
+            accessors.add (inverseBindMatrices, 5126, "MAT4", numInverseBindMatrices);
             accessors.add (toBlock<uint16> ({ 0, 1, 2, 1, 3, 2 }), 5123, "SCALAR", 6);
             accessors.add (toBlock<float> ({ 0.0f, 1.0f }), 5126, "SCALAR", 2);
             accessors.add (toBlock<float> ({ 0.0f, 0.0f, 0.0f, 1.0f, 0.70710678f, 0.0f, 0.0f, 0.70710678f }), 5126, "VEC4", 2);
@@ -265,6 +265,7 @@ protected:
         MemoryBlock weights = toBlock<float> ({ 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f });
         int weightsType = 5126;
         bool weightsNormalized = false;
+        MemoryBlock inverseBindMatrices = toBlock<float> ({ 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f });
         int numInverseBindMatrices = 2;
         String attributes = R"("POSITION": 0, "NORMAL": 1, "JOINTS_0": 2, "WEIGHTS_0": 3)";
         String skin = R"({ "name": "Bend", "joints": [ 1, 2 ], "inverseBindMatrices": 4 })";
@@ -968,6 +969,20 @@ TEST_F (GltfModelTests, FailsOnUnsupportedRequiredExtensions)
     EXPECT_TRUE (result.getErrorMessage().contains ("KHR_draco_mesh_compression"));
 }
 
+TEST_F (GltfModelTests, UnsupportedExtensionsThatAreOnlyUsedAreReported)
+{
+    // Used and not required: the file loads without what the extension changes, which is told once
+    auto result = loadJson (triangleJson ({}, R"(, "extensionsUsed": [ "KHR_texture_transform", "KHR_lights_punctual", "KHR_texture_transform" ])"));
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto& model = result.getReference();
+    const auto warnings = model.getWarnings().joinIntoString ("\n");
+    EXPECT_EQ (model.getWarnings().size(), 1) << warnings;
+    EXPECT_TRUE (warnings.contains ("KHR_texture_transform")) << warnings;
+    EXPECT_FALSE (warnings.contains ("KHR_lights_punctual")) << warnings;
+    EXPECT_EQ (model.getMeshes()[0]->getNumPrimitives(), 1);
+}
+
 TEST_F (GltfModelTests, ReadsKhrMaterialExtensions)
 {
     auto result = loadJson (triangleJson (R"(, "material": 0)", R"(,
@@ -1560,6 +1575,73 @@ TEST_F (GltfModelTests, NonIndexedPrimitivesMustBeTriangleLists)
     EXPECT_TRUE (model.getWarnings().joinIntoString ("\n").contains ("not a list of triangles"));
 }
 
+TEST_F (GltfModelTests, PrimitivesTheMeshRefusesAreReported)
+{
+    // A triangle of two vertices: its indices are in range, and a primitive still needs three vertices
+    const auto json = String (R"({
+        "asset": { "version": "2.0" },
+        "scenes": [ { "nodes": [ 0 ] } ],
+        "nodes": [ { "mesh": 0 } ],
+        "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0 }, "indices": 1 } ] } ],
+        "buffers": [ { "uri": "$POSITIONS", "byteLength": 24 }, { "uri": "$INDICES", "byteLength": 8 } ],
+        "bufferViews": [ { "buffer": 0, "byteLength": 24 }, { "buffer": 1, "byteLength": 6 } ],
+        "accessors": [
+            { "bufferView": 0, "componentType": 5126, "count": 2, "type": "VEC3" },
+            { "bufferView": 1, "componentType": 5123, "count": 3, "type": "SCALAR" }
+        ]
+    })")
+                          .replace ("$POSITIONS", toDataUri (toBlock<float> ({ 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f })))
+                          .replace ("$INDICES", toDataUri (toBlock<uint16> ({ 0, 1, 0, 0 })));
+
+    auto result = loadJson (json);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto& model = result.getReference();
+    const auto warnings = model.getWarnings().joinIntoString ("\n");
+    EXPECT_EQ (model.getMeshes()[0]->getNumPrimitives(), 0);
+    EXPECT_EQ (model.getWarnings().size(), 1) << warnings;
+    EXPECT_TRUE (warnings.contains ("Mesh 0 primitive 0: A primitive needs at least three vertices")) << warnings;
+}
+
+TEST_F (GltfModelTests, PositionsThatAreNotFiniteAreReported)
+{
+    // The second vertex of the triangle has no place
+    const auto positions = toBlock<float> ({ 0.0f, 0.0f, 0.0f, 1.0f, std::numeric_limits<float>::quiet_NaN(), 0.0f, 0.0f, 1.0f, 0.0f });
+
+    auto result = loadJson (triangleJson().replace (positionsUri(), toDataUri (positions)));
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto& model = result.getReference();
+    const auto warnings = model.getWarnings().joinIntoString ("\n");
+    EXPECT_EQ (model.getMeshes()[0]->getNumPrimitives(), 0);
+    EXPECT_TRUE (warnings.contains ("Mesh 0 primitive 0: missing or invalid POSITION")) << warnings;
+}
+
+TEST_F (GltfModelTests, NodeTransformsThatAreNotFiniteAreReported)
+{
+    // A translation too large for the floats a transform is made of
+    auto result = loadJson (R"({
+        "asset": { "version": "2.0" },
+        "scenes": [ { "nodes": [ 0, 1 ] } ],
+        "nodes": [ { "name": "Lost", "translation": [ 1e300, 2, 3 ], "scale": [ 2, 2, 2 ] },
+                   { "name": "Placed", "translation": [ 1, 2, 3 ] } ]
+    })");
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto& model = result.getReference();
+    const auto warnings = model.getWarnings().joinIntoString ("\n");
+    EXPECT_EQ (model.getWarnings().size(), 1) << warnings;
+    EXPECT_TRUE (warnings.contains ("Node 0: a transform that is not finite, ignored")) << warnings;
+
+    // The node is there, where its parent has it
+    const auto root = model.instantiate (scene);
+    const auto* lost = root.findChild ("Lost").get<TransformNode>();
+    ASSERT_NE (lost, nullptr);
+    expectNear (lost->getPosition(), { 0.0f, 0.0f, 0.0f });
+    expectNear (lost->getScale(), { 1.0f, 1.0f, 1.0f });
+    expectNear (root.findChild ("Placed").get<TransformNode>()->getPosition(), { 1.0f, 2.0f, 3.0f });
+}
+
 TEST_F (GltfModelTests, AttachesPointLights)
 {
     auto result = loadJson (R"({
@@ -1644,24 +1726,30 @@ TEST_F (GltfModelTests, LoadsAnimationsAsClips)
 
 TEST_F (GltfModelTests, ReadsNormalizedAnimationOutputs)
 {
+    // The weights are those of the two morph targets of the triangle the node draws
     const auto json = String (R"({
         "asset": { "version": "2.0" },
         "scenes": [ { "nodes": [ 0 ] } ],
-        "nodes": [ { "name": "Joint" } ],
+        "nodes": [ { "name": "Joint", "mesh": 0 } ],
+        "meshes": [ { "primitives": [ { "attributes": { "POSITION": 3 }, "targets": [ { "POSITION": 3 }, { "POSITION": 3 } ] } ] } ],
         "animations": [ { "channels": [ { "sampler": 0, "target": { "node": 0, "path": "rotation" } },
                                         { "sampler": 1, "target": { "node": 0, "path": "weights" } } ],
                           "samplers": [ { "input": 0, "output": 1 }, { "input": 0, "output": 2 } ] } ],
-        "buffers": [ { "uri": "$TIMES", "byteLength": 8 }, { "uri": "$ROTATIONS", "byteLength": 16 }, { "uri": "$WEIGHTS", "byteLength": 4 } ],
-        "bufferViews": [ { "buffer": 0, "byteLength": 8 }, { "buffer": 1, "byteLength": 16 }, { "buffer": 2, "byteLength": 4 } ],
+        "buffers": [ { "uri": "$TIMES", "byteLength": 8 }, { "uri": "$ROTATIONS", "byteLength": 16 }, { "uri": "$WEIGHTS", "byteLength": 4 },
+                     { "uri": "$POSITIONS", "byteLength": 36 } ],
+        "bufferViews": [ { "buffer": 0, "byteLength": 8 }, { "buffer": 1, "byteLength": 16 }, { "buffer": 2, "byteLength": 4 },
+                         { "buffer": 3, "byteLength": 36 } ],
         "accessors": [
             { "bufferView": 0, "componentType": 5126, "count": 2, "type": "SCALAR" },
             { "bufferView": 1, "componentType": 5122, "normalized": true, "count": 2, "type": "VEC4" },
-            { "bufferView": 2, "componentType": 5121, "normalized": true, "count": 4, "type": "SCALAR" }
+            { "bufferView": 2, "componentType": 5121, "normalized": true, "count": 4, "type": "SCALAR" },
+            { "bufferView": 3, "componentType": 5126, "count": 3, "type": "VEC3" }
         ]
     })")
                           .replace ("$TIMES", toDataUri (toBlock<float> ({ 0.0f, 1.0f })))
                           .replace ("$ROTATIONS", toDataUri (toBlock<int16> ({ 0, 0, 0, 32767, 0, -32768, 0, 0 })))
-                          .replace ("$WEIGHTS", toDataUri (toBlock<uint8> ({ 0, 255, 51, 0 })));
+                          .replace ("$WEIGHTS", toDataUri (toBlock<uint8> ({ 0, 255, 51, 0 })))
+                          .replace ("$POSITIONS", positionsUri());
 
     auto result = loadJson (json);
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
@@ -1786,9 +1874,10 @@ TEST_F (GltfModelTests, AnimationChannelsThatCannotBePlayedAreReported)
         const auto warnings = model.getWarnings().joinIntoString ("\n");
         EXPECT_TRUE (warnings.contains ("Animation 0 channel 0: " + expected)) << channel << "\n" << warnings;
 
-        // Its only channel skipped, the animation has nothing to play and is left out
+        // Its only channel skipped, the animation has nothing to play: it keeps its place, without a clip
         EXPECT_TRUE (warnings.contains ("Animation 0: no channel can be played")) << channel << "\n" << warnings;
-        EXPECT_TRUE (model.getAnimations().empty()) << channel;
+        ASSERT_EQ (model.getAnimations().size(), 1u) << channel;
+        EXPECT_EQ (model.getAnimations()[0], nullptr) << channel;
         EXPECT_FALSE (model.instantiate (scene).has<AnimationNode>()) << channel;
     };
 
@@ -1802,6 +1891,9 @@ TEST_F (GltfModelTests, AnimationChannelsThatCannotBePlayedAreReported)
     expectWarning (translationOfHand, R"({ "input": 2, "output": 1 })", "The number of values (9) doesn't match the number of keys (2)");
     expectWarning (translationOfHand, R"({ "input": 1, "output": 1 })", "invalid input or output");
     expectWarning (translationOfHand, R"({ "input": 0, "output": 1, "interpolation": "CUBICSPLINE" })", "The number of values (9) doesn't match the number of keys (3)");
+
+    // A weight for each of three keys, for a node that draws no mesh to morph
+    expectWarning (R"({ "sampler": 0, "target": { "node": 1, "path": "weights" } })", R"({ "input": 0, "output": 0 })", "the node draws no mesh for the weights to morph");
 }
 
 TEST_F (GltfModelTests, AnimationsKeepTheChannelsThatCanBePlayed)
@@ -2003,7 +2095,7 @@ TEST_F (GltfModelTests, SkinWeightsAreMadeToAddUpToOne)
 
 TEST_F (GltfModelTests, SkinsThatCannotMoveTheirMeshLeaveItAsItIs)
 {
-    const auto expectNotSkinned = [this] (const SkinnedStrip& asset, const String& expected, size_t numSkins)
+    const auto expectNotSkinned = [this] (const SkinnedStrip& asset, const String& expected, bool keepsSkin)
     {
         auto result = loadJson (asset.toJson());
         ASSERT_TRUE (result.wasOk()) << expected << "\n" << result.getErrorMessage();
@@ -2011,7 +2103,10 @@ TEST_F (GltfModelTests, SkinsThatCannotMoveTheirMeshLeaveItAsItIs)
         const auto& model = result.getReference();
         const auto warnings = model.getWarnings().joinIntoString ("\n");
         EXPECT_TRUE (warnings.contains (expected)) << expected << "\n" << warnings;
-        EXPECT_EQ (model.getSkins().size(), numSkins) << expected;
+
+        // A skin keeps its place among the skins of the model, without a Skin when it can't be used
+        ASSERT_EQ (model.getSkins().size(), 1u) << expected;
+        EXPECT_EQ (model.getSkins()[0] != nullptr, keepsSkin) << expected;
 
         // The node draws the mesh of the model, in its bind pose
         const auto strip = model.instantiate (scene).findChild ("Strip");
@@ -2022,36 +2117,84 @@ TEST_F (GltfModelTests, SkinsThatCannotMoveTheirMeshLeaveItAsItIs)
     // Joints without weights and weights without joints. The node then has a skin for a mesh without joints
     SkinnedStrip jointsOnly;
     jointsOnly.attributes = R"("POSITION": 0, "NORMAL": 1, "JOINTS_0": 2)";
-    expectNotSkinned (jointsOnly, "Mesh 0 primitive 0: JOINTS_0 and WEIGHTS_0 come together, the primitive is not skinned", 1);
+    expectNotSkinned (jointsOnly, "Mesh 0 primitive 0: JOINTS_0 and WEIGHTS_0 come together, the primitive is not skinned", true);
 
     SkinnedStrip weightsOnly;
     weightsOnly.attributes = R"("POSITION": 0, "NORMAL": 1, "WEIGHTS_0": 3)";
-    expectNotSkinned (weightsOnly, "Mesh 0 primitive 0: JOINTS_0 and WEIGHTS_0 come together, the primitive is not skinned", 1);
-    expectNotSkinned (weightsOnly, "Node 0: mesh 0 has no joints, skin 0 is ignored", 1);
+    expectNotSkinned (weightsOnly, "Mesh 0 primitive 0: JOINTS_0 and WEIGHTS_0 come together, the primitive is not skinned", true);
+    expectNotSkinned (weightsOnly, "Node 0: mesh 0 has no joints, skin 0 is ignored", true);
 
     // The last vertex follows a third joint, and the skin has two
     SkinnedStrip jointOutside;
     jointOutside.joints = toBlock<uint8> ({ 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0 });
-    expectNotSkinned (jointOutside, "Node 0: mesh 0 uses joint 2, which skin 0 doesn't have, it is not skinned", 1);
+    expectNotSkinned (jointOutside, "Node 0: mesh 0 uses joint 2, which skin 0 doesn't have, it is not skinned", true);
 
     // Joints that are not whole numbers, and the three components of the normals for weights
     SkinnedStrip fractionalJoints;
     fractionalJoints.jointsType = 5126;
     fractionalJoints.joints = toBlock<float> ({ 0.0f, 0.0f, 0.0f, 0.0f, 0.5f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f });
-    expectNotSkinned (fractionalJoints, "Mesh 0 primitive 0: invalid JOINTS_0 or WEIGHTS_0, the primitive is not skinned", 1);
+    expectNotSkinned (fractionalJoints, "Mesh 0 primitive 0: invalid JOINTS_0 or WEIGHTS_0, the primitive is not skinned", true);
 
     SkinnedStrip normalsForWeights;
     normalsForWeights.attributes = R"("POSITION": 0, "NORMAL": 1, "JOINTS_0": 2, "WEIGHTS_0": 1)";
-    expectNotSkinned (normalsForWeights, "Mesh 0 primitive 0: invalid JOINTS_0 or WEIGHTS_0, the primitive is not skinned", 1);
+    expectNotSkinned (normalsForWeights, "Mesh 0 primitive 0: invalid JOINTS_0 or WEIGHTS_0, the primitive is not skinned", true);
 
-    // One matrix for two joints, and positions for matrices: such a skin is left out
+    // One matrix for two joints, positions for matrices, and a matrix that is not finite: such a skin is left out
     SkinnedStrip oneMatrix;
     oneMatrix.numInverseBindMatrices = 1;
-    expectNotSkinned (oneMatrix, "Skin 0: 1 inverse bind matrices for 2 joints, ignored", 0);
+    expectNotSkinned (oneMatrix, "Skin 0: 1 inverse bind matrices for 2 joints, ignored", false);
 
     SkinnedStrip positionsForMatrices;
     positionsForMatrices.skin = R"({ "joints": [ 1, 2 ], "inverseBindMatrices": 0 })";
-    expectNotSkinned (positionsForMatrices, "Skin 0: invalid inverseBindMatrices, ignored", 0);
+    expectNotSkinned (positionsForMatrices, "Skin 0: invalid inverseBindMatrices, ignored", false);
+
+    SkinnedStrip matrixWithoutPlace;
+    matrixWithoutPlace.inverseBindMatrices = toBlock<float> ({ 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, std::numeric_limits<float>::infinity(), 0.0f, 1.0f });
+    expectNotSkinned (matrixWithoutPlace, "Skin 0: invalid inverseBindMatrices, ignored", false);
+}
+
+TEST_F (GltfModelTests, SkinsAndAnimationsKeepTheIndexTheyHaveInTheFile)
+{
+    // The first skin has positions for matrices, and the first animation a path that is not played
+    SkinnedStrip asset;
+    asset.skin = R"({ "joints": [ 1, 2 ], "inverseBindMatrices": 0 }, { "name": "Bend", "joints": [ 1, 2 ], "inverseBindMatrices": 4 })";
+
+    const auto json = asset.toJson()
+                          .replace (R"("skin": 0)", R"("skin": 1)")
+                          .replace (R"("animations": [)", R"("animations": [ { "name": "Broken", "channels": [ { "sampler": 0, "target": { "node": 2, "path": "color" } } ], "samplers": [ { "input": 6, "output": 7 } ] },)");
+
+    auto result = loadJson (json);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    // Both keep their place, without a Skin or a clip: the ones after them are found where the file has them
+    const auto& model = result.getReference();
+    ASSERT_EQ (model.getSkins().size(), 2u);
+    EXPECT_EQ (model.getSkins()[0], nullptr);
+    ASSERT_NE (model.getSkins()[1], nullptr);
+    EXPECT_EQ (model.getSkins()[1]->getName(), "Bend");
+
+    ASSERT_EQ (model.getAnimations().size(), 2u);
+    EXPECT_EQ (model.getAnimations()[0], nullptr);
+    ASSERT_NE (model.getAnimations()[1], nullptr);
+    EXPECT_EQ (model.getAnimations()[1]->getName(), "Bend");
+
+    // An instance has the clips at the same indices, and starts on the first one there is
+    auto instance = model.instantiate (scene);
+    auto* animation = instance.get<AnimationNode>();
+    ASSERT_NE (animation, nullptr);
+    ASSERT_EQ (animation->getNumClips(), 2);
+    EXPECT_EQ (animation->getClip (0), nullptr);
+    EXPECT_EQ (animation->getClip (1), model.getAnimations()[1]);
+    EXPECT_EQ (animation->getCurrentClip(), 1);
+
+    // The node is skinned by the skin it names, and follows the clip
+    const auto strip = instance.findChild ("Strip");
+    ASSERT_TRUE (strip.has<DeformNode>());
+    EXPECT_EQ (strip.get<DeformNode>()->getSkin(), model.getSkins()[1]);
+
+    animation->setPlaying (true);
+    scene.update (1.0);
+    expectNear (getDrawnVertices (strip)[2].position, { 0.0f, 1.0f, 1.0f });
 }
 
 TEST_F (GltfModelTests, JointsBeyondTheFirstFourOfAVertexAreReported)
@@ -2302,6 +2445,55 @@ TEST_F (GltfModelTests, MorphTargetsThatCannotBeUsedAreReported)
     expectNear (getDrawnVertices (face)[2].normal, { 0.0f, 0.70710678f, 0.70710678f });
 }
 
+TEST_F (GltfModelTests, MorphDeltasThatAreNotFiniteAreReported)
+{
+    // The first target would take the last vertex nowhere
+    MorphedTriangle asset;
+    asset.lift = toBlock<float> ({ 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, std::numeric_limits<float>::quiet_NaN(), 0.0f });
+
+    auto result = loadJson (asset.toJson());
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto& model = result.getReference();
+    const auto warnings = model.getWarnings().joinIntoString ("\n");
+    EXPECT_EQ (model.getWarnings().size(), 1) << warnings;
+    EXPECT_TRUE (warnings.contains ("Mesh 0 primitive 0 target 0: invalid POSITION, ignored")) << warnings;
+
+    // The target keeps its place and the deltas of its normals
+    const auto& targets = model.getMeshes()[0]->getPrimitive (0).morphTargets;
+    ASSERT_EQ (targets.size(), 2u);
+    EXPECT_TRUE (targets[0].positions.empty());
+    EXPECT_EQ (targets[0].normals.size(), 3u);
+
+    // With the weights of the mesh, the last vertex stays where it is
+    const auto face = model.instantiate (scene).findChild ("Face");
+    expectNear (getDrawnVertices (face)[2].position, { 0.0f, 1.0f, 0.0f });
+}
+
+TEST_F (GltfModelTests, ReadsTheNamesOfMorphTargetsFromTheExtrasOfTheirMesh)
+{
+    // glTF has no place for them: exporters write them there. The mesh has two targets, so a third name is not kept
+    MorphedTriangle asset;
+    asset.mesh = R"(, "weights": [ 0.5, 0.25 ], "extras": { "targetNames": [ "Lift", "Slide", "Spare" ] })";
+
+    auto result = loadJson (asset.toJson());
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto& model = result.getReference();
+    EXPECT_TRUE (model.getWarnings().isEmpty()) << model.getWarnings().joinIntoString ("\n");
+
+    const auto& mesh = *model.getMeshes()[0];
+    EXPECT_EQ (mesh.getMorphTargetNames().joinIntoString (", "), "Lift, Slide");
+    EXPECT_EQ (mesh.findMorphTarget ("Lift"), 0);
+    EXPECT_EQ (mesh.findMorphTarget ("Slide"), 1);
+    EXPECT_EQ (mesh.findMorphTarget ("Spare"), -1);
+
+    // A mesh without them has targets without names
+    auto unnamed = loadJson (MorphedTriangle().toJson());
+    ASSERT_TRUE (unnamed.wasOk()) << unnamed.getErrorMessage();
+    EXPECT_TRUE (unnamed.getReference().getMeshes()[0]->getMorphTargetNames().isEmpty());
+}
+
 TEST_F (GltfModelTests, WeightsTracksWiderThanTheMorphTargetsOfTheirMeshAreSkipped)
 {
     // For a mesh of two morph targets: keys of three weights (accessor 7), then keys of 33 million weights
@@ -2518,7 +2710,9 @@ TEST_F (GltfModelTests, AccessorsAreOnlyReadOnceTheirSizeIsKnownToFit)
     // Inverse bind matrices are read whole, so all of them count: here for more than the model can keep
     EXPECT_TRUE (warnings.contains ("Skin 0: over the 67108864 values a model can keep, ignored")) << warnings;
     EXPECT_TRUE (warnings.contains ("Skin 1: over the 67108864 values a model can keep, ignored")) << warnings;
-    EXPECT_TRUE (model.getSkins().empty());
+    ASSERT_EQ (model.getSkins().size(), 2u);
+    EXPECT_EQ (model.getSkins()[0], nullptr);
+    EXPECT_EQ (model.getSkins()[1], nullptr);
 
     // The triangles are there, with nothing to deform them
     const auto& mesh = *model.getMeshes()[0];

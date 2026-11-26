@@ -217,6 +217,20 @@ TEST_F (CartesianPlaneTests, SetEmptyTitle)
     EXPECT_TRUE (plane->getTitle().isEmpty());
 }
 
+TEST_F (CartesianPlaneTests, TheTitleIsTheOneOfTheComponent)
+{
+    // Taken as the component it is, the plane is given and tells the title it draws
+    Component& component = *plane;
+
+    component.setTitle ("Response");
+    EXPECT_EQ (plane->getTitle(), "Response");
+    EXPECT_EQ (component.getTitle(), "Response");
+
+    plane->setTitle ("Phase");
+    EXPECT_EQ (component.getTitle(), "Phase");
+    EXPECT_EQ (component.getProperty (Identifier ("title")).toString(), "Phase");
+}
+
 TEST_F (CartesianPlaneTests, SetTitleColor)
 {
     Color testColor (0xFF00FF00);
@@ -751,6 +765,60 @@ TEST_F (CartesianPlaneTests, LogarithmicScaleForYAxis)
     EXPECT_NE (y1, y2);
 }
 
+TEST_F (CartesianPlaneTests, ALogarithmicScaleAppliesWhileTheRangeIsAboveZero)
+{
+    const auto plot = plane->getPlotBounds();
+
+    // Asked on a range starting at zero, the scales are logarithmic once their ranges allow it
+    plane->setXScaleType (CartesianPlane::AxisScaleType::logarithmic);
+    plane->setYScaleType (CartesianPlane::AxisScaleType::logarithmic);
+    EXPECT_EQ (CartesianPlane::AxisScaleType::linear, plane->getXScaleType());
+    EXPECT_EQ (CartesianPlane::AxisScaleType::linear, plane->getYScaleType());
+
+    plane->setXRange (1.0, 100.0);
+    plane->setYRange (1.0, 100.0);
+    EXPECT_EQ (CartesianPlane::AxisScaleType::logarithmic, plane->getXScaleType());
+    EXPECT_EQ (CartesianPlane::AxisScaleType::logarithmic, plane->getYScaleType());
+
+    EXPECT_NEAR (plane->valueToX (10.0), plot.getCenterX(), 0.01f);
+    EXPECT_NEAR (plane->valueToY (10.0), plot.getCenterY(), 0.01f);
+    EXPECT_NEAR (plane->xToValue (plot.getCenterX()), 10.0, 0.01);
+    EXPECT_NEAR (plane->yToValue (plot.getCenterY()), 10.0, 0.01);
+
+    // Ranges moved back down to zero are told linearly again, rather than not at all
+    plane->setXRange (0.0, 100.0);
+    plane->setYRange (0.0, 100.0);
+    EXPECT_EQ (CartesianPlane::AxisScaleType::linear, plane->getXScaleType());
+    EXPECT_EQ (CartesianPlane::AxisScaleType::linear, plane->getYScaleType());
+
+    EXPECT_NEAR (plane->valueToX (50.0), plot.getCenterX(), 0.01f);
+    EXPECT_NEAR (plane->valueToY (50.0), plot.getCenterY(), 0.01f);
+    EXPECT_NEAR (plane->xToValue (plot.getCenterX()), 50.0, 0.01);
+    EXPECT_NEAR (plane->yToValue (plot.getCenterY()), 50.0, 0.01);
+}
+
+TEST_F (CartesianPlaneTests, APlaneNoLargerThanItsMarginsHasAnEmptyPlot)
+{
+    plane->setXRange (20.0, 20000.0);
+    plane->setYRange (-60.0, 6.0);
+
+    // The margins take 80 by 55: nothing is left for the plot, which is no less than empty
+    for (const auto size : { Size<float> (80.0f, 55.0f), Size<float> (40.0f, 30.0f) })
+    {
+        plane->setBounds (0.0f, 0.0f, size.getWidth(), size.getHeight());
+
+        const auto plot = plane->getPlotBounds();
+        EXPECT_FLOAT_EQ (plot.getWidth(), 0.0f);
+        EXPECT_FLOAT_EQ (plot.getHeight(), 0.0f);
+
+        // And every position of it is the start of the ranges
+        EXPECT_DOUBLE_EQ (plane->xToValue (plot.getX()), 20.0);
+        EXPECT_DOUBLE_EQ (plane->yToValue (plot.getBottom()), -60.0);
+        EXPECT_TRUE (std::isfinite (plane->valueToX (1000.0)));
+        EXPECT_TRUE (std::isfinite (plane->valueToY (0.0)));
+    }
+}
+
 //==============================================================================
 // Paint Tests
 //==============================================================================
@@ -852,6 +920,27 @@ TEST_F (CartesianPlaneTests, PaintWithZeroSize)
     plane->paint (g);
 
     EXPECT_TRUE (true);
+}
+
+TEST_F (CartesianPlaneTests, PaintsALegendThatDoesNotFitInThePlot)
+{
+    plane->addSignal ("Signal 1", Colors::red);
+    plane->addSignal ("Signal 2", Colors::blue);
+    plane->setLegendVisible (true);
+
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
+    auto renderer = context->makeRenderer (200, 100);
+    Graphics g (*context, *renderer);
+
+    // A plot narrower and lower than its legend, then one with no room at all
+    for (const auto size : { Size<float> (150.0f, 75.0f), Size<float> (60.0f, 40.0f) })
+    {
+        plane->setBounds (0.0f, 0.0f, size.getWidth(), size.getHeight());
+        plane->paint (g);
+    }
+
+    EXPECT_GE (plane->getPlotBounds().getWidth(), 0.0f);
+    EXPECT_GE (plane->getPlotBounds().getHeight(), 0.0f);
 }
 
 //==============================================================================

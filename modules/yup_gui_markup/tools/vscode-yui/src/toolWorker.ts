@@ -63,8 +63,8 @@ parentPort?.on ("message", (request: Request) => {
 
         parentPort?.postMessage ({ id: request.id, code, stdout: typeof answer === "string" ? answer : output.join ("\n"), stderr: errors.join ("\n"), missing });
     }).catch ((error: unknown) => {
-        // The module is left in a state nobody knows, so the worker ends and another one starts
-        parentPort?.postMessage ({ id: request.id, error: error instanceof Error ? error.message : String (error) });
+        // The module is left in a state nobody knows, so the worker tells it ends and another one starts
+        parentPort?.postMessage ({ id: request.id, error: error instanceof Error ? error.message : String (error), stopping: true });
         setImmediate (() => process.exit (1));
     });
 });

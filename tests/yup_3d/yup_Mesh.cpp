@@ -209,20 +209,19 @@ TEST_F (MeshTests, ChangeCountCountsEverySetVertices)
 
 TEST_F (MeshTests, SetVerticesRejectsAMissingPrimitiveAndAnotherNumberOfVertices)
 {
-#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
-    GTEST_SKIP() << "A primitive that does not exist and another number of vertices trigger an assertion when assertions are enabled or logged";
-#endif
-
     Mesh mesh;
     mesh.addPrimitive (makeTriangle (0.0f), {});
 
-    mesh.setVertices (1, makeTriangle (5.0f));
-    mesh.setVertices (-1, makeTriangle (5.0f));
+    EXPECT_TRUE (mesh.setVertices (1, makeTriangle (5.0f)).failed());
+    EXPECT_TRUE (mesh.setVertices (-1, makeTriangle (5.0f)).failed());
 
     auto oneMore = makeTriangle (5.0f);
     oneMore.push_back (vertexAt (9.0f, 9.0f, 9.0f));
-    mesh.setVertices (0, oneMore);
-    mesh.setVertices (0, std::vector<Mesh::Vertex>());
+
+    const auto tooMany = mesh.setVertices (0, oneMore);
+    EXPECT_TRUE (tooMany.failed());
+    EXPECT_TRUE (tooMany.getErrorMessage().isNotEmpty());
+    EXPECT_TRUE (mesh.setVertices (0, std::vector<Mesh::Vertex>()).failed());
 
     const auto& primitive = mesh.getPrimitive (0);
     ASSERT_EQ (primitive.vertices.size(), 3u);
@@ -230,6 +229,10 @@ TEST_F (MeshTests, SetVerticesRejectsAMissingPrimitiveAndAnotherNumberOfVertices
     expectNear (primitive.bounds.getMax(), { 1.0f, 1.0f, 0.0f });
     expectNear (mesh.getBounds().getMax(), { 1.0f, 1.0f, 0.0f });
     EXPECT_EQ (mesh.getChangeCount(), 0u);
+
+    // As many vertices as the primitive has are taken
+    EXPECT_TRUE (mesh.setVertices (0, makeTriangle (5.0f)).wasOk());
+    EXPECT_EQ (mesh.getChangeCount(), 1u);
 }
 
 TEST_F (MeshTests, EdgeIndicesListSharedEdgesOnceInOrder)
@@ -396,20 +399,80 @@ TEST_F (MeshTests, MorphWeightsAreKeptAsTheyAreSet)
 
 TEST_F (MeshTests, AddPrimitiveRejectsInfluencesAndMorphDeltasThatDoNotFitTheVertices)
 {
-#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
-    GTEST_SKIP() << "Influences and morph deltas that are not one per vertex trigger an assertion when assertions are enabled or logged";
-#endif
-
     Mesh mesh;
-    mesh.addPrimitive (makeTriangle (0.0f), {}, nullptr, std::vector<Mesh::Influences> (2));
+    EXPECT_TRUE (mesh.addPrimitive (makeTriangle (0.0f), {}, nullptr, std::vector<Mesh::Influences> (2)).failed());
 
     std::vector<Mesh::MorphTarget> targets (1);
     targets[0].normals.resize (4);
-    mesh.addPrimitive (makeTriangle (0.0f), {}, nullptr, {}, targets);
+    EXPECT_TRUE (mesh.addPrimitive (makeTriangle (0.0f), {}, nullptr, {}, targets).failed());
 
     EXPECT_EQ (mesh.getNumPrimitives(), 0);
     EXPECT_EQ (mesh.getNumMorphTargets(), 0);
     EXPECT_TRUE (mesh.getBounds().isEmpty());
+}
+
+TEST_F (MeshTests, AddPrimitiveRejectsWhatIsNotAListOfTrianglesOfItsVertices)
+{
+    Mesh mesh;
+
+    // Two vertices, four indices for three vertices, and an index beyond them
+    auto twoVertices = makeTriangle (0.0f);
+    twoVertices.pop_back();
+
+    const auto tooFew = mesh.addPrimitive (twoVertices, { 0, 1, 0 });
+    EXPECT_TRUE (tooFew.failed());
+    EXPECT_TRUE (tooFew.getErrorMessage().isNotEmpty());
+    EXPECT_TRUE (mesh.addPrimitive (makeTriangle (0.0f), { 0, 1, 2, 0 }).failed());
+    EXPECT_TRUE (mesh.addPrimitive (makeTriangle (0.0f), { 0, 1, 3 }).failed());
+
+    EXPECT_EQ (mesh.getNumPrimitives(), 0);
+    EXPECT_TRUE (mesh.getBounds().isEmpty());
+
+    // A mesh that refused a primitive takes the next one
+    EXPECT_TRUE (mesh.addPrimitive (makeTriangle (0.0f), { 0, 1, 2 }).wasOk());
+    EXPECT_EQ (mesh.getNumPrimitives(), 1);
+}
+
+TEST_F (MeshTests, AddPrimitiveMakesTheWeightsOfAVertexAddUpToOne)
+{
+    // Weights adding up to 4, a negative one, and one that is not finite
+    std::vector<Mesh::Influences> influences (3);
+    influences[0] = { { 0, 1, 0, 0 }, { 2.0f, 2.0f, 0.0f, 0.0f } };
+    influences[1] = { { 0, 1, 0, 0 }, { -1.0f, 0.25f, 0.0f, 0.0f } };
+    influences[2] = { { 0, 1, 0, 0 }, { std::numeric_limits<float>::infinity(), 1.0f, 0.0f, 0.0f } };
+
+    Mesh mesh;
+    mesh.addPrimitive (makeTriangle (0.0f), {}, nullptr, influences);
+
+    const auto& kept = mesh.getPrimitive (0).influences;
+    ASSERT_EQ (kept.size(), 3u);
+    EXPECT_EQ (kept[0].weights, (std::array<float, 4> { 0.5f, 0.5f, 0.0f, 0.0f }));
+
+    // A negative weight counts for nothing, and the joints stay as they were given
+    EXPECT_EQ (kept[1].weights, (std::array<float, 4> { 0.0f, 1.0f, 0.0f, 0.0f }));
+    EXPECT_EQ (kept[1].joints, (std::array<uint16, 4> { 0, 1, 0, 0 }));
+
+    // Weights that add up to no number leave the vertex without any: it stays in its bind pose
+    EXPECT_EQ (kept[2].weights, (std::array<float, 4> { 0.0f, 0.0f, 0.0f, 0.0f }));
+}
+
+TEST_F (MeshTests, MorphTargetsAreFoundByTheNameTheyAreGiven)
+{
+    Mesh mesh;
+    mesh.addPrimitive (makeTriangle (0.0f), {}, nullptr, {}, std::vector<Mesh::MorphTarget> (2));
+
+    EXPECT_TRUE (mesh.getMorphTargetNames().isEmpty());
+    EXPECT_EQ (mesh.findMorphTarget ("Smile"), -1);
+
+    mesh.setMorphTargetNames (StringArray ({ "Blink", "Smile", "Frown" }));
+
+    EXPECT_EQ (mesh.getMorphTargetNames().size(), 3);
+    EXPECT_EQ (mesh.findMorphTarget ("Blink"), 0);
+    EXPECT_EQ (mesh.findMorphTarget ("Smile"), 1);
+    EXPECT_EQ (mesh.findMorphTarget ("smile"), -1);
+
+    // The mesh has two targets: a third name stands for none
+    EXPECT_EQ (mesh.findMorphTarget ("Frown"), -1);
 }
 
 class MeshGpuResourceTests : public MeshTests
@@ -458,6 +521,19 @@ protected:
 
         device = new OreInjectedGpuDevice (&oreCtx);
     }
+
+    /** A device that can be made to refuse the updates of its buffers. */
+    struct RefusingDevice final : OreInjectedGpuDevice
+    {
+        using OreInjectedGpuDevice::OreInjectedGpuDevice;
+
+        bool updateBuffer (GpuBuffer::Ptr buffer, const void* data, size_t byteSize) override
+        {
+            return ! refusesUpdates && OreInjectedGpuDevice::updateBuffer (buffer, data, byteSize);
+        }
+
+        bool refusesUpdates = false;
+    };
 
     ::testing::NiceMock<MockOreContext> oreCtx;
     GpuDevice::Ptr device;
@@ -522,6 +598,33 @@ TEST_F (MeshGpuResourceTests, VerticesSetWithoutABufferAreUploadedWithIt)
     EXPECT_EQ (vertexBuffers.made, 2);
     EXPECT_EQ (vertexBuffers.updates, 0);
     EXPECT_TRUE (vertexBuffers.holds (movedAgain));
+}
+
+TEST_F (MeshGpuResourceTests, AVertexBufferTheDeviceCouldNotRewriteIsRewrittenTheNextTime)
+{
+    auto* refusing = new RefusingDevice (&oreCtx);
+    const GpuDevice::Ptr refusingDevice (refusing);
+
+    Mesh mesh;
+    mesh.addPrimitive (makeTriangle (0.0f), {});
+
+    const auto vertices = mesh.getVertexBuffer (refusingDevice, 0);
+    ASSERT_NE (vertices, nullptr);
+
+    const auto moved = makeTriangle (5.0f);
+    mesh.setVertices (0, moved);
+
+    // The device refuses the update: the buffer keeps the vertices it had
+    refusing->refusesUpdates = true;
+    EXPECT_EQ (mesh.getVertexBuffer (refusingDevice, 0), vertices);
+    EXPECT_EQ (vertexBuffers.updates, 0);
+
+    // It is asked again when the buffer next is, and no more once it took them
+    refusing->refusesUpdates = false;
+    EXPECT_EQ (mesh.getVertexBuffer (refusingDevice, 0), vertices);
+    EXPECT_EQ (mesh.getVertexBuffer (refusingDevice, 0), vertices);
+    EXPECT_EQ (vertexBuffers.updates, 1);
+    EXPECT_TRUE (vertexBuffers.holds (moved));
 }
 
 //==============================================================================

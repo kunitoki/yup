@@ -261,6 +261,7 @@ void Artboard::setFile (std::shared_ptr<ArtboardFile> file, StringRef artboardNa
             deferredTarget = session->acquireScreenTarget();
 
     updateSceneFromFile();
+    updateFrameAttachment();
 }
 
 void Artboard::releaseDeferredTarget()
@@ -307,6 +308,8 @@ void Artboard::clear()
 
     setWantsKeyboardFocus (false);
     relinquishTextInput();
+
+    updateFrameAttachment();
 }
 
 //==============================================================================
@@ -352,6 +355,7 @@ void Artboard::setPaused (bool shouldPause)
 {
     paused = shouldPause;
 
+    updateFrameAttachment();
     repaint();
 }
 
@@ -365,6 +369,8 @@ bool Artboard::isPausingWhenHidden() const
 void Artboard::shouldPauseWhenHidden (bool shouldPause)
 {
     pauseWhenHidden = shouldPause;
+
+    updateFrameAttachment();
 }
 
 //==============================================================================
@@ -889,6 +895,14 @@ void Artboard::refreshDisplay (double lastFrameTimeSeconds)
         repaint();
 }
 
+void Artboard::updateFrameAttachment()
+{
+    // What the application writes into a view model instance is only seen by advancing, so an artboard that can advance does at every frame
+    const auto advances = scene != nullptr && ! paused && (! pauseWhenHidden || isShowing());
+
+    frameAttachment.setActive (advances);
+}
+
 //==============================================================================
 
 void Artboard::paint (Graphics& g)
@@ -946,6 +960,16 @@ void Artboard::paint (Graphics& g)
 void Artboard::resized()
 {
     updateNodeBounds();
+}
+
+void Artboard::visibilityChanged()
+{
+    updateFrameAttachment();
+}
+
+void Artboard::parentHierarchyChanged()
+{
+    updateFrameAttachment();
 }
 
 //==============================================================================

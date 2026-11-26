@@ -202,3 +202,141 @@ TEST_F (SceneCameraComponentTests, LookAtTurnsTheCameraAndFollowsItsPosition)
     camera->setProperty (Identifier ("lookAt"), var());
     expectRotation (rotationOf (*camera), Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 1.0f));
 }
+
+TEST_F (SceneCameraComponentTests, AValueACameraCanNotHaveIsReportedAndNotKept)
+{
+    YuiDocument document;
+    const auto result = document.loadFromString ("Scene3D {\n"
+                                                 "    id: view;\n"
+                                                 "    Camera3D {\n"
+                                                 "        id: camera;\n"
+                                                 "        fov: 0;\n"
+                                                 "        near: -1;\n"
+                                                 "        far: -5;\n"
+                                                 "        orthographicSize: 0;\n"
+                                                 "    }\n"
+                                                 "}");
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    expectDiagnostic (document, "Camera3D.fov: expected an angle above 0 and below 180deg");
+    expectDiagnostic (document, "Camera3D.near: expected a distance above 0");
+    expectDiagnostic (document, "Camera3D.far: expected a distance, or 0 for a perspective camera to see infinitely far");
+    expectDiagnostic (document, "Camera3D.orthographicSize: expected a size above 0");
+    EXPECT_EQ (document.getDiagnostics().size(), 4u) << DataTreeDiagnostic::join (document.getDiagnostics());
+
+    // Where the value is written
+    const auto* diagnostic = findDiagnostic (document, "Camera3D.fov");
+    ASSERT_NE (diagnostic, nullptr);
+    EXPECT_EQ (diagnostic->line, 5);
+
+    auto* view = document.findById<SceneComponent> ("view");
+    auto* camera = document.findById<SceneCameraComponent> ("camera");
+
+    ASSERT_NE (view, nullptr);
+    ASSERT_NE (camera, nullptr);
+
+    // The camera keeps the values it had: the ones a CameraNode has by default
+    const auto* node = camera->getEntity().get<CameraNode>();
+    const CameraNode defaults {};
+
+    ASSERT_NE (node, nullptr);
+    EXPECT_FLOAT_EQ (node->yFov, defaults.yFov);
+    EXPECT_FLOAT_EQ (node->zNear, defaults.zNear);
+    EXPECT_FLOAT_EQ (node->zFar, defaults.zFar);
+    EXPECT_FLOAT_EQ (node->yMag, defaults.yMag);
+    EXPECT_FLOAT_EQ (camera->getFieldOfView(), defaults.yFov);
+
+    // So it does with a value that is not a number, or not a finite one, which does not ask for the scene to be painted
+    view->refreshDisplay (0.0);
+    Internals::takeRepaintRequest (*view);
+
+    camera->setFieldOfView (std::numeric_limits<float>::quiet_NaN());
+    camera->setNearPlane (std::numeric_limits<float>::infinity());
+    camera->setFieldOfView (MathConstants<float>::pi);
+
+    EXPECT_FLOAT_EQ (node->yFov, defaults.yFov);
+    EXPECT_FLOAT_EQ (node->zNear, defaults.zNear);
+    EXPECT_FALSE (Internals::takeRepaintRequest (*view));
+    EXPECT_EQ (Internals::getNumProblems (*view), 4u);
+
+    // A value it can have is kept, and withdraws what was reported about the property
+    camera->setFieldOfView (1.0f);
+
+    EXPECT_FLOAT_EQ (node->yFov, 1.0f);
+    EXPECT_EQ (Internals::getNumProblems (*view), 3u);
+}
+
+TEST_F (SceneCameraComponentTests, AnOrthographicCameraWhoseFarPlaneIsNotBeyondItsNearOneIsReported)
+{
+    YuiDocument document;
+    const auto result = document.loadFromString ("Scene3D {\n"
+                                                 "    id: view;\n"
+                                                 "    Camera3D {\n"
+                                                 "        id: camera;\n"
+                                                 "        projection: orthographic;\n"
+                                                 "        far: 0;\n"
+                                                 "    }\n"
+                                                 "}");
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
+
+    // An infinite far plane is the one of a perspective camera
+    EXPECT_EQ (document.getDiagnostics().front().message, "Camera3D.projection: an orthographic camera sees up to its far plane, which has to be beyond its near one");
+    EXPECT_EQ (document.getDiagnostics().front().line, 5);
+
+    auto* view = document.findById<SceneComponent> ("view");
+    auto* camera = document.findById<SceneCameraComponent> ("camera");
+
+    ASSERT_NE (view, nullptr);
+    ASSERT_NE (camera, nullptr);
+    EXPECT_EQ (Internals::getNumProblems (*view), 1u);
+
+    // It stands for as long as the two planes and the projection do not fit together, whichever of them changes
+    camera->setProjection (CameraNode::Projection::perspective);
+    EXPECT_EQ (Internals::getNumProblems (*view), 0u);
+
+    camera->setProjection (CameraNode::Projection::orthographic);
+    EXPECT_EQ (Internals::getNumProblems (*view), 1u);
+
+    camera->setFarPlane (10.0f);
+    EXPECT_EQ (Internals::getNumProblems (*view), 0u);
+
+    camera->setNearPlane (20.0f);
+    EXPECT_EQ (Internals::getNumProblems (*view), 1u);
+}
+
+TEST_F (SceneCameraComponentTests, WhatCodeSetsOnTheCameraNodeIsKeptWhenTheCameraMovesToAnotherParent)
+{
+    SceneComponent view;
+    SceneNodeComponent left, right;
+    SceneCameraComponent camera;
+
+    view.addAndMakeVisible (left);
+    view.addAndMakeVisible (right);
+    left.addAndMakeVisible (camera);
+
+    auto* lens = camera.getEntity().get<CameraNode>();
+    ASSERT_NE (lens, nullptr);
+    ASSERT_EQ (view.getScene()->getActiveCamera(), lens);
+
+    // The depth of field has no property
+    lens->fStop = 1.4f;
+    lens->focusDistance = 3.0f;
+
+    right.addAndMakeVisible (camera);
+
+    // The camera moved with its entity, which carries the same CameraNode, and is still the one of the scene
+    ASSERT_EQ (camera.getEntity().get<CameraNode>(), lens);
+    EXPECT_EQ (camera.getEntity().getParent(), right.getEntity());
+    EXPECT_FLOAT_EQ (lens->fStop, 1.4f);
+    EXPECT_FLOAT_EQ (lens->focusDistance, 3.0f);
+    EXPECT_EQ (view.getScene()->getActiveCamera(), lens);
+
+    // Taken out of the scene, it is not the camera the scene is seen through, before any frame releases it
+    right.removeChildComponent (camera);
+
+    EXPECT_TRUE (camera.getEntity().isValid());
+    EXPECT_EQ (view.getScene()->getActiveCamera(), nullptr);
+}

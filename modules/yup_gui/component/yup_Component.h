@@ -30,6 +30,7 @@ template <class T>
 class ComponentTestHelper;
 #endif
 
+class ComponentDocument;
 class ComponentTypeInfo;
 class FrameAttachment;
 class StyleContext;
@@ -637,7 +638,7 @@ public:
         Maps a point from the parent's local space to this component's local space.
 
         This applies the parent's getChildPointFromLocal() and then, if this component has an
-        effect, ComponentEffect::displayToContent().
+        effect that is active, ComponentEffect::displayToContent().
 
         @param parentPoint The point in the parent's local coordinates.
 
@@ -649,8 +650,8 @@ public:
     /**
         Maps a point from this component's local space to the parent's local space.
 
-        This applies ComponentEffect::contentToDisplay() if this component has an effect,
-        then the parent's getLocalPointFromChild().
+        This applies ComponentEffect::contentToDisplay() if this component has an effect that
+        is active, then the parent's getLocalPointFromChild().
 
         @param localPoint The point in this component's local coordinates.
 
@@ -866,6 +867,9 @@ public:
         When an area is fully covered by an opaque component (and its children), rendering
         can start from that component instead of from the root.
 
+        A component with a style set on it is not painted as an opaque one, whatever this
+        returns: see setStyle().
+
         @return True if the component is opaque, false otherwise.
      */
     bool isOpaque() const;
@@ -873,7 +877,13 @@ public:
     /**
         Set the opaque state of the component.
 
+        Components are opaque by default. An opaque component has to paint all its pixels with
+        opaque colors, as what is behind it is not painted: one that does not shows what was
+        there before.
+
         @param shouldBeOpaque True if the component should be opaque, false otherwise.
+
+        @see setStyle
      */
     void setOpaque (bool shouldBeOpaque);
 
@@ -1676,6 +1686,9 @@ public:
     /**
         Called when the mouse button is released.
 
+        A component that was hidden or disabled while the button was held on it is still called,
+        so that what mouseDown() began can end.
+
         @param event The mouse event.
      */
     void mouseUp (const MouseEvent& event) override;
@@ -1890,7 +1903,19 @@ public:
 
     /** Sets the style for this component.
 
-        @param newStyle The new style to apply to the component.
+        A style paints what it likes of the component: rounded shapes, translucent colors, or
+        nothing where it leaves a hole. So a component with a style set on it is not painted as
+        an opaque one, whatever isOpaque() returns: its parent is painted behind it, and the
+        style needs no background of its own. This holds for a style set from C++, for the
+        drawing of a `.yui` element and for the one a `drawing:` rule of a stylesheet installs.
+        The opaque state counts again once the style is removed.
+
+        A style the theme has for the type of the component is not set on it, and leaves the
+        opaque state as it is.
+
+        @param newStyle The new style to apply to the component, or nullptr to remove it.
+
+        @see setOpaque
     */
     void setStyle (ComponentStyle::Ptr newStyle);
 
@@ -2072,6 +2097,14 @@ public:
         The component subtree is first rendered to an offscreen GPU texture, then the effect's
         apply() method is called to composite the result back onto the main Graphics context.
         Pass nullptr to remove the effect.
+
+        Where that texture can't be made, without a GPU or for a component larger than a texture
+        of the device can be, the component is painted directly, without its effect. So it is
+        while the effect tells it has nothing to apply, see ComponentEffect::isActive().
+
+        An effect can be set on several components. It tells them itself when what it draws
+        changed (see ComponentEffect::invalidate), so changing a parameter of an effect of the
+        library needs no repaint() of the component.
 
         @param effect The effect to apply, or nullptr to remove.
         @see ComponentEffect
@@ -2259,8 +2292,10 @@ private:
     void sendEnablementChanged();
     void sendPaletteChanged();
     void updateFrameAttachments();
+    void internalThemeChanged();
     void internalRepaint();
-    void internalRepaint (const Rectangle<float>& rect);
+    void internalRepaint (const Rectangle<float>& rect, bool contentChanged = true);
+    void repaintEffect();
     void internalPaint (Graphics& g, const RectangleList<float>& repaintRegions, bool renderContinuous, const RectangleList<float>* activeClipRegion = nullptr);
     void internalMouseEnter (const MouseEvent& event);
     void internalMouseExit (const MouseEvent& event);
@@ -2353,6 +2388,7 @@ private:
     void sendChildBoundsChangedToParent();
     void setStyleTransform (const AffineTransform& newTransform);
 
+    bool isOpaqueForPainting() const noexcept;
     bool hasOpaqueChildCoveringArea (const Rectangle<float>& area);
     AffineTransform getTransformToTopLevelComponent() const;
     Point<float> getTopLevelScreenOrigin() const;
@@ -2362,11 +2398,14 @@ private:
     EdgeSpacing<float> getOffscreenMargin() const;
     Rectangle<float> getEffectBounds (float scale) const;
     void paintChildrenAndOverChildren (Graphics& g, const RectangleList<float>& clipRegion, bool renderContinuous, const RectangleList<float>* activeClipRegion = nullptr);
+    ComponentEffect* getActiveComponentEffect() const;
     bool hasActiveEffect() const noexcept;
     void applyActiveEffects (Graphics& g, GpuTexture::Ptr texture, Rectangle<float> bounds, float scale);
     void releaseUnusedEffectCanvases() noexcept;
+    void releaseGpuResources (bool withChildren);
     GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas = nullptr, const std::optional<RectangleList<float>>& dirtyRegion = std::nullopt, bool holdPaintMargin = false);
     std::optional<RectangleList<float>> takeEffectDirtyRegion (bool renderContinuous);
+    void markEffectCanvasDirty();
     void invalidateCanvasesIfThemeChanged();
     GpuCanvas::Ptr renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects, float scale, GpuCanvas::Ptr reuseCanvas = nullptr);
 
@@ -2375,6 +2414,8 @@ private:
 #endif
 
     friend class ComponentNative;
+    friend class ComponentDocument;
+    friend class ComponentEffect;
     friend class SDLComponentNative;
     friend class PointerSimulator;
     friend class StyleContext;
@@ -2406,6 +2447,7 @@ private:
     std::unique_ptr<ThemePalette> palette;
     std::unique_ptr<StyleState> styleState;
     std::unique_ptr<StyleContext> styleContext;
+    ComponentDocument* componentDocument = nullptr;
     Array<Identifier> styleClasses;
     const ComponentTypeInfo* instanceTypeInfo = nullptr;
     NamedValueSet properties;
@@ -2418,6 +2460,7 @@ private:
     GpuCanvas::Ptr filterIntermediateCanvas;
     EdgeSpacing<int> offscreenCanvasMargin;
     EdgeSpacing<float> offscreenPaintedMargin;
+    float offscreenPaintedScale = 0.0f;
     RectangleList<float> effectDirtyRegion;
     static constexpr int maximumDirtyRectangles = 8;
     GpuCanvas::Ptr presentedCanvas;

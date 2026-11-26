@@ -47,10 +47,9 @@ drawing Meter {
            stroke: palette.text; strokeWidth: 2; }
 }
 
-// The black keys lie over the white ones, so they are drawn after them
+// The black keys lie over the white ones, so they are drawn after them. What is behind the
+// keyboard shows between the keys: a drawing needs no background of its own
 drawing Keys {
-    rect { bounds: bounds; fill: palette.surface; }
-
     repeat i in 0 .. len (keyNotes) {
         rect { id: white; bounds: keyBounds[i].reduced (0.5); cornerRadius: 2; visible: ! keyBlack[i];
                fill: keyPressed[i] ? palette.accent : (keyHovered[i] ? palette.textMuted : palette.text); }

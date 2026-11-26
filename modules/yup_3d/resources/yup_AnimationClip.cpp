@@ -72,12 +72,17 @@ void AnimationClip::Track::sample (float time, Span<float> output) const noexcep
         const auto t2 = t * t;
         const auto t3 = t2 * t;
 
+        // A rotation and its opposite are the same: the next key is taken with the sign that is nearer to
+        // this one, its tangent with it, as slerp() does. The spline would pass near zero between the two
+        const auto isOpposite = path == Path::rotation && std::inner_product (from, from + numComponents, to, 0.0f) < 0.0f;
+        const auto sign = isOpposite ? -1.0f : 1.0f;
+
         for (size_t i = 0; i < numComponents; ++i)
         {
             output[i] = (2.0f * t3 - 3.0f * t2 + 1.0f) * from[i]
                       + (t3 - 2.0f * t2 + t) * interval * outTangent[i]
-                      + (3.0f * t2 - 2.0f * t3) * to[i]
-                      + (t3 - t2) * interval * inTangent[i];
+                      + (3.0f * t2 - 2.0f * t3) * sign * to[i]
+                      + (t3 - t2) * interval * sign * inTangent[i];
         }
     }
     else if (path != Path::rotation)
@@ -133,6 +138,14 @@ Result AnimationClip::addTrack (Track track)
 
     if (numValues == 0 || track.values.size() != numValues)
         return Result::fail ("The number of values (" + String (track.values.size()) + ") doesn't match the number of keys (" + String (track.times.size()) + ")");
+
+    const auto valuesAreFinite = std::all_of (track.values.begin(), track.values.end(), [] (float value)
+    {
+        return std::isfinite (value);
+    });
+
+    if (! valuesAreFinite)
+        return Result::fail ("The values of the keys must be finite");
 
     duration = jmax (duration, track.times.back());
     tracks.push_back (std::move (track));

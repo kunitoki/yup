@@ -86,12 +86,8 @@ DeformNode::DeformNode (Mesh::Ptr meshToDeform, Skin::Ptr skinToFollow, std::vec
     weights.resize (static_cast<size_t> (source->getNumMorphTargets()));
     setWeights (source->getMorphWeights());
 
-    // The mesh completed its primitives when it took them, so the copy takes them as they are, vertex
-    // for vertex: what comes with the vertices of the mesh goes with the ones of the copy as well
     deformed = new Mesh (source->getName());
-
-    for (const auto& primitive : source->getPrimitives())
-        deformed->addPrimitive (primitive.vertices, primitive.indices, primitive.material);
+    copyAddedPrimitives();
 
     sourceChangeCount = source->getChangeCount();
 }
@@ -113,6 +109,10 @@ void DeformNode::setWeights (Span<const float> newWeights)
 
 void DeformNode::update ([[maybe_unused]] double deltaSeconds)
 {
+    // A MeshNode given the shared mesh again, by being attached anew for example, draws the copy again
+    if (auto* meshNode = getEntity().get<MeshNode>(); meshNode != nullptr && meshNode->mesh == source)
+        meshNode->mesh = deformed;
+
     deform();
 }
 
@@ -139,11 +139,38 @@ void DeformNode::detachedFromEntity()
 
 //==============================================================================
 
+bool DeformNode::copyAddedPrimitives()
+{
+    const auto numCopied = deformed->getNumPrimitives();
+    const auto numPrimitives = source->getNumPrimitives();
+
+    if (numCopied >= numPrimitives)
+        return false;
+
+    // The mesh completed its primitives when it took them, so the copy takes what is drawn of them as it
+    // is, vertex for vertex: what comes with the vertices of the mesh goes with the ones of the copy as well
+    for (auto index = numCopied; index < numPrimitives; ++index)
+        deformed->addDrawnCopy (source->getPrimitive (index));
+
+    // A primitive the mesh took once the node was made can have more morph targets, and joints the skin lacks
+    weights.resize (static_cast<size_t> (source->getNumMorphTargets()));
+
+    if (skin != nullptr && skin->getNumJoints() < source->getNumJoints())
+    {
+        jassertfalse; // Only a skin that has every joint the mesh refers to can move it
+        skin = nullptr;
+    }
+
+    return true;
+}
+
 void DeformNode::deform()
 {
-    // Every entity drawing a mesh shows the vertices the mesh is given: the copy takes them again
+    // Every entity drawing a mesh shows the vertices the mesh is given and the primitives it takes: the
+    // copy takes them again
     const auto sourceChanges = source->getChangeCount();
-    const auto sourceChanged = std::exchange (sourceChangeCount, sourceChanges) != sourceChanges;
+    const auto verticesChanged = std::exchange (sourceChangeCount, sourceChanges) != sourceChanges;
+    const auto sourceChanged = copyAddedPrimitives() || verticesChanged;
 
     // With new weights or new vertices, and the first time, the mesh is deformed whatever its joints did
     const auto deformsAnyway = std::exchange (stale, false) || sourceChanged;
@@ -151,6 +178,13 @@ void DeformNode::deform()
 
     if (! deformsAnyway && ! jointsMoved)
         return;
+
+    // The copy has the vertices of the mesh one for one, so it takes the ones it is given
+    const auto store = [this] (int primitiveIndex, Span<const Mesh::Vertex> newVertices)
+    {
+        [[maybe_unused]] const auto result = deformed->setVertices (primitiveIndex, newVertices);
+        jassert (result.wasOk());
+    };
 
     // What the joints move is measured for the next time they do, see updateJointMatrices(): how far these
     // vertices get from the origin of the mesh, and the bounds of where they land
@@ -168,7 +202,7 @@ void DeformNode::deform()
         if (! skinned && primitive.morphTargets.empty())
         {
             if (sourceChanged)
-                deformed->setVertices (index, primitive.vertices);
+                store (index, primitive.vertices);
 
             continue;
         }
@@ -198,7 +232,7 @@ void DeformNode::deform()
             vertex.tangent = { tangent.getX(), tangent.getY(), tangent.getZ(), vertex.tangent[3] };
         }
 
-        deformed->setVertices (index, vertices);
+        store (index, vertices);
     }
 
     skinnedReach = std::sqrt (reachSquared);

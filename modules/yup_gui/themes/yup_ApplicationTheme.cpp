@@ -33,6 +33,9 @@ ApplicationTheme::~ApplicationTheme() = default;
 void ApplicationTheme::setGlobalTheme (ApplicationTheme::Ptr s)
 {
     getGlobalThemeInstance() = std::move (s);
+
+    // Another theme being the global one is a change the windows look for, as a change of the theme itself
+    makeGeneration();
 }
 
 ApplicationTheme::Ptr ApplicationTheme::getGlobalTheme()
@@ -46,10 +49,20 @@ ApplicationTheme::Ptr& ApplicationTheme::getGlobalThemeInstance()
     return globalTheme;
 }
 
-uint32 ApplicationTheme::makeGeneration() noexcept
+std::atomic<uint32>& ApplicationTheme::getGenerationCounter() noexcept
 {
     static std::atomic<uint32> lastGeneration { 0 };
-    return ++lastGeneration;
+    return lastGeneration;
+}
+
+uint32 ApplicationTheme::makeGeneration() noexcept
+{
+    return ++getGenerationCounter();
+}
+
+uint32 ApplicationTheme::getLastGeneration() noexcept
+{
+    return getGenerationCounter().load();
 }
 
 //==============================================================================

@@ -64,7 +64,6 @@ ProgressBar::ProgressBar (StringRef componentID)
     : Component (componentID)
 {
     setOpaque (false);
-    lastAnimationTime = Time::getCurrentTime();
 }
 
 ProgressBar::~ProgressBar() = default;
@@ -91,12 +90,10 @@ void ProgressBar::setProgress (double newProgress, NotificationType notification
     {
         indeterminate.set (true);
         currentProgress.set (-1.0);
+        updateFrameAttachment();
 
         if (! wasIndeterminate)
-        {
             animationPhase = 0.0;
-            lastAnimationTime = Time::getCurrentTime();
-        }
 
         const BailOutChecker bailOutChecker (this);
 
@@ -122,6 +119,7 @@ void ProgressBar::setProgress (double newProgress, NotificationType notification
     newProgress = jlimit (0.0, 1.0, newProgress);
     indeterminate.set (false);
     currentProgress.set (newProgress);
+    updateFrameAttachment();
 
     const bool progressDidChange = ! approximatelyEqual (oldProgress, newProgress);
 
@@ -171,22 +169,28 @@ void ProgressBar::paint (Graphics& g)
     }
 }
 
-void ProgressBar::refreshDisplay ([[maybe_unused]] double lastFrameTimeSeconds)
+void ProgressBar::refreshDisplay (double lastFrameTimeSeconds)
 {
     // Animate in indeterminate mode
     if (indeterminate.get())
     {
-        auto currentTime = Time::getCurrentTime();
-        auto deltaTime = (currentTime - lastAnimationTime).inSeconds();
-        lastAnimationTime = currentTime;
-
         // Update animation phase (full cycle every 2 seconds)
-        animationPhase += deltaTime * 0.5;
-        while (animationPhase >= 1.0)
-            animationPhase -= 1.0;
+        animationPhase = std::fmod (animationPhase + jmax (0.0, lastFrameTimeSeconds) * 0.5, 1.0);
 
         repaint();
     }
+
+    updateFrameAttachment();
+}
+
+void ProgressBar::visibilityChanged()
+{
+    updateFrameAttachment();
+}
+
+void ProgressBar::parentHierarchyChanged()
+{
+    updateFrameAttachment();
 }
 
 //==============================================================================
@@ -194,6 +198,11 @@ void ProgressBar::updateProgress (double newProgress, NotificationType notificat
 {
     repaint();
     sendProgressChanged (notification);
+}
+
+void ProgressBar::updateFrameAttachment()
+{
+    frameAttachment.setActive (indeterminate.get() && isShowing());
 }
 
 void ProgressBar::sendProgressChanged (NotificationType notification)

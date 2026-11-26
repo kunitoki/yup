@@ -1,12 +1,16 @@
 import * as vscode from "vscode";
 import { realPathOf } from "./documentFiles";
+import { characterOf, toolColumnOf } from "./positions";
 
 /** Who asks the tool what the editor features show of a document, as it is in its editor. */
 export interface LanguageHost {
     log (message: string): void;
 
-    /** Asks a command of the tool answering in JSON about a document, with its arguments after the document. */
-    ask (document: vscode.TextDocument, command: string, args?: string[]): Promise<Record<string, unknown> | undefined>;
+    /**
+        Asks a command of the tool answering in JSON about a document, with its arguments after the document. What
+        is asked with the token of the editor is not run once the editor stopped waiting, or asked for it again.
+    */
+    ask (document: vscode.TextDocument, command: string, args?: string[], cancellation?: vscode.CancellationToken): Promise<Record<string, unknown> | undefined>;
 
     /** What a document is made of: its symbols, its imports and its colors. */
     outline (document: vscode.TextDocument): Promise<Record<string, unknown> | undefined>;
@@ -48,33 +52,44 @@ function text (value: unknown): string {
     return typeof value === "string" ? value : "";
 }
 
-// The tool tells a place by its line and its column from 1, and a range by where it starts and where it ends
-function rangeOf (value: unknown): vscode.Range | undefined {
+/**
+    Returns where an editor has a column of the tool on a line of a document, both counted from 1 as the tool
+    tells them. The tool counts characters and an editor the units they are written with (see characterOf).
+
+    @param document The document as an editor holds it. Without it the column is taken as it is.
+*/
+export function characterIn (document: vscode.TextDocument | undefined, line: number, column: number): number {
+    return characterOf (document !== undefined && line >= 1 && line <= document.lineCount ? document.lineAt (line - 1).text : "", column);
+}
+
+// The tool tells a range of a document by the lines and the columns it starts and ends at
+function rangeOf (document: vscode.TextDocument, value: unknown): vscode.Range | undefined {
     const places = Array.isArray (value) && value.length === 4 && value.every (place => typeof place === "number") ? value as number[] : undefined;
 
-    return places === undefined ? undefined : new vscode.Range (places[0] - 1, places[1] - 1, places[2] - 1, places[3] - 1);
+    return places === undefined ? undefined : new vscode.Range (places[0] - 1, characterIn (document, places[0], places[1]),
+                                                                places[2] - 1, characterIn (document, places[2], places[3]));
 }
 
-function placeOf (position: vscode.Position): string[] {
-    return ["--at", `${position.line + 1}:${position.character + 1}`];
+function placeOf (document: vscode.TextDocument, position: vscode.Position): string[] {
+    return ["--at", `${position.line + 1}:${toolColumnOf (document.lineAt (position.line).text, position.character)}`];
 }
 
-function symbolOf (symbol: Record<string, unknown>): vscode.DocumentSymbol | undefined {
-    const range = rangeOf (symbol["range"]);
+function symbolOf (document: vscode.TextDocument, symbol: Record<string, unknown>): vscode.DocumentSymbol | undefined {
+    const range = rangeOf (document, symbol["range"]);
     const name = text (symbol["name"]);
 
     if (range === undefined || name.length === 0)
         return undefined;
 
     const described = new vscode.DocumentSymbol (name, text (symbol["detail"]), symbolKinds[text (symbol["kind"])] ?? vscode.SymbolKind.Object,
-                                                 range, rangeOf (symbol["selection"]) ?? range);
+                                                 range, rangeOf (document, symbol["selection"]) ?? range);
 
-    described.children = symbolsOf (symbol["children"]);
+    described.children = symbolsOf (document, symbol["children"]);
     return described;
 }
 
-function symbolsOf (symbols: unknown): vscode.DocumentSymbol[] {
-    return records (symbols).map (symbolOf).filter ((symbol): symbol is vscode.DocumentSymbol => symbol !== undefined);
+function symbolsOf (document: vscode.TextDocument, symbols: unknown): vscode.DocumentSymbol[] {
+    return records (symbols).map (symbol => symbolOf (document, symbol)).filter ((symbol): symbol is vscode.DocumentSymbol => symbol !== undefined);
 }
 
 /**
@@ -85,8 +100,8 @@ export function registerLanguageFeatures (host: LanguageHost): vscode.Disposable
     const selector: vscode.DocumentSelector = { language: "yui" };
 
     const completions: vscode.CompletionItemProvider = {
-        async provideCompletionItems (document, position) {
-            const found = await host.ask (document, "complete", placeOf (position));
+        async provideCompletionItems (document, position, token) {
+            const found = await host.ask (document, "complete", placeOf (document, position), token);
 
             return records (found?.["items"]).map (item => {
                 const completion = new vscode.CompletionItem (text (item["label"]), completionKinds[text (item["kind"])] ?? vscode.CompletionItemKind.Text);
@@ -103,17 +118,17 @@ export function registerLanguageFeatures (host: LanguageHost): vscode.Disposable
             const outline = await host.outline (document);
 
             const imports = records (outline?.["imports"]).map (imported => {
-                const range = rangeOf (imported["range"]);
+                const range = rangeOf (document, imported["range"]);
                 return range === undefined ? undefined : new vscode.DocumentSymbol (text (imported["path"]) || "import", "import", vscode.SymbolKind.File, range, range);
             });
 
-            return imports.filter ((symbol): symbol is vscode.DocumentSymbol => symbol !== undefined).concat (symbolsOf (outline?.["symbols"]));
+            return imports.filter ((symbol): symbol is vscode.DocumentSymbol => symbol !== undefined).concat (symbolsOf (document, outline?.["symbols"]));
         }
     };
 
     const definitions: vscode.DefinitionProvider = {
-        async provideDefinition (document, position) {
-            const found = await host.ask (document, "definition", placeOf (position));
+        async provideDefinition (document, position, token) {
+            const found = await host.ask (document, "definition", placeOf (document, position), token);
             const file = realPathOf (text (found?.["file"]));
             const line = found?.["line"];
             const column = found?.["column"];
@@ -121,13 +136,16 @@ export function registerLanguageFeatures (host: LanguageHost): vscode.Disposable
             if (file === undefined || typeof line !== "number" || typeof column !== "number")
                 return undefined;
 
-            return new vscode.Location (vscode.Uri.file (file), new vscode.Position (line - 1, column - 1));
+            // What is defined in another file is placed by its text when an editor holds it
+            const defining = vscode.workspace.textDocuments.find (open => open.uri.scheme === "file" && open.uri.fsPath === file);
+
+            return new vscode.Location (vscode.Uri.file (file), new vscode.Position (line - 1, characterIn (defining, line, column)));
         }
     };
 
     const hovers: vscode.HoverProvider = {
-        async provideHover (document, position) {
-            const found = await host.ask (document, "hover", placeOf (position));
+        async provideHover (document, position, token) {
+            const found = await host.ask (document, "hover", placeOf (document, position), token);
             const code = text (found?.["code"]);
 
             if (found === undefined || code.length === 0)
@@ -143,7 +161,7 @@ export function registerLanguageFeatures (host: LanguageHost): vscode.Disposable
             if (values.length > 0)
                 told.appendMarkdown (`\n\n${values.join (", ")}`);
 
-            return new vscode.Hover (told, rangeOf (found["range"]));
+            return new vscode.Hover (told, rangeOf (document, found["range"]));
         }
     };
 
@@ -152,7 +170,7 @@ export function registerLanguageFeatures (host: LanguageHost): vscode.Disposable
             const outline = await host.outline (document);
 
             return records (outline?.["colors"]).flatMap (color => {
-                const range = rangeOf (color["range"]);
+                const range = rangeOf (document, color["range"]);
                 const written: unknown = color["color"];
                 const parts = Array.isArray (written) ? written.map (Number) : [];
 

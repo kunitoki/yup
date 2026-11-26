@@ -81,7 +81,8 @@ public:
     /** Creates the zeroed uniforms of a reflected uniform block.
 
         A block larger than maxSizeInBytes gives empty uniforms, as a block of no size
-        does: a reflection read from a file can declare any size.
+        does: a reflection read from a file can declare any size. So is a member left
+        out when it reaches past the block, or is an array declaring no stride.
 
         @param block  The block, one of ShaderReflection::uniformBuffers. Its members
                       and its size are read, not its name nor where it is bound.
@@ -171,6 +172,16 @@ public:
     bool set (StringRef name, const var& value);
 
     //==============================================================================
+    /** Returns true if both are the uniforms of the same block: the same members, laid
+        out the same way in as many bytes, whatever the bytes hold.
+
+        GpuImageShader::draw() takes the uniforms of its shader only. Those of another
+        block of the same size would fill its members with values meant for others.
+
+        @param other  The uniforms to compare the layout with.
+    */
+    bool hasSameLayoutAs (const ShaderUniforms& other) const noexcept;
+
     /** Returns true if both hold the same members and the same bytes. */
     bool operator== (const ShaderUniforms&) const = default;
 

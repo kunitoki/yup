@@ -136,6 +136,29 @@ TEST_F (FrameResourcesMetalTests, ResizeReleasesTransients)
     resources.endFrame();
 }
 
+TEST_F (FrameResourcesMetalTests, ReleasedTexturesAreCreatedAgainByTheNextFrameOfTheSameSize)
+{
+    FrameResources resources (device);
+    const GpuTextureDesc desc (64, 64, GpuTextureFormat::rgba16float, true);
+
+    resources.beginFrame (64, 64);
+    auto transient = resources.acquire (desc);
+    auto history = resources.getHistory ("taa", desc);
+    resources.endFrame();
+
+    resources.releaseTextures();
+
+    // Only the test still holds them
+    EXPECT_EQ (transient->getReferenceCount(), 1);
+    EXPECT_EQ (history.write->getReferenceCount(), 1);
+    EXPECT_EQ (resources.findHistory ("taa").read, nullptr);
+
+    resources.beginFrame (64, 64);
+    EXPECT_NE (resources.acquire (desc), transient);
+    EXPECT_FALSE (resources.getHistory ("taa", desc).valid);
+    resources.endFrame();
+}
+
 TEST_F (FrameResourcesMetalTests, InvalidateHistoryKeepsTexturesButMarksThemInvalid)
 {
     FrameResources resources (device);

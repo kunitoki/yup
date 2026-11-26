@@ -466,6 +466,7 @@ extern const std::size_t <RESOURCE_NAME>_size;
 
 `RESOURCE_NAMES` and the files are parallel lists: the *n*-th name is bound to
 the *n*-th file, the `RESOURCES` counting first and the `INCLUDES` after them.
+Configuring fails when there are more or fewer names than files.
 The library is regenerated only when a resource's bytes change, so incremental
 builds stay fast. The target is placed in the `EmbeddedResources` IDE folder.
 

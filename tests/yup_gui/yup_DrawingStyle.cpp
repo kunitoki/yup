@@ -83,6 +83,14 @@ protected:
     */
     static GpuImageShader::Ptr makeShader (std::initializer_list<ShaderMember> members, int numTextures = 0, const StringArray& textureNames = {})
     {
+        const auto created = GpuImageShader::createFromBundle (makeShaderBundle (members, numTextures, textureNames));
+        EXPECT_TRUE (created.wasOk()) << created.getErrorMessage();
+        return created.wasOk() ? created.getValue() : nullptr;
+    }
+
+    /** The bundle of a shader made by hand, see makeShader. */
+    static ShaderBundle::Ptr makeShaderBundle (std::initializer_list<ShaderMember> members, int numTextures = 0, const StringArray& textureNames = {})
+    {
         ShaderReflection reflection;
 
         if (members.size() > 0)
@@ -119,6 +127,15 @@ protected:
             reflection.separateImages.push_back (texture);
         }
 
+        // The pixel every fragment stage writes
+        ShaderReflection::ResourceBinding pixel;
+        pixel.name = "color";
+        pixel.type = ShaderReflection::ResourceType::stageOutput;
+        pixel.baseType = ShaderReflection::BaseType::float32;
+        pixel.vecSize = 4;
+
+        reflection.stageOutputs.push_back (pixel);
+
         ShaderBundle::Ptr bundle (new ShaderBundle());
 
         for (const auto stage : { ShaderStage::vertex, ShaderStage::fragment })
@@ -133,9 +150,7 @@ protected:
             bundle->addShader (std::move (info));
         }
 
-        const auto created = GpuImageShader::createFromBundle (bundle);
-        EXPECT_TRUE (created.wasOk()) << created.getErrorMessage();
-        return created.wasOk() ? created.getValue() : nullptr;
+        return bundle;
     }
 
     /** Finds the `shader` blocks of a text by name, each compiled as the shader given for it: one given none could
@@ -226,6 +241,46 @@ TEST_F (DrawingStyleTest, SetStyleIsReturnedByComponentStyleLookup)
     slider.setStyle (style.getReference());
 
     EXPECT_EQ (ApplicationTheme::findComponentStyle (slider).get(), style.getReference().get());
+}
+
+TEST_F (DrawingStyleTest, ADrawingOnAnOpaqueComponentLetsItsParentPaintBehindIt)
+{
+    struct Backdrop : Component
+    {
+        void paint (Graphics&) override { ++numPaints; }
+
+        int numPaints = 0;
+    };
+
+    Backdrop backdrop;
+    backdrop.setBounds (0.0f, 0.0f, 48.0f, 48.0f);
+    backdrop.setVisible (true);
+
+    // Opaque, as components are by default, and covering the whole backdrop
+    Component drawn;
+    drawn.setBounds (0.0f, 0.0f, 48.0f, 48.0f);
+    backdrop.addAndMakeVisible (drawn);
+
+    // A disc leaves the corners of the component to what is behind it
+    const auto parsed = YuiParser::parse (R"yui(
+        drawing Disc {
+            circle { center: bounds.center; radius: 20; fill: #ff0000; }
+        })yui");
+    ASSERT_TRUE (parsed.wasOk()) << parsed.diagnostics.front().toString();
+
+    auto style = DrawingStyle::create (drawn, parsed.document.getChildWithName ("drawing"));
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    drawn.setStyle (style.getReference());
+    ASSERT_TRUE (drawn.isOpaque());
+
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    auto renderer = context->makeRenderer (48, 48);
+    Graphics g (*context, *renderer);
+
+    yup::ComponentTestHelper<Component>::triggerPaint (backdrop, g, backdrop.getLocalBounds());
+
+    EXPECT_EQ (backdrop.numPaints, 1);
 }
 
 TEST_F (DrawingStyleTest, PaintsThroughComponentStyleWithoutThrowing)
@@ -2855,6 +2910,156 @@ TEST_F (DrawingStyleShaderGpuTest, AShaderTheDeviceCantDrawPaintsNothingAndStops
     EXPECT_EQ (countRepaintsOfAFrame (native, 0.5), 0);
 
     window.removeChildComponent (component);
+}
+
+TEST_F (DrawingStyleShaderGpuTest, TellsWhatTheDeviceRefusedOfTheShadersItRuns)
+{
+    // Bundles with no variant for Metal: one painted by a use, the other run by the filter of a layer
+    const String text (R"yui(
+        shader Plasma { fragment: "fx/plasma.frag"; }
+        shader Tone { fragment: "fx/tone.frag"; }
+
+        drawing Screen {
+            rect { bounds: bounds; fill: #0000ff; }
+            use Plasma { bounds: rect (0, 0, 8, 8); }
+
+            layer {
+                filter { bounds: rect (8, 8, 8, 8); use Tone {} }
+                rect { bounds: rect (8, 8, 8, 8); fill: #ff0000; }
+            }
+        })yui");
+
+    const auto plasma = makeShader ({ { "speed", 1 } });
+    const auto tone = makeShader ({ { "gain", 1 } }, 1);
+
+    DrawnComponent component (parseYui (text), nullptr, findShaders (text, { { "Plasma", plasma }, { "Tone", tone } }));
+
+    auto* style = dynamic_cast<DrawingStyle*> (component.getStyle().get());
+    ASSERT_NE (style, nullptr);
+
+    const auto findFailure = [style] (const GpuImageShader::Ptr& shader)
+    {
+        for (const auto& failure : style->getShaderFailures())
+            if (failure.shader.shader == shader)
+                return failure;
+
+        return DrawingStyle::ShaderFailure();
+    };
+
+    // Nothing is known of a drawing that was not painted
+    EXPECT_TRUE (style->getShaderFailures().empty());
+
+    // The use paints nothing and the filter leaves its layer as it is, each keeping why
+    expectPixel (component, 4, 4, Color (0xff0000ff));
+    expectPixel (component, 12, 12, Color (0xffff0000));
+
+    EXPECT_EQ (style->getShaderFailures().size(), 2u);
+    EXPECT_TRUE (findFailure (plasma).message.contains ("variant")) << findFailure (plasma).message;
+    EXPECT_EQ (findFailure (plasma).shader.block.getProperty ("name").toString(), String ("Plasma"));
+    EXPECT_TRUE (findFailure (tone).message.contains ("variant")) << findFailure (tone).message;
+    EXPECT_EQ (findFailure (tone).shader.block.getProperty ("name").toString(), String ("Tone"));
+
+    // Painted again, the same failures stand
+    expectPixel (component, 4, 4, Color (0xff0000ff));
+    EXPECT_EQ (style->getShaderFailures().size(), 2u);
+
+    // Letting go of what it keeps of the device, the style forgets what that device refused
+    style->releaseResources();
+    EXPECT_TRUE (style->getShaderFailures().empty());
+
+    expectPixel (component, 12, 12, Color (0xffff0000));
+    EXPECT_EQ (style->getShaderFailures().size(), 2u);
+}
+
+TEST_F (DrawingStyleShaderGpuTest, AStylesheetReportsWhatTheDeviceRefusedOfAShaderWhereItIsDeclared)
+{
+    /** Painted by the drawing the stylesheet gives it. */
+    struct Styled : Component
+    {
+        Styled()
+        {
+            setOpaque (false);
+            setBounds (0.0f, 0.0f, 16.0f, 16.0f);
+        }
+
+        void paint (Graphics& g) override
+        {
+            if (auto currentStyle = getStyle())
+                currentStyle->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
+        }
+    };
+
+    // The bundles a build makes of the shaders, for other graphics APIs than Metal
+    std::map<String, MemoryBlock> bundles;
+    ASSERT_TRUE (makeShaderBundle ({ { "speed", 1 } })->saveToMemoryBlock (bundles["fx/plasma.frag.ysl"]).wasOk());
+    ASSERT_TRUE (makeShaderBundle ({ { "gain", 1 } }, 1)->saveToMemoryBlock (bundles["fx/tone.frag.ysl"]).wasOk());
+
+    YuiDocument document;
+    document.setAssetReader ([bundles] (const String& path) -> std::optional<MemoryBlock>
+    {
+        const auto found = bundles.find (path);
+        return found != bundles.end() ? std::optional<MemoryBlock> (found->second) : std::nullopt;
+    });
+
+    const auto loaded = document.loadFromString (R"yui(
+        shader Plasma { fragment: "fx/plasma.frag"; }
+        shader Tone { fragment: "fx/tone.frag"; }
+
+        drawing Screen {
+            rect { bounds: bounds; fill: #0000ff; }
+            use Plasma { bounds: rect (0, 0, 8, 8); }
+
+            layer {
+                filter { bounds: rect (8, 8, 8, 8); use Tone {} }
+                rect { bounds: rect (8, 8, 8, 8); fill: #ff0000; }
+            }
+        }
+
+        style { #screen { drawing: Screen; } }
+
+        Component { })yui");
+
+    ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
+
+    auto* root = document.getRoot();
+    auto* context = root->getStyleContext();
+
+    Styled screen;
+    screen.setComponentID ("screen");
+    root->addAndMakeVisible (screen);
+    context->restyleNow();
+
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+    ASSERT_NE (dynamic_cast<DrawingStyle*> (screen.getStyle().get()), nullptr);
+
+    // Nothing is reported while the drawing is painted: the restyle its paint asked for tells both shaders
+    expectPixel (screen, 4, 4, Color (0xff0000ff));
+    expectPixel (screen, 12, 12, Color (0xffff0000));
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+
+    context->restyleNow();
+
+    const auto diagnostics = document.getDiagnostics();
+
+    const auto lineOf = [&diagnostics] (const String& start)
+    {
+        for (const auto& diagnostic : diagnostics)
+            if (diagnostic.message.startsWith (start))
+                return diagnostic.line;
+
+        return 0;
+    };
+
+    EXPECT_EQ (diagnostics.size(), 2u) << DataTreeDiagnostic::join (diagnostics);
+    EXPECT_EQ (lineOf ("The shader 'Plasma' can't be drawn: "), 2);
+    EXPECT_EQ (lineOf ("The shader 'Tone' can't be drawn: "), 3);
+
+    // And tells them once
+    expectPixel (screen, 4, 4, Color (0xff0000ff));
+    context->markDirty (*root);
+    context->restyleNow();
+
+    EXPECT_TRUE (context->getDiagnostics().empty()) << DataTreeDiagnostic::join (context->getDiagnostics());
 }
 
 #if YUP_ENABLE_SHADER_TRANSPILER

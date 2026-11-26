@@ -6,16 +6,22 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { after, afterEach, before, test } from "node:test";
-import { collectDocumentFiles, DocumentFiles, EditedDocument, isNamedBy, noteMissingFiles, runUntilFilesAreGiven, setUnsavedTexts } from "../src/documentFiles";
+import { collectDocumentFiles, DocumentFiles, EditedDocument, isNamedBy, leftOutProblem, noteMissingFiles, runUntilFilesAreGiven, setReadableFolders, setUnsavedTexts } from "../src/documentFiles";
 
 let root: string;
 
+// The folder of the tests stands for the workspace, which is where a document reads the files it names
 before (() => {
     root = fs.mkdtempSync (path.join (os.tmpdir (), "yui-document-files-"));
+    setReadableFolders (() => [root]);
 });
 
 after (() => fs.rmSync (root, { recursive: true, force: true }));
-afterEach (() => setUnsavedTexts (() => undefined));
+
+afterEach (() => {
+    setUnsavedTexts (() => undefined);
+    setReadableFolders (() => [root]);
+});
 
 // Writes the files of a project in a folder of its own, and returns where they are
 function write (project: string, files: Record<string, string | Uint8Array>): string {
@@ -222,4 +228,68 @@ test ("a file a document names is not read when it may not be", async () => {
     const collected = await collectDocumentFiles (edited (path.join (folder, "main.yui")), undefined, file => file.startsWith (folder + path.sep));
 
     assert.deepEqual (names (collected), ["main.yui", "part.yui"]);
+});
+
+test ("a file that does not fit is told by the limit it does not fit in", () => {
+    const large = leftOutProblem ("models/large.glb", 16 * 1024 * 1024 + 1);
+    const crowded = leftOutProblem ("logo.png", 1024);
+
+    assert.match (large, /^'models\/large[.]glb' [(]16[.]0 MB[)] is too large .* 16[.]0 MB at most/);
+    assert.doesNotMatch (large, /64[.]0 MB/);
+
+    // A small file left out for those given before it is not told to be large, nor by a size that says nothing
+    assert.match (crowded, /^'logo[.]png' is left out .* 64[.]0 MB together/);
+    assert.doesNotMatch (crowded, /too large|[(]/);
+});
+
+test ("a folder whose name starts with two dots is one of the document, not the one above it", async () => {
+    const folder = write ("dots", {
+        "main.yui": 'Image { source: "..cache/logo.png"; }\n',
+        "..cache/logo.png": "kept by a build"
+    });
+
+    const collected = await collectDocumentFiles (edited (path.join (folder, "main.yui")), undefined);
+
+    assert.deepEqual (names (collected), ["..cache/logo.png", "main.yui"]);
+    assert.deepEqual (collected.problems, []);
+});
+
+test ("a document reads what it names in the workspace and in its own folder, and tells what it leaves there", async () => {
+    const folder = write ("confined", {
+        "ui/main.yui": 'import "part.yui";\n\nImage { source: "../shared/logo.png"; }\nImage { source: "../shared/absent.png"; }\n',
+        "ui/part.yui": "component Part : Label { }\n",
+        "shared/logo.png": "of the workspace, not of the folder of the document"
+    });
+
+    const document = edited (path.join (folder, "ui", "main.yui"));
+
+    // With no workspace, a document only reads its own folder: what is there elsewhere is told, what is not is just missing
+    setReadableFolders (() => []);
+
+    const alone = await collectDocumentFiles (document, undefined);
+
+    assert.deepEqual (names (alone), ["main.yui", "part.yui"]);
+    assert.equal (alone.problems.length, 1);
+    assert.match (alone.problems[0], /^'[.][.][/\\]shared[/\\]logo[.]png' is outside/);
+
+    setReadableFolders (() => [folder]);
+
+    const inWorkspace = await collectDocumentFiles (document, undefined);
+
+    assert.deepEqual (names (inWorkspace), ["shared/logo.png", "ui/main.yui", "ui/part.yui"]);
+    assert.deepEqual (inWorkspace.problems, []);
+});
+
+test ("a link leading out of where a document reads is not followed", async () => {
+    const folder = write ("linked", { "main.yui": 'Image { source: "assets/logo.png"; }\n' });
+    const elsewhere = write ("elsewhere", { "logo.png": "not of the folder" });
+
+    fs.symlinkSync (elsewhere, path.join (folder, "assets"));
+    setReadableFolders (() => [folder]);
+
+    const collected = await collectDocumentFiles (edited (path.join (folder, "main.yui")), undefined);
+
+    assert.deepEqual (names (collected), ["main.yui"]);
+    assert.equal (collected.problems.length, 1);
+    assert.match (collected.problems[0], /^'assets[/\\]logo[.]png' is outside/);
 });

@@ -27,7 +27,7 @@ loader.setWatching (true);
 ```
 
 The paths of `import`s are relative to the folder of the file containing the
-`import` statement:
+`import` statement, and those starting with `/` to the folder of the main file:
 
 ```text
 ui/
@@ -39,7 +39,9 @@ ui/
 
 `onLoad` is called after every load with its result, including the reloads
 started by watching. A failing load keeps the interface shown, so a typo while
-editing is reported and fixed without losing anything. A
+editing is reported and fixed without losing anything. A main file that can't
+be read fails the load the same way: the document lists it as its problem and
+tells its listeners. A
 [`YuiView`](documents.md#showing-a-document) owns a document and its
 loader, and shows the root after every load.
 

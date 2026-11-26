@@ -63,14 +63,22 @@ public:
     explicit SynthNeonEffect (Options optionsToUse);
 
     void apply (yup::Graphics& g, yup::GpuTexture::Ptr input, yup::Rectangle<float> bounds) override;
+    void releaseResources() override;
     std::optional<yup::Point<float>> displayToContent (yup::Point<float> displayPoint, yup::Rectangle<float> bounds) const override;
     std::optional<yup::Point<float>> contentToDisplay (yup::Point<float> contentPoint, yup::Rectangle<float> bounds) const override;
 
     /** Sets how far the tube has powered on, from 0 when off to 1 when fully on, the default.
 
-        Called on the message thread; the next repaint draws it.
+        Called on the message thread. The components the effect is set on are drawn through it again,
+        without being painted again.
     */
-    void setOpening (float newOpening) noexcept { opening = yup::jlimit (0.0f, 1.0f, newOpening); }
+    void setOpening (float newOpening) noexcept
+    {
+        const auto clamped = yup::jlimit (0.0f, 1.0f, newOpening);
+
+        if (opening.exchange (clamped) != clamped)
+            invalidate();
+    }
 
 private:
     static constexpr float downsamplePerPoint = 2.0f;

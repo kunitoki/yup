@@ -5,9 +5,10 @@ import assert from "node:assert/strict";
 import * as http from "node:http";
 import { after, before, test } from "node:test";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
-import { AgentBackend, AgentServer } from "../src/agentServer";
+import { AgentBackend, AgentServer, hasToken } from "../src/agentServer";
 
 const image = Buffer.from ("not really a PNG").toString ("base64");
+const token = "0f1e2d3c4b5a69788796a5b4c3d2e1f0";
 const calls: { name: string; args: Record<string, unknown> }[] = [];
 
 const backend: AgentBackend = {
@@ -40,7 +41,7 @@ function request (method: string, path: string, headers: Record<string, string>)
 }
 
 before (async () => {
-    server = await AgentServer.start (backend, 0, "1.0.0");
+    server = await AgentServer.start (backend, 0, "1.0.0", token);
 });
 
 after (async () => {
@@ -55,7 +56,8 @@ test ("the server listens on the loopback address, at its endpoint", () => {
 test ("a client lists the tools, and gets the text and the image of a call", async () => {
     const client = new Client ({ name: "test", version: "1.0.0" }, { versionNegotiation: { mode: "auto" } });
 
-    await client.connect (new StreamableHTTPClientTransport (new URL (server.url)));
+    // The headers are those the file agents read lists the server with
+    await client.connect (new StreamableHTTPClientTransport (new URL (server.url), { requestInit: { headers: server.headers } }));
 
     const listed = await client.listTools ();
 
@@ -80,11 +82,39 @@ test ("a client lists the tools, and gets the text and the image of a call", asy
 test ("what is asked for another host, from the page of one or at another path is refused", async () => {
     const host = `127.0.0.1:${server.port}`;
 
-    assert.equal (await request ("POST", "/mcp", { Host: "example.com" }), 403);
-    assert.equal (await request ("POST", "/mcp", { Host: host, Origin: "https://example.com" }), 403);
-    assert.equal (await request ("GET", "/other", { Host: host }), 404);
+    assert.equal (await request ("POST", "/mcp", { Host: "example.com", ...server.headers }), 403);
+    assert.equal (await request ("POST", "/mcp", { Host: host, Origin: "https://example.com", ...server.headers }), 403);
+    assert.equal (await request ("GET", "/other", { Host: host, ...server.headers }), 404);
+});
+
+test ("what is asked without the token of the server is refused, whatever it asks for", async () => {
+    const host = `127.0.0.1:${server.port}`;
+
+    assert.deepEqual (server.headers, { Authorization: `Bearer ${token}` });
+
+    assert.equal (await request ("POST", "/mcp", { Host: host }), 401);
+    assert.equal (await request ("POST", "/mcp", { Host: host, Authorization: "Bearer " + token.replace ("0", "1") }), 401);
+    assert.equal (await request ("POST", "/mcp", { Host: host, Authorization: token }), 401);
+    assert.equal (await request ("GET", "/other", { Host: host }), 401);
+});
+
+test ("a token is told from the others whole, as the bearer of a request", () => {
+    assert.ok (hasToken (`Bearer ${token}`, token));
+    assert.ok (hasToken (`bearer ${token}`, token));
+
+    assert.ok (! hasToken (undefined, token));
+    assert.ok (! hasToken ("", token));
+    assert.ok (! hasToken (token, token));
+    assert.ok (! hasToken (`Basic ${token}`, token));
+    assert.ok (! hasToken (`Bearer ${token.substring (1)}`, token));
+    assert.ok (! hasToken (`Bearer ${token}0`, token));
+    assert.ok (! hasToken (`Bearer ${token} ${token}`, token));
+
+    // A server with no token answers nobody, rather than everybody
+    assert.ok (! hasToken ("Bearer ", ""));
+    assert.ok (! hasToken (undefined, ""));
 });
 
 test ("a port that is taken is not shared", async () => {
-    await assert.rejects (AgentServer.start (backend, server.port, "1.0.0"), { code: "EADDRINUSE" });
+    await assert.rejects (AgentServer.start (backend, server.port, "1.0.0", token), { code: "EADDRINUSE" });
 });

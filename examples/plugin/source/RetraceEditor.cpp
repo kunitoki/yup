@@ -160,10 +160,9 @@ void RetraceEditor::advanceOpening()
 
     opening = static_cast<float> (yup::jmin (1.0, (now - openingStart) / (openingSeconds * 1000.0)));
 
+    // The effect has the editor drawn through it again by itself, without the editor being painted again
     if (auto* neon = dynamic_cast<SynthNeonEffect*> (getComponentEffect().get()))
         neon->setOpening (opening);
-
-    repaint();
 
     if (opening >= 1.0f)
         startTimerHz (10);

@@ -15,7 +15,8 @@ just yui_tool --help
 ```
 
 builds it as `cmake/tools/yui_tool/build/yup_yui_tool` and runs it with the
-arguments given. The tool sets itself up as an application does, default theme
+arguments given. Every command takes `--help` too, which prints the usage of
+them all. The tool sets itself up as an application does, default theme
 included, but never opens a window, so it also runs on machines without a
 display such as build servers. `yup_yui_tool --version` prints its version.
 
@@ -242,7 +243,7 @@ yup_yui_tool render ui/main.yui --output main.png --size 640x760 --theme light -
 draws the interface of a document into a PNG, without opening a window. The
 size of the image, in logical pixels, is the first of:
 
-1. `--size <width>x<height>`;
+1. `--size <width>x<height>`, each side from 1 to 4096;
 2. the `width` and `height` the root component asks for;
 3. `--default-size <width>x<height>`, for a caller with a size to offer when
    the document has none;
@@ -306,8 +307,8 @@ frames at most, after which a warning tells that it is still changing. What is
 animated is shown where it starts: a clip that plays, a shader given the time
 and an animation are at their first frame.
 
-The errors of the document are printed as for `verify`. The image is still
-written when the document loads despite them.
+The problems of the document are printed as for `lint`, its warnings included.
+The image is still written when the document loads despite them.
 
 | Exit code | Meaning |
 |---|---|
@@ -384,7 +385,7 @@ yup_yui_tool definition ui/main.yui --at 42:17
 yup_yui_tool hover ui/main.yui --at 42:17
 ```
 
-`--at <line>:<column>` is a place of the file, both from 1. The file is read
+`--at <line>:<column>` is a place of the file, both whole numbers from 1. The file is read
 without being loaded, so these also answer for one that has errors, as a
 document being typed has most of the time. The files it imports are read with
 it.
@@ -632,21 +633,30 @@ of the project, which Claude Code and GitHub Copilot read:
 ```
 
 `yup_yui_tool mcp` serves them by itself, on its standard input and output,
-with no editor. Paths are relative to the folder it is started in. `yui_render`
+with no editor. Paths are relative to the folder it is started in, which the
+files it reads and writes have to be inside of, with no link on the way.
+`yui_render`
 needs a graphics device, as `render` does, so it fails on Linux, where
 `yui_inspect` still answers.
 
 ```json
 {
     "mcpServers": {
-        "yui": { "type": "http", "url": "http://127.0.0.1:7391/mcp" }
+        "yui": {
+            "type": "http",
+            "url": "http://127.0.0.1:7391/mcp",
+            "headers": { "Authorization": "Bearer <token>" }
+        }
     }
 }
 ```
 
 The [VS Code extension](#vs-code) serves them from the editor, with no native
 tool to build: it checks the documents as they are in their editors, unsaved
-changes included, and draws in its preview panel on every platform.
+changes included, and draws in its preview panel on every platform. It only
+answers the requests sending its token, which its `YUI: Set Up Agent Tools`
+command writes there, once git is known not to commit that file (see
+[VS Code](#vs-code)).
 
 ## Importing an SVG
 
@@ -725,7 +735,8 @@ support to VS Code:
   are what the tool [answers an editor](#answering-an-editor);
 - `YUI: Open Preview`, a panel beside the editor running the interface, a
   drawing, a palette or a component of the file;
-- the `YUI: Import SVG as Drawing` command;
+- the `YUI: Import SVG as Drawing` command, which saves the drawing as a `.yui`
+  file;
 - the [tools for agents](#tools-for-agents), once `YUI: Set Up Agent Tools` was
   run in a workspace.
 
@@ -758,7 +769,8 @@ their buffers and images, and its textures. They count for the problems, the
 preview and the tools for agents, as they are in their editors while unsaved,
 and again when they change in the workspace. A file over 16 MB, and what a
 document reads beyond 64 MB together, is left out with a warning and counts
-as missing.
+as missing. So does a file that is neither in the workspace nor in the folder
+of the document, where it really is: a link leading elsewhere is not followed.
 
 The preview draws a [`Scene3D`](scenes.md) with the
 [raster tier](../../3d/platform-tiers.md) of the renderer, on WebGL 2: without
@@ -801,14 +813,50 @@ writes.
 
 `YUI: Set Up Agent Tools` turns `yui.mcp.enabled` on for the workspace and
 adds the server to its `.mcp.json`, keeping what the file holds. The server
-only listens on this machine, at `http://127.0.0.1:<yui.mcp.port>/mcp`, only
-reads the files of the workspace and writes none: a document importing a file
+only listens on this machine, at `http://127.0.0.1:<yui.mcp.port>/mcp`, and
+only answers the requests sending its token as `Authorization: Bearer <token>`:
+the port can be reached by every user and program of the machine. The token
+is made once, kept in the secret storage of VS Code and written to `.mcp.json`
+as the `headers` of the server, so that file is made readable by its owner
+only.
+
+The token is a secret and `.mcp.json` is a file projects commit, to share
+their servers. So the extension asks git about the file before it writes the
+token to it:
+
+- a file git neither tracks nor ignores is first ignored for your clone only,
+  by a line naming it in `.git/info/exclude`, which is never committed. The
+  `.gitignore` of the project is left alone;
+- a file git already ignores is written;
+- a file git tracks, or that a rule of the project keeps from being ignored
+  (`!.mcp.json`), is left as it is, as is one git could not be told to ignore.
+  The extension tells so, and offers to copy
+  the entry of the server, token included, for you to add to your own agent
+  configuration, which is outside the repository;
+- outside a git repository the file is written, and keeping it out of version
+  control is left to you.
+
+Both agents have a command adding a server to your own configuration:
+
+```sh
+copilot mcp add --transport http --header "Authorization: Bearer <token>" yui http://127.0.0.1:7391/mcp
+claude mcp add --transport http yui http://127.0.0.1:7391/mcp --header "Authorization: Bearer <token>"
+```
+
+A `.mcp.json` listing the server without its token is brought up to date in
+the same way when the server starts, and the agents started before that need
+to read it again. One that is tracked is told about until the entry of the
+server is taken out of it.
+
+The server only reads the files of the workspace: a document importing a file
 outside of it is checked without that file. The models of the
-`yui.lint.models` setting are read wherever they are. Each window serving a
-workspace needs a port of its own, which the command finds when the one set is
-taken. A tool that draws opens the preview panel beside the editor when it is
-closed, and leaves what it shows alone. Without a `theme`, it draws in the one
-the preview shows.
+`yui.lint.models` setting are read wherever they are. It writes one kind of
+file, the `.png` a call names as [`output`](#saving-the-image), inside the
+workspace, and is only served from a workspace that is trusted. Each window
+serving a workspace needs a port of its own, which the command finds when the
+one set is taken. A tool that draws opens the preview panel beside the editor
+when it is closed, and leaves what it shows alone. Without a `theme`, it draws
+in the one the preview shows.
 
 There is no formatter yet: writing a document back from its tree would lose
 its comments.
@@ -833,8 +881,11 @@ just vscode_yui_test
 ```
 
 checks the types of the extension, then runs its tests that need no editor:
-those of the server its tools for agents are reached through, of the files
-given to the tool, of the grammar and of the snippets.
+those of the server its tools for agents are reached through and of its token,
+of the file holding that token being kept out of the commits, of the files
+given to the tool, of the problems several documents tell of a file, of the
+columns of the tool as an editor counts them, of the grammar and of the
+snippets.
 
 ## See also
 

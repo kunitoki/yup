@@ -100,6 +100,25 @@ Identifier makeOptionalIdentifier (const var& value)
     return text.isNotEmpty() ? Identifier (text) : Identifier();
 }
 
+// The names an `id` or a `class` is written with: a bare name, or the ones in a string, separated by spaces or commas.
+// Nothing when the value is not that, as an expression isn't
+std::optional<StringArray> readNames (const String& value)
+{
+    const auto text = value.trim();
+
+    auto names = StringArray::fromTokens (text.unquoted(), " ,", "");
+    names.removeEmptyStrings();
+
+    if (! text.isQuotedString() && names.size() > 1)
+        return std::nullopt;
+
+    for (const auto& name : names)
+        if (! Identifier::isValidIdentifier (name))
+            return std::nullopt;
+
+    return names;
+}
+
 DataTree findElementById (const DataTree& element, const String& id)
 {
     if (detail::getYuiElementId (element) == id)
@@ -229,26 +248,13 @@ struct YuiBuilder::TreeWatcher final : DataTreeListener
 
         watchedNodes.clear();
         watchedRoot = {};
-        transactionDepth = 0;
-        mutatedInTransaction = false;
+        hasStructureChanged = false;
     }
 
-    void transactionStarted (DataTree&) override
-    {
-        ++transactionDepth;
-    }
-
-    void transactionEnded (DataTree&, DataTree::TransactionResult) override
-    {
-        // A node watched while a transaction is applied gets its end only
-        if (transactionDepth > 0 && --transactionDepth == 0 && std::exchange (mutatedInTransaction, false))
-            notifyMutation();
-    }
-
-    void propertyChanged (DataTree&, const Identifier&) override { handleMutation(); }
-    void childAdded (DataTree&, DataTree&) override { handleMutation(); }
-    void childRemoved (DataTree&, DataTree&, int) override { handleMutation(); }
-    void childMoved (DataTree&, DataTree&, int, int) override { handleMutation(); }
+    void propertyChanged (DataTree&, const Identifier&) override { handleMutation (false); }
+    void childAdded (DataTree&, DataTree&) override { handleMutation (true); }
+    void childRemoved (DataTree&, DataTree&, int) override { handleMutation (true); }
+    void childMoved (DataTree&, DataTree&, int, int) override { handleMutation (true); }
 
     void attachSubtree (DataTree node)
     {
@@ -262,47 +268,31 @@ struct YuiBuilder::TreeWatcher final : DataTreeListener
             attachSubtree (node.getChild (i));
     }
 
-    void handleMutation()
+    void handleMutation (bool isStructural)
     {
         if (owner.ignoreTreeChanges || ! watchedRoot.isValid())
             return;
 
-        // The changes of a transaction are told about once, when it ends
-        if (transactionDepth > 0)
-            mutatedInTransaction = true;
-        else
-            notifyMutation();
-    }
-
-    void notifyMutation()
-    {
-        if (owner.onTreeMutated != nullptr)
-        {
-            owner.onTreeMutated();
-            return;
-        }
-
-        const auto rootCopy = watchedRoot;
-        owner.build (rootCopy);
+        hasStructureChanged |= isStructural;
+        owner.treeMutated();
     }
 
     YuiBuilder& owner;
     DataTree watchedRoot;
     std::vector<DataTree> watchedNodes;
-    int transactionDepth = 0;
-    bool mutatedInTransaction = false;
+    bool hasStructureChanged = false;
 };
 
 //==============================================================================
-/* Has the components of the repeats made again once the change of a range is over. */
-struct YuiBuilder::RangeUpdater final : AsyncUpdater
+/* Has the changes of the tree and of the ranges of the repeats applied once they are over. */
+struct YuiBuilder::ChangeUpdater final : AsyncUpdater
 {
-    explicit RangeUpdater (YuiBuilder& ownerToUse)
+    explicit ChangeUpdater (YuiBuilder& ownerToUse)
         : owner (ownerToUse)
     {
     }
 
-    ~RangeUpdater() override
+    ~ChangeUpdater() override
     {
         cancelPendingUpdate();
     }
@@ -319,7 +309,7 @@ struct YuiBuilder::RangeUpdater final : AsyncUpdater
 
 YuiBuilder::YuiBuilder()
     : treeWatcher (std::make_unique<TreeWatcher> (*this))
-    , rangeUpdater (std::make_unique<RangeUpdater> (*this))
+    , changeUpdater (std::make_unique<ChangeUpdater> (*this))
 {
     registerYuiComponentTypes();
 
@@ -422,8 +412,10 @@ Result YuiBuilder::build (const DataTree& document)
     const ScopedValueSetter<bool> building (isBuilding, true);
     const auto numDeclarationDiagnostics = static_cast<std::ptrdiff_t> (diagnostics.size());
 
+    // What was waiting to be applied is: the tree and the ranges are read as they are now
+    hasPendingTreeChange = false;
     hasPendingRangeChange = false;
-    rangeUpdater->cancelPendingUpdate();
+    changeUpdater->cancelPendingUpdate();
 
     // The range of a repeat is only known once the values it reads are applied. When it is not the one its
     // components were made for, they are made again, which keeps those still described
@@ -489,14 +481,18 @@ Result YuiBuilder::build (const DataTree& document)
 
 void YuiBuilder::applyPendingChanges()
 {
-    if (! std::exchange (hasPendingRangeChange, false))
+    // A change of the tree is the one applied: the build it leads to makes the components of the repeats again too
+    const auto hasTreeChange = std::exchange (hasPendingTreeChange, false);
+
+    if (! hasTreeChange && ! std::exchange (hasPendingRangeChange, false))
         return;
 
-    rangeUpdater->cancelPendingUpdate();
+    changeUpdater->cancelPendingUpdate();
 
-    if (onRangeChanged != nullptr)
+    // Nothing of the builder is read once a hook returns, as what it tells may destroy the builder
+    if (const auto& hook = hasTreeChange ? onTreeMutated : onRangeChanged; hook != nullptr)
     {
-        onRangeChanged();
+        hook();
         return;
     }
 
@@ -507,6 +503,17 @@ void YuiBuilder::applyPendingChanges()
     }
 }
 
+void YuiBuilder::treeMutated()
+{
+    hasPendingTreeChange = true;
+    changeUpdater->triggerAsyncUpdate();
+}
+
+bool YuiBuilder::hasTreeStructureChanged() const noexcept
+{
+    return treeWatcher != nullptr && treeWatcher->hasStructureChanged;
+}
+
 void YuiBuilder::rangeChanged()
 {
     // A range changing while its components are made is seen by the build itself
@@ -514,7 +521,7 @@ void YuiBuilder::rangeChanged()
         return;
 
     hasPendingRangeChange = true;
-    rangeUpdater->triggerAsyncUpdate();
+    changeUpdater->triggerAsyncUpdate();
 }
 
 bool YuiBuilder::bindRanges()
@@ -567,8 +574,9 @@ void YuiBuilder::clear()
     applied.clear();
     scopes.clear();
     ranges.clear();
+    hasPendingTreeChange = false;
     hasPendingRangeChange = false;
-    rangeUpdater->cancelPendingUpdate();
+    changeUpdater->cancelPendingUpdate();
     composites.clear();
     palettes.clear();
     drawings.clear();
@@ -731,12 +739,19 @@ void YuiBuilder::collectStyleDeclarations (const DataTree& parent)
 
             if (unqualified.isValid() && propTypeName.isNotEmpty())
             {
-                declaredProperties.try_emplace (unqualified, ComponentProperty {
+                const auto type = ComponentProperty::getTypeFromName (propTypeName);
+                const auto elementType = ComponentProperty::getElementTypeFromName (propTypeName);
+
+                const auto [declared, isNew] = declaredProperties.try_emplace (unqualified, ComponentProperty {
                     .name = unqualified,
-                    .type = ComponentProperty::getTypeFromName (propTypeName),
-                    .elementType = ComponentProperty::getElementTypeFromName (propTypeName),
+                    .type = type,
+                    .elementType = elementType,
                     .isInherited = true
                 });
+
+                // The first declaration of a name is the one read, whatever declares it again
+                if (! isNew && (declared->second.type != type || declared->second.elementType != elementType))
+                    report ("The property '" + unqualified.toString() + "' is already declared with another type", child);
             }
         }
     };
@@ -758,8 +773,8 @@ void YuiBuilder::collectStyleDeclarations (const DataTree& parent)
         {
             const auto name = element.getProperty ("name").toString().trim();
 
-            if (name.isNotEmpty())
-                shaders.insert_or_assign (name, element);
+            if (name.isNotEmpty() && ! shaders.insert_or_assign (name, element).second)
+                report ("The shader '" + name + "' is already declared", element);
 
             collectProps (element);
         }
@@ -772,8 +787,8 @@ void YuiBuilder::collectStyleDeclarations (const DataTree& parent)
         {
             const auto name = element.getProperty ("name").toString().trim();
 
-            if (name.isNotEmpty())
-                drawings.insert_or_assign (name, element);
+            if (name.isNotEmpty() && ! drawings.insert_or_assign (name, element).second)
+                report ("The drawing '" + name + "' is already declared", element);
 
             collectProps (element);
         }
@@ -787,6 +802,13 @@ void YuiBuilder::collectDeclarations (const DataTree& document)
     for (const auto& element : document)
     {
         const auto kind = element.getType().toString();
+
+        if (kind == "import")
+        {
+            // Left by a parse that reads no file: what the file declares is missing
+            report ("Unresolved import '" + element.getProperty ("path").toString() + "'", element);
+            continue;
+        }
 
         if (kind == "tokens")
         {
@@ -898,7 +920,14 @@ Result YuiBuilder::resolveComposite (const Identifier& typeName, Composite& comp
             signals.push_back ({ .name = name,
                                  .connect = [this, name] (Component& component, ComponentSignal::Handler handler)
                                  {
-                                     connections.push_back ({ &component, name, std::move (handler) });
+                                     // A signal has one handler, as the one of a widget: the last connected, or none
+                                     std::erase_if (connections, [&] (const Connection& connection)
+                                     {
+                                         return connection.component == &component && connection.signal == name;
+                                     });
+
+                                     if (handler != nullptr)
+                                         connections.push_back ({ &component, name, std::move (handler) });
                                  },
                                  .arguments = std::move (arguments) });
         }
@@ -1039,6 +1068,10 @@ Component& YuiBuilder::createComponent (const DataTree& element, Component* pare
             placeChild (*parent, *component, isReused);
 
         components.push_back ({ key, parent, &type, std::move (created), turn, previousId });
+
+        // The components made under the root can look for what builds them from here on
+        if (parent == nullptr && onRootCreated != nullptr)
+            onRootCreated (*component);
     }
 
     static const Identifier bindType ("bind");
@@ -1228,10 +1261,21 @@ void YuiBuilder::applyIdentity (Component& component, const DataTree& element, S
             imageComponent->setBaseDirectory (baseDirectory);
     }
 
-    // A kept component loses the identity it had, unless it's a composite instance keeping the one of its body
+    String id;
+
     if (element.hasProperty (idProperty()))
     {
-        const auto id = detail::getYuiElementId (element);
+        const auto names = readNames (element.getProperty (idProperty()).toString());
+
+        if (names.has_value() && names->size() == 1)
+            id = (*names)[0];
+        else
+            report (element.getType().toString() + ".id: expected a name, such as knob", element, idProperty());
+    }
+
+    // A kept component loses the identity it had, unless it's a composite instance keeping the one of its body
+    if (id.isNotEmpty())
+    {
         component.setComponentID (id);
 
         if (! scope.ids.emplace (id, &component).second)
@@ -1244,9 +1288,15 @@ void YuiBuilder::applyIdentity (Component& component, const DataTree& element, S
 
     Array<Identifier> classes;
 
-    for (const auto& styleClass : StringArray::fromTokens (element.getProperty (classProperty()).toString().unquoted(), " ,", ""))
-        if (styleClass.isNotEmpty())
+    if (const auto names = readNames (element.getProperty (classProperty()).toString()))
+    {
+        for (const auto& styleClass : *names)
             classes.add (Identifier (styleClass));
+    }
+    else
+    {
+        report (element.getType().toString() + ".class: expected a name or names in a string, such as \"knob large\"", element, classProperty());
+    }
 
     if (! isUseSite)
         component.setStyleClasses (classes);
@@ -1376,7 +1426,7 @@ void YuiBuilder::resetValue (Component& component, const ComponentTypeInfo& type
 
     if (const auto* signal = typeInfo.findSignal (name))
     {
-        signal->connect (component, [] (const Array<var>&) {});
+        signal->connect (component, nullptr);
         return;
     }
 
@@ -1795,15 +1845,23 @@ void YuiBuilder::connectHandler (Component& component, const ComponentSignal& si
     if (handler.argumentNames.size() > static_cast<int> (signal.arguments.size()))
         return fail ("expected at most " + String (static_cast<int> (signal.arguments.size())) + " argument names");
 
-    // The names the handler gives the arguments of the signal, then the indices of the repeats it is in
+    // The names the handler gives the arguments of the signal, then the indices of the repeats it is in, which an
+    // argument of the same name hides
     auto localNames = handler.argumentNames;
     std::vector<ComponentSignal::Argument> localTypes (signal.arguments.begin(), signal.arguments.begin() + handler.argumentNames.size());
     const auto numArguments = handler.argumentNames.size();
+    Array<var> indices;
 
-    for (const auto& indexName : scope.indexNames)
+    for (int i = 0; i < scope.indexNames.size(); ++i)
     {
+        const auto& indexName = scope.indexNames[i];
+
+        if (handler.argumentNames.contains (indexName))
+            continue;
+
         localNames.add (indexName);
         localTypes.push_back ({ Identifier (indexName), ComponentProperty::Type::integer });
+        indices.add (scope.indexValues[i]);
     }
 
     auto locals = std::make_shared<YuiHandlerArguments> (localNames, localTypes);
@@ -1872,16 +1930,26 @@ void YuiBuilder::connectHandler (Component& component, const ComponentSignal& si
         steps->push_back (std::move (step));
     }
 
-    signal.connect (component, [this, locals, numArguments, indices = scope.indexValues, steps = std::shared_ptr<const std::vector<Step>> (std::move (steps))] (const Array<var>& signalArguments)
+    signal.connect (component, [this, locals, numArguments, indices, madeFor = scope.weak_from_this(), steps = std::shared_ptr<const std::vector<Step>> (std::move (steps))] (const Array<var>& signalArguments)
     {
+        // A call may have the document built again, which destroys this function while it runs: what it reads is held here
+        auto& owner = *this;
+        const auto heldLocals = locals;
+        const auto heldSteps = steps;
+        const auto heldScope = madeFor;
+
         auto localValues = signalArguments;
         localValues.resize (numArguments);
         localValues.addArray (indices);
 
-        for (const auto& step : *steps)
+        for (const auto& step : *heldSteps)
         {
+            // The scope goes with the build the handler was made by, and the calls left are of an interface that is gone
+            if (heldScope.expired())
+                return;
+
             // Set for each call, as a call emitting a signal can run this handler again
-            locals->setValues (localValues);
+            heldLocals->setValues (localValues);
 
             auto callArguments = signalArguments;
 
@@ -1896,16 +1964,16 @@ void YuiBuilder::connectHandler (Component& component, const ComponentSignal& si
             if (step.actionName.isEmpty())
             {
                 if (auto* target = step.emitter.get())
-                    emit (*target, step.emitted, callArguments);
+                    owner.emit (*target, step.emitted, callArguments);
             }
-            else if (const auto found = actions.find (step.actionName); found != actions.end())
+            else if (const auto found = owner.actions.find (step.actionName); found != owner.actions.end())
             {
                 const auto action = found->second;
                 action (callArguments);
             }
-            else if (fallbackAction != nullptr)
+            else if (owner.fallbackAction != nullptr)
             {
-                const auto action = fallbackAction;
+                const auto action = owner.fallbackAction;
                 action (step.actionName, callArguments);
             }
         }

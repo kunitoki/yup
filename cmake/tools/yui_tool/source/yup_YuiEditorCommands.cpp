@@ -68,8 +68,16 @@ bool readAsked (int argc, char** argv, bool needsPlace, Asked& asked)
         else if (needsPlace && argument == "--at" && hasValue)
         {
             const String value (argv[++i]);
+            const auto line = value.upToFirstOccurrenceOf (":", false, false);
+            const auto column = value.fromFirstOccurrenceOf (":", false, false);
 
-            asked.place = { value.upToFirstOccurrenceOf (":", false, false).getIntValue(), value.fromFirstOccurrenceOf (":", false, false).getIntValue() };
+            // Whole numbers and nothing else, short enough to be read as one
+            const auto isWhole = [] (const String& text)
+            {
+                return text.isNotEmpty() && text.length() <= 9 && text.containsOnly ("0123456789");
+            };
+
+            asked.place = isWhole (line) && isWhole (column) ? YuiToolPlace { line.getIntValue(), column.getIntValue() } : YuiToolPlace();
 
             if (asked.place.line < 1 || asked.place.column < 1)
             {

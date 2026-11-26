@@ -119,6 +119,20 @@ TEST_F (AnimationClipTests, TracksThatCannotBePlayedAreRejected)
     EXPECT_FLOAT_EQ (clip.getDuration(), 0.0f);
 }
 
+TEST_F (AnimationClipTests, TracksWithValuesThatAreNotFiniteAreRejected)
+{
+    AnimationClip clip;
+    const auto notANumber = std::numeric_limits<float>::quiet_NaN();
+    const auto infinity = std::numeric_limits<float>::infinity();
+
+    EXPECT_TRUE (clip.addTrack (makeTrack (Path::translation, Interpolation::linear, { 0.0f, 1.0f }, { 0.0f, 0.0f, 0.0f, 1.0f, notANumber, 1.0f })).failed());
+    EXPECT_TRUE (clip.addTrack (makeTrack (Path::rotation, Interpolation::step, { 0.0f }, { 0.0f, 0.0f, 0.0f, infinity })).failed());
+    EXPECT_TRUE (clip.addTrack (makeTrack (Path::weights, Interpolation::linear, { 0.0f, 1.0f }, { 0.0f, -infinity })).failed());
+
+    EXPECT_TRUE (clip.getTracks().empty());
+    EXPECT_FLOAT_EQ (clip.getDuration(), 0.0f);
+}
+
 //==============================================================================
 
 TEST_F (AnimationClipTests, StepHoldsEachKeyUntilTheNextOne)
@@ -203,6 +217,28 @@ TEST_F (AnimationClipTests, LinearRotationsTurnAtAConstantSpeedTheShorterWayRoun
     expectNear (sample (track, 0.25f), toValues (Quaternion::fromAxisAngle (axis, MathConstants<float>::halfPi * 0.25f)));
     expectNear (sample (track, 0.5f), toValues (Quaternion::fromAxisAngle (axis, MathConstants<float>::halfPi * 0.5f)));
     expectNear (sample (track, 0.75f), toValues (Quaternion::fromAxisAngle (axis, MathConstants<float>::halfPi * 0.75f)));
+}
+
+TEST_F (AnimationClipTests, CubicSplineRotationsTurnTheShorterWayRound)
+{
+    const Vector3<float> axis { 0.0f, 1.0f, 0.0f };
+    const auto turn = Quaternion::fromAxisAngle (axis, MathConstants<float>::halfPi);
+
+    // From no rotation to a quarter turn, each key between its tangents: out of the first one along
+    // (0, 0.3, 0, 0), into the last one along (0, 0.2, 0, -0.1)
+    const auto direct = makeTrack (Path::rotation, Interpolation::cubicSpline, { 0.0f, 1.0f }, { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.3f, 0.0f, 0.0f, 0.0f, 0.2f, 0.0f, -0.1f, turn.getX(), turn.getY(), turn.getZ(), turn.getW(), 0.0f, 0.0f, 0.0f, 0.0f });
+
+    // The last key with every sign flipped, its tangents too, is the same rotation reached the same way:
+    // followed as the values are, the spline would pass near zero and turn the other way round
+    const auto flipped = makeTrack (Path::rotation, Interpolation::cubicSpline, { 0.0f, 1.0f }, { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.3f, 0.0f, 0.0f, 0.0f, -0.2f, 0.0f, 0.1f, -turn.getX(), -turn.getY(), -turn.getZ(), -turn.getW(), 0.0f, 0.0f, 0.0f, 0.0f });
+
+    for (const auto time : { 0.25f, 0.5f, 0.75f })
+        expectNear (sample (flipped, time), sample (direct, time));
+
+    // Without tangents the keys are averaged halfway: an eighth of a turn
+    const auto plain = makeTrack (Path::rotation, Interpolation::cubicSpline, { 0.0f, 1.0f }, { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -turn.getX(), -turn.getY(), -turn.getZ(), -turn.getW(), 0.0f, 0.0f, 0.0f, 0.0f });
+
+    expectNear (sample (plain, 0.5f), toValues (Quaternion::fromAxisAngle (axis, MathConstants<float>::halfPi * 0.5f)));
 }
 
 TEST_F (AnimationClipTests, RotationsComeOutAsUnitQuaternions)

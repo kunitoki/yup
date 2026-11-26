@@ -74,7 +74,8 @@ ResultValue<GpuImageShader::Ptr> GpuImageShader::createFromBundle (ShaderBundle:
         return nullptr;
     };
 
-    if (findStage (ShaderStage::vertex) == nullptr)
+    const auto* vertex = findStage (ShaderStage::vertex);
+    if (vertex == nullptr)
         return makeResultValueFail ("The shader bundle has no vertex stage");
 
     const auto* fragment = findStage (ShaderStage::fragment);
@@ -96,6 +97,59 @@ ResultValue<GpuImageShader::Ptr> GpuImageShader::createFromBundle (ShaderBundle:
 
     if (reflection.separateImages.size() > static_cast<size_t> (maxInputTextures))
         return makeResultValueFail ("The fragment stage declares " + String (static_cast<int> (reflection.separateImages.size())) + " textures: an image shader has " + String (maxInputTextures) + " at most");
+
+    // A draw binds one uniform block, textures and their samplers: anything else a stage declares would be drawn unbound
+    for (const auto* stage : { vertex, fragment })
+    {
+        for (const auto& [resources, kind] : { std::pair { &stage->reflection.storageBuffers, "storage buffer" },
+                                               std::pair { &stage->reflection.storageImages, "storage image" },
+                                               std::pair { &stage->reflection.subpassInputs, "subpass input" },
+                                               std::pair { &stage->reflection.pushConstantBuffers, "push constant block" } })
+        {
+            if (! resources->empty())
+                return makeResultValueFail (String ("The ") + toString (stage->stage) + " stage declares the " + kind + " " + resources->front().name
+                                            + ", which cannot be bound: an image shader takes its values through one uniform block and its textures");
+        }
+    }
+
+    // What the vertex stage reads is bound where the fragment stage declares it, or not at all
+    if (vertex->reflection.sampledImages.size() > vertex->reflection.glCombinedSamplers.size())
+        return makeResultValueFail ("The vertex stage declares a combined sampler2D, which cannot be bound");
+
+    for (const auto& [resources, bound, kind] : { std::tuple { &vertex->reflection.uniformBuffers, &reflection.uniformBuffers, "uniform block" },
+                                                  std::tuple { &vertex->reflection.separateImages, &reflection.separateImages, "texture" } })
+    {
+        for (const auto& resource : *resources)
+        {
+            const bool isBound = std::any_of (bound->begin(), bound->end(), [&resource] (const ShaderReflection::ResourceBinding& declared)
+            {
+                return declared.set == resource.set && declared.binding == resource.binding;
+            });
+
+            if (! isBound)
+                return makeResultValueFail (String ("The vertex stage declares the ") + kind + " " + resource.name
+                                            + ", which cannot be bound: the fragment stage does not declare it at the same set and binding");
+        }
+    }
+
+    // The vertex stage of an image shader writes `uv` and nothing else, and the pass has one color target
+    const auto isFloatVector = [] (const ShaderReflection::ResourceBinding& variable, uint32 numComponents)
+    {
+        return variable.location == 0
+            && variable.baseType == ShaderReflection::BaseType::float32
+            && variable.vecSize == numComponents
+            && variable.columns == 1
+            && variable.arraySizes.empty();
+    };
+
+    for (const auto& input : reflection.stageInputs)
+    {
+        if (! isFloatVector (input, 2))
+            return makeResultValueFail ("The fragment stage declares the input " + input.name + ": an image shader has one at most, the vec2 uv at location 0");
+    }
+
+    if (reflection.stageOutputs.size() != 1 || ! isFloatVector (reflection.stageOutputs.front(), 4))
+        return makeResultValueFail ("The fragment stage has to declare one output, the vec4 pixel at location 0");
 
     Ptr shader (new GpuImageShader());
     shader->bundle = bundle;
@@ -188,6 +242,20 @@ ShaderUniforms GpuImageShader::createUniforms() const
     return blockUniforms;
 }
 
+bool GpuImageShader::canDrawWith (GpuPlatform platform) const noexcept
+{
+    const auto language = shaderLanguageForApi (platform);
+
+    // As GpuPipeline::compileFromBundle() looks for them: OpenGL ES takes the GLSL variant of a bundle without an ESSL one
+    const auto hasVariant = [this, language] (ShaderStage stage)
+    {
+        return bundle->findShader (stage, language) != nullptr
+            || (language == ShaderLanguage::essl && bundle->findShader (stage, ShaderLanguage::glsl) != nullptr);
+    };
+
+    return hasVariant (ShaderStage::vertex) && hasVariant (ShaderStage::fragment);
+}
+
 //==============================================================================
 
 Result GpuImageShader::draw (const GpuDevice::Ptr& device,
@@ -211,9 +279,9 @@ Result GpuImageShader::draw (const GpuDevice::Ptr& device,
     if (device == nullptr || ! device->isGpuAvailable() || device->isDeviceLost())
         return Result::fail ("The device has no GPU to draw the image shader with");
 
-    // Uniforms of another size would leave the shader reading past them
-    jassert (uniforms.getSizeInBytes() == blockUniforms.getSizeInBytes());
-    if (uniforms.getSizeInBytes() != blockUniforms.getSizeInBytes())
+    // Uniforms of another block would fill the members of the shader with values meant for others, or leave it reading past them
+    jassert (uniforms.hasSameLayoutAs (blockUniforms));
+    if (! uniforms.hasSameLayoutAs (blockUniforms))
         return Result::fail ("The uniforms are not the ones of the image shader: take them from createUniforms()");
 
     for (size_t i = 0; i < textureBindings.size(); ++i)
@@ -225,6 +293,13 @@ Result GpuImageShader::draw (const GpuDevice::Ptr& device,
     const auto texture = target.asTexture();
     if (texture == nullptr || isDepthStencilFormat (texture->getFormat()) || texture->getSampleCount() != 1)
         return Result::fail ("An image shader draws into a color target that is not multisampled");
+
+    // A pass reading the texture it writes is a feedback loop, which no graphics API defines
+    for (size_t i = 0; i < textureBindings.size(); ++i)
+    {
+        if (inputs[i] == texture)
+            return Result::fail ("The input " + String (static_cast<int> (i) + 1) + " of the image shader is the texture of its target");
+    }
 
     // The device keeps the pipeline, so the shader holds nothing that must not outlive a device
     const auto pipeline = device->getOrCompilePipelineFor (pipelineOwner, texture->getFormat(), [this, &device] (GpuTextureFormat format)

@@ -316,6 +316,9 @@ TEST_F (YuiParserTest, ReportsStyleErrors)
     EXPECT_EQ (parseError ("style { Slider { opacity: ; } }"), "1:18: The declaration 'opacity' needs a value");
     EXPECT_EQ (parseError ("style { { opacity: 1; } }"), "1:9: Expected a selector");
     EXPECT_EQ (parseError ("style { @keyframes f { half { glow: 1; } } }"), "1:24: Expected 'from', 'to' or a percentage");
+    EXPECT_EQ (parseError ("style { @keyframes f { % { glow: 1; } } }"), "1:24: Expected 'from', 'to' or a percentage");
+    EXPECT_EQ (parseError ("style { @keyframes f { 1.2.3% { glow: 1; } } }"), "1:24: Expected 'from', 'to' or a percentage");
+    EXPECT_EQ (parseError ("style { @keyframes f { 12.5% { glow: 1; } } }"), String());
     EXPECT_EQ (parseError ("style { @keyframes f { 150% { glow: 1; } } }"), "1:24: The keyframe position must be between 0% and 100%");
     EXPECT_EQ (parseError ("palette P { mode: dark; }"), "1:25: The palette needs 'colors'");
     EXPECT_EQ (parseError ("style { Label { text: \"a;b\"; } }"), String());
@@ -642,6 +645,61 @@ TEST_F (YuiParserTest, ResolvesImports)
     const auto broken = YuiParser::parse ("import \"broken.yui\";", resolver);
     ASSERT_FALSE (broken.wasOk());
     EXPECT_EQ (broken.diagnostics.front().toString(), "broken.yui:2:9: Expected '}'");
+}
+
+TEST_F (YuiParserTest, ImportsEachFileOnceIncludingTheOneParsed)
+{
+    const std::map<String, String> files {
+        { "main.yui", "import \"parts/a.yui\"; palette P { colors: \"#100b00-#85cb33\"; } Component { }" },
+        { "parts/a.yui", "import \"b.yui\"; import \"../main.yui\"; style { }" },
+        { "parts/b.yui", "import \"a.yui\"; import \"/main.yui\"; tokens { }" }
+    };
+
+    const auto resolver = [&] (const String& path) -> std::optional<String>
+    {
+        if (const auto it = files.find (path); it != files.end())
+            return it->second;
+
+        return std::nullopt;
+    };
+
+    // The files import each other and the text parsed, which is known by its path. A path starting with '/' is
+    // relative to the folder of that text, whatever file writes it
+    const auto result = YuiParser::parse (files.at ("main.yui"), resolver, "main.yui");
+    ASSERT_TRUE (result.wasOk()) << result.diagnostics.front().toString();
+
+    const auto& document = result.document;
+    ASSERT_EQ (document.getNumChildren(), 4);
+    EXPECT_EQ (document.getChild (0).getType().toString(), "tokens");
+    EXPECT_EQ (document.getChild (1).getType().toString(), "style");
+    EXPECT_EQ (document.getChild (2).getType().toString(), "palette");
+    EXPECT_EQ (document.getChild (3).getType().toString(), "Component");
+
+    // A text of no path is a file like another for the ones importing it, and brings its root once more
+    const auto unnamed = YuiParser::parse (files.at ("main.yui"), resolver);
+    ASSERT_FALSE (unnamed.wasOk());
+    EXPECT_EQ (unnamed.diagnostics.front().toString(), "1:64: A document can only have one root component: 'main.yui' has one already");
+}
+
+TEST_F (YuiParserTest, ReportsTheRootComponentOfAnImportedFileWhenThereIsAnother)
+{
+    const auto resolver = [] (const String& path) -> std::optional<String>
+    {
+        return path == "part.yui" ? std::optional<String> ("style { }\nRow { }") : std::nullopt;
+    };
+
+    // A file with the only root is fine
+    EXPECT_TRUE (YuiParser::parse ("import \"part.yui\";", resolver).wasOk());
+
+    const auto after = YuiParser::parse ("Column { }\nimport \"part.yui\";", resolver);
+    ASSERT_FALSE (after.wasOk());
+    EXPECT_FALSE (after.document.isValid());
+    EXPECT_EQ (after.diagnostics.front().toString(), "part.yui:2:1: A document can only have one root component: the main text has one already");
+
+    // The root is where the element is written, not its first property
+    const auto before = YuiParser::parse ("import \"part.yui\";\n\nColumn { id: root; }", resolver);
+    ASSERT_FALSE (before.wasOk());
+    EXPECT_EQ (before.diagnostics.front().toString(), "3:1: A document can only have one root component: 'part.yui' has one already");
 }
 
 TEST_F (YuiParserTest, CountsColumnsInCharacters)

@@ -27,8 +27,14 @@ namespace yup
 AnimationNode::AnimationNode (std::vector<AnimationClip::Ptr> clipsToPlay, std::vector<Entity> targetEntities)
     : clips (std::move (clipsToPlay))
     , targets (std::move (targetEntities))
-    , currentClip (clips.empty() ? -1 : 0)
 {
+    const auto first = std::find_if (clips.begin(), clips.end(), [] (const AnimationClip::Ptr& clip)
+    {
+        return clip != nullptr;
+    });
+
+    if (first != clips.end())
+        currentClip = static_cast<int> (first - clips.begin());
 }
 
 //==============================================================================
@@ -54,7 +60,8 @@ int AnimationNode::findClip (StringRef clipName) const noexcept
 
 void AnimationNode::setCurrentClip (int index)
 {
-    currentClip = isPositiveAndBelow (index, getNumClips()) ? index : -1;
+    currentClip = getClip (index) != nullptr ? index : -1;
+    playing = playing && currentClip >= 0;
     setTime (0.0);
 }
 
@@ -66,12 +73,32 @@ double AnimationNode::getDuration() const noexcept
 
 void AnimationNode::setTime (double newTime)
 {
+    if (std::isnan (newTime))
+    {
+        jassertfalse; // A time that is not a number has no place in a clip
+        return;
+    }
+
     time = jlimit (0.0, getDuration(), newTime);
     applyPose();
 }
 
+void AnimationNode::setSpeed (float newSpeed) noexcept
+{
+    if (! std::isfinite (newSpeed))
+    {
+        jassertfalse; // A speed that is not finite would leave the clip without a time
+        return;
+    }
+
+    speed = newSpeed;
+}
+
 void AnimationNode::setPlaying (bool shouldPlay)
 {
+    // Without a clip there is nothing to play
+    shouldPlay = shouldPlay && currentClip >= 0;
+
     const auto duration = getDuration();
     const auto isAtTheEndAhead = speed > 0.0f ? time >= duration : speed < 0.0f && time <= 0.0;
 
@@ -102,6 +129,12 @@ void AnimationNode::update (double deltaSeconds)
     // The clip is where it posed its targets: what was written to them since stays
     if (step == 0.0)
         return;
+
+    if (! std::isfinite (step))
+    {
+        jassertfalse; // A step that is not finite would leave a looping clip without a time
+        return;
+    }
 
     auto newTime = time + step;
 

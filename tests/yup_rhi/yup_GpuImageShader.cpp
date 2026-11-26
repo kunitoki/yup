@@ -38,23 +38,46 @@ using ::testing::Return;
 class GpuImageShaderTests : public ::testing::Test
 {
 protected:
-    /** A bundle holding one GLSL variant of each stage, the fragment one reflecting @p reflection. */
-    static ShaderBundle::Ptr makeBundle (ShaderReflection reflection)
+    /** A bundle holding one GLSL variant of each stage, reflecting what it is given. */
+    static ShaderBundle::Ptr makeStages (ShaderReflection vertexReflection, ShaderReflection fragmentReflection)
     {
         ShaderBundle::Ptr bundle (new ShaderBundle());
 
         ShaderInfo vertex;
         vertex.stage = ShaderStage::vertex;
         vertex.source = "void main() {}";
+        vertex.reflection = std::move (vertexReflection);
         bundle->addShader (std::move (vertex));
 
         ShaderInfo fragment;
         fragment.stage = ShaderStage::fragment;
         fragment.source = "void main() {}";
-        fragment.reflection = std::move (reflection);
+        fragment.reflection = std::move (fragmentReflection);
         bundle->addShader (std::move (fragment));
 
         return bundle;
+    }
+
+    /** A bundle holding one GLSL variant of each stage, the fragment one reflecting @p reflection
+        and, when it tells no output, the pixel every fragment stage writes. */
+    static ShaderBundle::Ptr makeBundle (ShaderReflection reflection)
+    {
+        if (reflection.stageOutputs.empty())
+            reflection.stageOutputs = { makeVariable ("color", ShaderReflection::ResourceType::stageOutput, 0, 4) };
+
+        return makeStages ({}, std::move (reflection));
+    }
+
+    /** The reflection of an input or an output of a stage: a vector of floats at a location. */
+    static ShaderReflection::ResourceBinding makeVariable (const String& name, ShaderReflection::ResourceType type, uint32 location, uint32 vecSize)
+    {
+        ShaderReflection::ResourceBinding variable;
+        variable.name = name;
+        variable.type = type;
+        variable.location = location;
+        variable.baseType = ShaderReflection::BaseType::float32;
+        variable.vecSize = vecSize;
+        return variable;
     }
 
     /** The reflection of `uniform Parameters { float intensity; } params;`. */
@@ -86,6 +109,14 @@ protected:
         texture.baseType = ShaderReflection::BaseType::image;
         texture.imageDim = ShaderReflection::ImageDimension::dim2D;
         return texture;
+    }
+
+    /** The reflection of a fragment stage declaring nothing but the pixel it writes. */
+    static ShaderReflection makeFragment()
+    {
+        ShaderReflection reflection;
+        reflection.stageOutputs = { makeVariable ("color", ShaderReflection::ResourceType::stageOutput, 0, 4) };
+        return reflection;
     }
 
     static String getFailure (const ResultValue<GpuImageShader::Ptr>& created)
@@ -273,6 +304,145 @@ TEST_F (GpuImageShaderTests, AcceptsTheSamplersAGLVariantFoldsItsTexturesInto)
     EXPECT_EQ (created.getValue()->getNumInputTextures(), 1);
 }
 
+TEST_F (GpuImageShaderTests, RefusesTheResourcesNoDrawBinds)
+{
+    using ResourceType = ShaderReflection::ResourceType;
+
+    const auto makeResource = [] (const char* name, ResourceType type)
+    {
+        ShaderReflection::ResourceBinding resource;
+        resource.name = name;
+        resource.type = type;
+        return resource;
+    };
+
+    ShaderReflection storageBuffer, storageImage, subpassInput, pushConstants;
+    storageBuffer.storageBuffers = { makeResource ("Particles", ResourceType::storageBuffer) };
+    storageImage.storageImages = { makeResource ("history", ResourceType::storageImage) };
+    subpassInput.subpassInputs = { makeResource ("depth", ResourceType::subpassInput) };
+    pushConstants.pushConstantBuffers = { makeResource ("Constants", ResourceType::pushConstant) };
+
+    for (const auto& [reflection, declared] : { std::pair { storageBuffer, "storage buffer Particles" },
+                                                std::pair { storageImage, "storage image history" },
+                                                std::pair { subpassInput, "subpass input depth" },
+                                                std::pair { pushConstants, "push constant block Constants" } })
+    {
+        // Whichever stage declares it
+        EXPECT_TRUE (getFailure (GpuImageShader::createFromBundle (makeBundle (reflection))).contains (String ("fragment stage declares the ") + declared)) << declared;
+        EXPECT_TRUE (getFailure (GpuImageShader::createFromBundle (makeStages (reflection, makeFragment()))).contains (String ("vertex stage declares the ") + declared)) << declared;
+    }
+}
+
+TEST_F (GpuImageShaderTests, VertexStageReadsWhatTheFragmentStageDeclaresOnly)
+{
+    auto fragment = makeFragment();
+    fragment.uniformBuffers = { makeBlock (0, 0) };
+    fragment.separateImages = { makeTexture ("source", 0, 1) };
+
+    // The block and the texture both stages declare are bound once, for both
+    ShaderReflection vertex;
+    vertex.uniformBuffers = fragment.uniformBuffers;
+    vertex.separateImages = fragment.separateImages;
+
+    const auto created = GpuImageShader::createFromBundle (makeStages (vertex, fragment));
+    EXPECT_TRUE (created.wasOk()) << getFailure (created);
+
+    // What the vertex stage declares alone, or elsewhere, is bound by nothing
+    vertex.uniformBuffers = { makeBlock (0, 3) };
+    EXPECT_TRUE (getFailure (GpuImageShader::createFromBundle (makeStages (vertex, fragment))).contains ("vertex stage declares the uniform block Parameters"));
+
+    vertex.uniformBuffers = fragment.uniformBuffers;
+    vertex.separateImages = { makeTexture ("lookup", 1, 1) };
+    EXPECT_TRUE (getFailure (GpuImageShader::createFromBundle (makeStages (vertex, fragment))).contains ("vertex stage declares the texture lookup"));
+
+    vertex.separateImages.clear();
+    vertex.sampledImages = { makeTexture ("lookup", 0, 4) };
+    EXPECT_TRUE (getFailure (GpuImageShader::createFromBundle (makeStages (vertex, fragment))).contains ("vertex stage declares a combined sampler2D"));
+}
+
+TEST_F (GpuImageShaderTests, RefusesInputsAndOutputsOtherThanUvAndThePixel)
+{
+    using ResourceType = ShaderReflection::ResourceType;
+
+    const auto failureOf = [] (const ShaderReflection& fragment)
+    {
+        return getFailure (GpuImageShader::createFromBundle (makeStages ({}, fragment)));
+    };
+
+    // What the vertex stage writes at location 0, under any name
+    auto reflection = makeFragment();
+    reflection.stageInputs = { makeVariable ("coordinates", ResourceType::stageInput, 0, 2) };
+    EXPECT_EQ (failureOf (reflection), String());
+
+    // Another location, another size, another type, and one more than it writes
+    reflection.stageInputs = { makeVariable ("normal", ResourceType::stageInput, 1, 2) };
+    EXPECT_TRUE (failureOf (reflection).contains ("input normal")) << failureOf (reflection);
+
+    reflection.stageInputs = { makeVariable ("tint", ResourceType::stageInput, 0, 4) };
+    EXPECT_TRUE (failureOf (reflection).contains ("input tint")) << failureOf (reflection);
+
+    reflection.stageInputs = { makeVariable ("index", ResourceType::stageInput, 0, 2) };
+    reflection.stageInputs.front().baseType = ShaderReflection::BaseType::int32;
+    EXPECT_TRUE (failureOf (reflection).contains ("input index")) << failureOf (reflection);
+
+    reflection.stageInputs = { makeVariable ("uv", ResourceType::stageInput, 0, 2), makeVariable ("depth", ResourceType::stageInput, 1, 1) };
+    EXPECT_TRUE (failureOf (reflection).contains ("input depth")) << failureOf (reflection);
+
+    // One output, the pixel: not none, not a vec3, not at another location, not two
+    reflection = makeFragment();
+    reflection.stageOutputs.clear();
+    EXPECT_TRUE (failureOf (reflection).contains ("one output")) << failureOf (reflection);
+
+    reflection.stageOutputs = { makeVariable ("color", ResourceType::stageOutput, 0, 3) };
+    EXPECT_TRUE (failureOf (reflection).contains ("one output")) << failureOf (reflection);
+
+    reflection.stageOutputs = { makeVariable ("color", ResourceType::stageOutput, 1, 4) };
+    EXPECT_TRUE (failureOf (reflection).contains ("one output")) << failureOf (reflection);
+
+    reflection.stageOutputs = { makeVariable ("color", ResourceType::stageOutput, 0, 4), makeVariable ("motion", ResourceType::stageOutput, 1, 4) };
+    EXPECT_TRUE (failureOf (reflection).contains ("one output")) << failureOf (reflection);
+}
+
+TEST_F (GpuImageShaderTests, TellsTheGraphicsApisItHasAVariantOfBothStagesFor)
+{
+    const auto makeVariant = [] (ShaderStage stage, ShaderLanguage language)
+    {
+        ShaderInfo info;
+        info.stage = stage;
+        info.language = language;
+        info.source = "void main() {}";
+
+        if (stage == ShaderStage::fragment)
+            info.reflection = makeFragment();
+
+        return info;
+    };
+
+    // Both stages for OpenGL and for Metal, and the fragment stage alone for Direct3D
+    ShaderBundle::Ptr bundle (new ShaderBundle());
+
+    for (const auto language : { ShaderLanguage::glsl, ShaderLanguage::msl })
+    {
+        for (const auto stage : { ShaderStage::vertex, ShaderStage::fragment })
+            bundle->addShader (makeVariant (stage, language));
+    }
+
+    bundle->addShader (makeVariant (ShaderStage::fragment, ShaderLanguage::hlsl));
+
+    const auto created = GpuImageShader::createFromBundle (bundle);
+    ASSERT_TRUE (created.wasOk()) << getFailure (created);
+
+    const auto shader = created.getValue();
+    EXPECT_TRUE (shader->canDrawWith (GpuPlatform::OpenGL));
+    EXPECT_TRUE (shader->canDrawWith (GpuPlatform::Metal));
+    EXPECT_FALSE (shader->canDrawWith (GpuPlatform::Direct3D));
+    EXPECT_FALSE (shader->canDrawWith (GpuPlatform::Vulkan));
+    EXPECT_FALSE (shader->canDrawWith (GpuPlatform::WebGPU));
+
+    // OpenGL ES takes the GLSL variant of a bundle without an ESSL one, as a draw does
+    EXPECT_TRUE (shader->canDrawWith (GpuPlatform::OpenGLES));
+}
+
 #if YUP_ENABLE_SHADER_TRANSPILER
 
 TEST_F (GpuImageShaderTests, CreatesFromGlslWithABlockAndOneInput)
@@ -307,6 +477,28 @@ TEST_F (GpuImageShaderTests, ProceduralShaderHasNoInputNorUniforms)
 
     EXPECT_EQ (created.getValue()->getNumInputTextures(), 0);
     EXPECT_TRUE (created.getValue()->createUniforms().isEmpty());
+
+    // Compiled for every language, it draws with every graphics API
+    for (const auto platform : { GpuPlatform::OpenGL, GpuPlatform::OpenGLES, GpuPlatform::Direct3D, GpuPlatform::Metal, GpuPlatform::WebGPU, GpuPlatform::Vulkan })
+        EXPECT_TRUE (created.getValue()->canDrawWith (platform)) << static_cast<int> (platform);
+}
+
+TEST_F (GpuImageShaderTests, GlslWithOtherInputsOrOutputsThanUvAndThePixelIsRefused)
+{
+    const auto twoOutputs = GpuImageShader::createFromGlsl (R"(#version 450
+layout(location = 0) out vec4 color;
+layout(location = 1) out vec4 motion;
+void main() { color = vec4 (1.0); motion = vec4 (0.0); })");
+
+    EXPECT_TRUE (getFailure (twoOutputs).contains ("one output")) << getFailure (twoOutputs);
+
+    const auto otherInput = GpuImageShader::createFromGlsl (R"(#version 450
+layout(location = 0) in vec2 uv;
+layout(location = 1) in vec4 tint;
+layout(location = 0) out vec4 color;
+void main() { color = tint * uv.x; })");
+
+    EXPECT_TRUE (getFailure (otherInput).contains ("input tint")) << getFailure (otherInput);
 }
 
 TEST_F (GpuImageShaderTests, BoolMembersOfGlslAreUnsignedIntegers)
@@ -501,6 +693,53 @@ TEST_F (GpuImageShaderMockedTests, DrawFailsWithoutTheInputsTheShaderDeclares)
     const GpuTexture::Ptr one[] = { target->asTexture() };
     EXPECT_TRUE (shader->draw (device, frame, *target, shader->createUniforms(), Span<const GpuTexture::Ptr> (one, 1)).failed());
     EXPECT_TRUE (shader->draw (device, frame, *target, shader->createUniforms(), Span<const GpuTexture::Ptr>()).failed());
+}
+
+TEST_F (GpuImageShaderMockedTests, DrawFailsWhenAnInputIsTheTextureOfTheTarget)
+{
+    ShaderReflection reflection;
+    reflection.separateImages = { makeTexture ("source", 0, 0) };
+
+    const auto shader = createShader (reflection);
+    ASSERT_NE (shader, nullptr);
+
+    // Refused before anything is compiled or recorded
+    EXPECT_CALL (*mockOreCtx, makeShaderModule (_)).Times (0);
+
+    auto frame = GpuFrame::begin (device);
+    ASSERT_TRUE (frame.isValid());
+
+    const auto drawn = shader->draw (device, frame, *target, shader->createUniforms(), target->asTexture());
+    ASSERT_TRUE (drawn.failed());
+    EXPECT_TRUE (drawn.getErrorMessage().contains ("texture of its target")) << drawn.getErrorMessage();
+}
+
+TEST_F (GpuImageShaderMockedTests, DrawFailsWithTheUniformsOfAnotherBlock)
+{
+    ShaderReflection reflection;
+    reflection.uniformBuffers = { makeBlock (0, 0) };
+
+    // As many bytes, laid out for a member of another name
+    auto otherReflection = reflection;
+    otherReflection.uniformBuffers.front().members.front().name = "amount";
+
+    const auto shader = createShader (reflection);
+    const auto other = createShader (otherReflection);
+    ASSERT_NE (shader, nullptr);
+    ASSERT_NE (other, nullptr);
+    ASSERT_EQ (shader->createUniforms().getSizeInBytes(), other->createUniforms().getSizeInBytes());
+
+    EXPECT_CALL (*mockOreCtx, makeShaderModule (_)).Times (0);
+
+    auto frame = GpuFrame::begin (device);
+    ASSERT_TRUE (frame.isValid());
+
+    for (const auto& uniforms : { other->createUniforms(), ShaderUniforms() })
+    {
+        const auto drawn = shader->draw (device, frame, *target, uniforms);
+        ASSERT_TRUE (drawn.failed());
+        EXPECT_TRUE (drawn.getErrorMessage().contains ("uniforms")) << drawn.getErrorMessage();
+    }
 }
 
 TEST_F (GpuImageShaderMockedTests, PipelineThatCannotBeCompiledIsNotCompiledAgain)

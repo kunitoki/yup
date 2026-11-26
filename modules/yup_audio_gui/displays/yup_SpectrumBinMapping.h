@@ -159,7 +159,7 @@ public:
     /** Returns the level of the band covered by a display point.
 
         @param binLevels      the non-negative linear level of every FFT bin, from bin 0 to Nyquist
-        @param displayPoint   the display point index
+        @param displayPoint   the display point index, one outside the display points has no band and returns 0
         @param aggregation    how the levels of the bins inside the band are combined
     */
     float getBandLevel (Span<const float> binLevels, int displayPoint, BandAggregation aggregation) const noexcept;

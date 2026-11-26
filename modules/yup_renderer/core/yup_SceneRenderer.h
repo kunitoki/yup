@@ -95,6 +95,7 @@ namespace yup
 
     The color and depth targets are kept between frames and created again when the size, the
     tier, the raster sample count or the device changes, so render() can be called every frame.
+    releaseTargets() lets go of them for a scene that is not shown for a while.
 
     @see SceneComponent, SceneDrawList
 */
@@ -189,6 +190,19 @@ public:
     /** Returns why the last render failed, or an empty string if it succeeded. */
     const String& getLastError() const noexcept { return lastError; }
 
+    /** Returns what prevented the last render from coloring the meshes of a material shader with it.
+
+        A shader the renderer can't draw with leaves its meshes to their materials, and the render
+        succeeds: one that has no variant for the tier in use, or whose pipelines the device does
+        not compile. A SceneMaterialComponent reports it in the diagnostics of its document.
+
+        @param shader The shader of a MaterialShaderNode of the scene.
+
+        @returns What prevents it, or an empty string when the last render that looked at the
+                 scene drew with the shader, or met no visible entity colored by it.
+    */
+    String getMaterialShaderError (const MaterialShader& shader) const;
+
     /** Returns the capabilities the last render ran with, or nullptr before the first render.
 
         The pointer stays valid until the next render.
@@ -234,6 +248,20 @@ public:
         the image before them.
     */
     void restartAccumulation() noexcept;
+
+    /** Releases what the frames are rendered into and carried over in: the texture render()
+        returned, the targets of the passes, the accumulated history and the shadow maps.
+
+        For a scene that is not shown for a while, as SceneComponent does while it is hidden. The
+        pipelines, the baked probes and the environment are kept, so the next render() only
+        creates its targets again, as after a change of size: it starts over from that frame
+        alone, draws the shadow maps again, and the full tier accumulates its frames anew, see
+        isConverged(). The frames the GPU has not finished keep the textures they use. Does
+        nothing before the first render.
+
+        @see restartAccumulation
+    */
+    void releaseTargets() noexcept;
 
     //==============================================================================
     /** What one frame of this renderer cost on the GPU and what it drew, see setFrameStatsEnabled(). */
@@ -308,7 +336,7 @@ public:
     };
 
     /** @internal Returns an intermediate texture of the last frame, valid until the next render,
-        or nullptr when the tier has none or the last render failed.
+        or nullptr when the tier has none, the last render failed or releaseTargets() was called since.
     */
     GpuTexture::Ptr getPassOutput (PassOutput output) const;
 

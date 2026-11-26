@@ -29,30 +29,29 @@
 
 using namespace yup;
 
-namespace
+class CountDownLatchTests : public ::testing::Test
 {
+protected:
+    static void runWorkers (CountDownLatch& latch, int numWorkers, std::atomic<int>& done)
+    {
+        std::vector<std::thread> workers;
 
-void runWorkers (CountDownLatch& latch, int numWorkers, std::atomic<int>& done)
-{
-    std::vector<std::thread> workers;
-
-    for (int i = 0; i < numWorkers; ++i)
-        workers.emplace_back ([&]
-        {
-            for (volatile int spin = 0; spin < 1000 * (i + 1); ++spin)
+        for (int i = 0; i < numWorkers; ++i)
+            workers.emplace_back ([&latch, &done, i]
             {
-            }
-            latch.countDown();
-            ++done;
-        });
+                for (volatile int spin = 0; spin < 1000 * (i + 1); spin = spin + 1)
+                {
+                }
+                latch.countDown();
+                ++done;
+            });
 
-    for (auto& worker : workers)
-        worker.join();
-}
+        for (auto& worker : workers)
+            worker.join();
+    }
+};
 
-} // namespace
-
-TEST (CountDownLatchTests, WaitsUntilTheCountReachesZero)
+TEST_F (CountDownLatchTests, WaitsUntilTheCountReachesZero)
 {
     constexpr int numWorkers = 8;
 
@@ -72,7 +71,7 @@ TEST (CountDownLatchTests, WaitsUntilTheCountReachesZero)
     EXPECT_EQ (0, latch.getCount());
 }
 
-TEST (CountDownLatchTests, CountsDownBelowZeroWithoutWakingAnyone)
+TEST_F (CountDownLatchTests, CountsDownBelowZeroWithoutWakingAnyone)
 {
     CountDownLatch latch (0);
 
@@ -82,7 +81,7 @@ TEST (CountDownLatchTests, CountsDownBelowZeroWithoutWakingAnyone)
     EXPECT_EQ (0, latch.getCount());
 }
 
-TEST (CountDownLatchTests, AddCountBeforeDispatchingWorkKeepsTheWaiterBlocked)
+TEST_F (CountDownLatchTests, AddCountBeforeDispatchingWorkKeepsTheWaiterBlocked)
 {
     // The pattern the parallel import parser uses: a worker raises the count
     // before its work is dispatched. The waiter starts blocked (count 1), so
@@ -96,7 +95,7 @@ TEST (CountDownLatchTests, AddCountBeforeDispatchingWorkKeepsTheWaiterBlocked)
     {
         latch.addCount (1);
 
-        for (volatile int spin = 0; spin < 100000; ++spin)
+        for (volatile int spin = 0; spin < 100000; spin = spin + 1)
         {
         }
 
@@ -117,7 +116,7 @@ TEST (CountDownLatchTests, AddCountBeforeDispatchingWorkKeepsTheWaiterBlocked)
     EXPECT_EQ (0, latch.getCount());
 }
 
-TEST (CountDownLatchTests, WaitsFromMultipleThreads)
+TEST_F (CountDownLatchTests, WaitsFromMultipleThreads)
 {
     constexpr int numWorkers = 8;
 

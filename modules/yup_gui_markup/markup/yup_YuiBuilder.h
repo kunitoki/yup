@@ -167,8 +167,9 @@ public:
     /** Optional sink notified when a live binding reports a problem after or during build. */
     std::function<void (const DataTreeDiagnostic&)> onDiagnostic;
 
-    /** Optional hook invoked when the built DataTree is mutated in place.
-        When null, the builder automatically rebuilds from its watched DataTree.
+    /** Optional hook invoked once the built DataTree was mutated in place, when its changes are
+        applied (see @ref applyPendingChanges). When null, the builder builds its watched DataTree
+        again itself.
     */
     std::function<void()> onTreeMutated;
 
@@ -177,12 +178,22 @@ public:
     */
     std::function<void()> onRangeChanged;
 
-    /** Makes again, now, the components of the `repeat` blocks whose range changed.
+    /** Optional hook invoked each time a build has made, or kept, the root of its components:
+        before the components under it are made and before any of them is given its values.
+    */
+    std::function<void (Component&)> onRootCreated;
 
-        The range of a `repeat` of components can read what changes, such as the property of a
-        model. When it does, the components are made again once the change is over, from the
-        message loop, keeping those that are still described. A tool or a test with no message
-        loop calls this to have it done. It does nothing when no range changed.
+    /** Applies, now, the changes waiting for the message loop.
+
+        The builder watches the tree it built, and the ranges of its `repeat` blocks of components,
+        which can read what changes, such as the property of a model. When the tree is mutated in
+        place or a range changes, the document is built again once the change is over, from the
+        message loop, keeping the components that are still described. However many changes are
+        made before that, they lead to one build. A tool or a test with no message loop calls this
+        to have it done. It does nothing when nothing changed.
+
+        The changes are not applied as they are made so that a handler or an action can make them:
+        the components it runs for are still there when it returns.
     */
     void applyPendingChanges();
 
@@ -192,12 +203,22 @@ public:
     /** Returns true when DataTree mutation notifications are currently suppressed. */
     bool isIgnoringTreeChanges() const noexcept { return ignoreTreeChanges; }
 
+    /** Returns true when elements were added to the built DataTree, removed from it or moved in
+        it since the last build, done or failed.
+
+        A DataTreeSourceMap made for the tree no longer places its elements then, as it knows
+        them by their index among their siblings.
+    */
+    bool hasTreeStructureChanged() const noexcept;
+
     //==============================================================================
     /** Registers the function run by `action ("name", ...)` handlers, or removes it when null.
 
         Actions are looked up when the handler runs, so they can be set before or after building.
-        Don't rebuild synchronously from inside an action, as the component emitting the signal
-        would be destroyed while it runs.
+        An action can change the built DataTree, which is applied once the handler is over (see
+        @ref applyPendingChanges). Don't build again from inside an action: it ends the handler,
+        whose calls left are not run, and the component emitting the signal may be destroyed
+        while it runs.
     */
     void setAction (const String& name, Action action);
 
@@ -422,7 +443,7 @@ private:
     };
 
     struct TreeWatcher;
-    struct RangeUpdater;
+    struct ChangeUpdater;
 
     //==============================================================================
     void collectDeclarations (const DataTree& document);
@@ -435,6 +456,7 @@ private:
     Component& createComponent (const DataTree& element, Component* parent, Scope& scope, const DataTree& recordElement, const String& turn = {});
     void createRepeated (const DataTree& repeat, Component& parent, Scope& scope, const String& turn);
     bool bindRanges();
+    void treeMutated();
     void rangeChanged();
     std::unique_ptr<Component> reuseComponent (const DataTree& element, Component* parent, const ComponentTypeInfo& type, const String& turn);
     void placeChild (Component& parent, Component& child, bool isReused);
@@ -473,7 +495,7 @@ private:
     std::vector<Connection> connections;
     std::vector<std::unique_ptr<YuiPropertyWatcher>> watchers;
     std::unique_ptr<TreeWatcher> treeWatcher;
-    std::unique_ptr<RangeUpdater> rangeUpdater;
+    std::unique_ptr<ChangeUpdater> changeUpdater;
     std::map<String, Action> actions;
     FallbackAction fallbackAction;
     std::vector<ComponentInitializer> initializers;
@@ -483,6 +505,7 @@ private:
     File baseDirectory;
     bool ignoreTreeChanges = false;
     bool isBuilding = false;
+    bool hasPendingTreeChange = false;
     bool hasPendingRangeChange = false;
     int numRepeatTurns = 1;
 

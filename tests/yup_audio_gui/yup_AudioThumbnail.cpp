@@ -123,6 +123,40 @@ protected:
     std::shared_ptr<AudioPeakProfileCache> cache;
     std::unique_ptr<AudioThumbnail> thumbnail;
     std::unique_ptr<ThumbnailTestListener> listener;
+
+    /** Counts the paths a paint draws, with no GPU. */
+    class PathCounter final : public rive::Renderer
+    {
+    public:
+        using rive::Renderer::drawImage;
+        using rive::Renderer::drawImageMesh;
+
+        void save() override {}
+
+        void restore() override {}
+
+        void transform (const rive::Mat2D&) override {}
+
+        void drawPath (rive::RenderPath*, rive::RenderPaint*) override { ++numPaths; }
+
+        void clipPath (rive::RenderPath*) override {}
+
+        void drawImage (const rive::RenderImage*, rive::ImageSampler, rive::BlendMode, float) override {}
+
+        void drawImageMesh (const rive::RenderImage*,
+                            rive::ImageSampler,
+                            rive::rcp<rive::RenderBuffer>,
+                            rive::rcp<rive::RenderBuffer>,
+                            rive::rcp<rive::RenderBuffer>,
+                            uint32_t,
+                            uint32_t,
+                            rive::BlendMode,
+                            float) override {}
+
+        void modulateOpacity (float) override {}
+
+        int numPaths = 0;
+    };
 };
 
 TEST_F (AudioThumbnailTests, DefaultConstructor)
@@ -486,6 +520,39 @@ TEST_F (AudioThumbnailTests, PaintChannelWithValidData)
     syncThumbnail.paintChannel (g, lane, 0, sampleRange, 400.0f);
 
     EXPECT_TRUE (true);
+}
+
+TEST_F (AudioThumbnailTests, PaintChannelLeavesOutTheColumnsOutsideWhatIsRepainted)
+{
+    auto syncCache = std::make_shared<AudioPeakProfileCache>();
+    AudioThumbnail syncThumbnail (syncCache);
+
+    auto buffer = createThumbnailTestBuffer (2, kThumbnailBufferSize);
+    syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
+    ASSERT_NE (nullptr, syncThumbnail.getPeakProfile());
+
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
+    PathCounter counter;
+    Graphics g (*context, counter);
+
+    const Rectangle<float> lane (0.0f, 0.0f, 400.0f, 100.0f);
+    const Range<double> sampleRange (0.0, static_cast<double> (kThumbnailBufferSize));
+
+    syncThumbnail.paintChannel (g, lane, 0, sampleRange, 400.0f);
+
+    const int numPathsOfTheLane = counter.numPaths;
+    ASSERT_GT (numPathsOfTheLane, 0);
+
+    // A strip a fortieth of the lane wide is all that is repainted, as when a playhead moved out of it
+    counter.numPaths = 0;
+
+    {
+        const auto saved = g.saveState();
+        g.setClipPath (Rectangle<float> (200.0f, 0.0f, 10.0f, 100.0f));
+        syncThumbnail.paintChannel (g, lane, 0, sampleRange, 400.0f);
+    }
+
+    EXPECT_EQ (numPathsOfTheLane, counter.numPaths * 40);
 }
 
 TEST_F (AudioThumbnailTests, PaintChannelWithInvalidChannelIndex)

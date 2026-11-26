@@ -35,6 +35,10 @@ namespace yup
     sets the property then drives the shader, and repaints the component as any property
     change does: a stylesheet rule, a transition, a binding or Component::setProperty().
 
+    The shader only runs again when something it reads changed: a value of its uniform block, a
+    series, or what the component painted. A paint that changes none of them, as when something
+    repaints around the component, draws the picture the shader made last.
+
     It is what an `effect:` declaration installs when it names a `shader` block of the
     stylesheet, the properties being the ones the block declares (see StyleContext::findShader):
 
@@ -126,9 +130,16 @@ namespace yup
     - `time`: the seconds the component has been showing for, a `float`. It starts again from
       zero every hour, which keeps it precise to a fraction of a millisecond as a `float`.
 
-    A shader whose block has a `time` member is animated: the component repaints at every
-    frame of its window while it is showing. Any other shader only runs when the component is
-    painted, and costs nothing between two paints.
+    A member of one of these names is filled this way whatever the shader means by it. Give a
+    value of your own another name, or a Property of its name: checkProperties() and a stylesheet
+    loading the shader refuse one that is declared as something else and that no property fills.
+
+    A shader whose block has a `time` member is animated: it is drawn again at every frame of
+    the window of its component, over what the component painted last, which is not painted
+    again for it (see ComponentEffect::invalidate). It takes those frames only while they show it:
+    from the paint that draws it, until the component is hidden, is given another effect, or
+    the shader can't be drawn. The window is then left with no frame to run for it. Any other
+    shader only runs when the component is painted, and costs nothing between two paints.
 
     The picture has the size of the component in pixels, its paint margin included (see
     Component::setPaintMargin). A shader declaring no texture makes its picture alone: it fills
@@ -136,11 +147,19 @@ namespace yup
     be drawn, as an effect has one to give: the textures filled from arrays don't count (see
     getNumPictures).
 
-    When the shader can't run, the component is drawn as it is: without a shader, without a
-    GPU, or when the shader fails to compile for the device. A shader that could not be drawn
-    is not tried again at every paint, nor does it keep its component repainting: it is tried
-    again once the component is painted by another device, or once the effect is given another
-    shader.
+    When the shader can't run, the component is drawn as it is, with no texture in between: without
+    a shader, with a shader reading two pictures, without a GPU, or once the shader failed to
+    compile for the device (see isActive). A shader that could not be drawn is not tried again at
+    every paint: it is tried again once the component is in the window of another device, or once
+    the effect is given another shader. Nor does a shader that is not drawn keep the frames of
+    its window running: one given the time takes them again once a paint of the component drew it.
+    What the device refused is logged and kept (see getDrawError), and a stylesheet styling the
+    component reports it where the shader is declared.
+
+    The effect keeps the texture it draws in, which has the size of the component, the texture it
+    last read and one for each series, all made with the device of the window the component is
+    painted in. It lets go of them when the component leaves that window
+    (see ComponentEffect::releaseResources).
 
     The effect is bound to the component it was created for: set it on that component only.
     Create it, change its shader and destroy it on the message thread. The effect is applied
@@ -184,7 +203,10 @@ public:
     ~ShaderEffect() override;
 
     //==============================================================================
-    /** Replaces the shader, and repaints the component.
+    /** Replaces the shader, which the component it is set on is drawn through at its next frame.
+
+        The component is not painted again for it, unless the effect starts or stops having a
+        shader it can draw with (see isActive).
 
         The properties stay the ones the effect was created with: the new shader is expected
         to read the same ones, as the shader of a file loaded again does.
@@ -245,9 +267,48 @@ public:
     */
     static int getNumPictures (const GpuImageShader& shader, const std::vector<Property>& properties);
 
+    /** Tells whether a shader can be filled from properties, which the constructor does not check:
+        a property it can't write is ignored, and its member stays at zero.
+
+        @param shader      The shader.
+        @param properties  The properties to fill it from.
+
+        @returns Result::ok(), or the first thing that is wrong: a property of a type a uniform
+                 can't take (see getNumUniformComponents), one naming no member of the uniform
+                 block of the shader, nor a texture of it for an array, one whose member holds
+                 fewer scalars than its type needs, or a member named `resolution`, `scale` or
+                 `time` that no property fills and that is not what the effect fills it with: a
+                 `vec2` or a `vec4` for the first, a `float` for the others.
+    */
+    static Result checkProperties (const GpuImageShader& shader, const std::vector<Property>& properties);
+
     //==============================================================================
-    /** @internal */
+    /** Returns false while the effect has nothing to draw the component with, which is then
+        painted directly: it has no shader, its shader reads two pictures, or the device of the
+        window the component is in could not draw it.
+
+        @see ComponentEffect::isActive
+    */
+    bool isActive() const override;
+
+    /** Returns why the device the component was last painted with could not draw the shader,
+        such as a pipeline it failed to compile or a bundle with no variant for its graphics
+        API. It is empty while the shader is drawn, or was never tried.
+
+        The failure is found while the component is painted. It is logged then, and when a
+        stylesheet styles the component its StyleContext reports it at its next restyle, as a
+        diagnostic at the `shader` block declaring the shader. It is forgotten when the effect
+        is given another shader, when the component is painted by another device, and when it
+        leaves its window.
+    */
+    const String& getDrawError() const noexcept { return drawError; }
+
+    /** @internal The texture a component gives is another one each time the component painted itself
+        again, which is what tells the effect that the picture changed: one written in place does not. */
     void apply (Graphics& g, GpuTexture::Ptr inputTexture, Rectangle<float> bounds) override;
+
+    /** @internal */
+    void releaseResources() override;
 
 private:
     struct SeriesTextures;
@@ -262,10 +323,15 @@ private:
     std::vector<Property> properties;
     GpuDevice::Ptr targetDevice;
     GpuTarget::Ptr target;
+    GpuTexture::Ptr drawnInput;
+    ShaderUniforms drawnUniforms;
     std::unique_ptr<SeriesTextures> series;
     std::optional<FrameAttachment> frameAttachment;
     double time = 0.0;
-    bool drawFailed = false;
+    String drawError;
+    bool canDraw = false;
+    bool isGivenTime = false;
+    bool isStalled = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ShaderEffect)
 };

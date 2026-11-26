@@ -32,7 +32,6 @@ using namespace yup;
 namespace
 {
 
-constexpr float maximumSize = 4096.0f;
 constexpr double maximumScale = 4.0;
 constexpr double maximumZoom = 8.0;
 constexpr float defaultMargin = 8.0f;
@@ -71,12 +70,12 @@ var describeTool (const char* name, const char* description, std::initializer_li
 // The arguments saying what to show of a file and how, which the tools showing one share
 std::pair<Identifier, var> fileArgument()
 {
-    return { "file", describeText ("Path of the .yui file, absolute or relative to the folder of the workspace.") };
+    return { "file", describeText ("Path of the .yui file inside the folder of the workspace, absolute or relative to it.") };
 }
 
 std::pair<Identifier, var> modelsArgument()
 {
-    return { "models", describeText ("Path of the JSON file declaring the models the file binds to. Without it, the <name>.models.json next to a <name>.yui file is used when there is one.") };
+    return { "models", describeText ("Path of the JSON file declaring the models the file binds to, inside the folder of the workspace. Without it, the <name>.models.json next to a <name>.yui file is used when there is one.") };
 }
 
 var describeNumber (const char* description)
@@ -178,6 +177,19 @@ YuiAgentResult succeed (const var& found)
 }
 
 //==============================================================================
+// True for a file inside a folder with no link on the way to it, which could lead out of the folder
+bool isInsideFolder (const File& file, const File& folder)
+{
+    if (! file.isAChildOf (folder))
+        return false;
+
+    for (auto part = file; part != folder; part = part.getParentDirectory())
+        if (part.isSymbolicLink())
+            return false;
+
+    return true;
+}
+
 Result findFile (const var& arguments, const YuiAgentHost& host, File& file)
 {
     const auto path = arguments["file"].toString();
@@ -186,6 +198,9 @@ Result findFile (const var& arguments, const YuiAgentHost& host, File& file)
         return Result::fail ("give the path of a .yui file as 'file'");
 
     file = host.baseFolder.getChildFile (path);
+
+    if (! isInsideFolder (file, host.baseFolder))
+        return Result::fail ("'file' is a file inside '" + host.baseFolder.getFullPathName() + "'");
 
     if (! file.existsAsFile())
         return Result::fail ("can't read '" + file.getFullPathName() + "'");
@@ -200,6 +215,9 @@ Result loadModels (const var& arguments, const YuiAgentHost& host, const File& f
     const auto modelsFile = given.isNotEmpty() ? host.baseFolder.getChildFile (given)
                                                : file.getSiblingFile (file.getFileNameWithoutExtension() + ".models.json");
     const auto* values = arguments["values"].getDynamicObject();
+
+    if (! isInsideFolder (modelsFile, host.baseFolder))
+        return Result::fail ("'models' is a file inside '" + host.baseFolder.getFullPathName() + "'");
 
     if (! modelsFile.existsAsFile())
     {
@@ -247,8 +265,8 @@ Result readViewOptions (const var& arguments, YuiToolViewOptions& options)
     {
         const auto parsed = parseYuiToolSize (size);
 
-        if (! parsed.has_value() || parsed->getWidth() > maximumSize || parsed->getHeight() > maximumSize)
-            return Result::fail ("'size' is <width>x<height> in logical pixels, such as 640x400, each at most " + String (static_cast<int> (maximumSize)));
+        if (! parsed.has_value())
+            return Result::fail ("'size' is <width>x<height> in logical pixels, such as 640x400, each at most " + String (static_cast<int> (maximumYuiToolSize)));
 
         options.size = *parsed;
     }
@@ -634,19 +652,6 @@ Result readGrid (const var& arguments, double scale, float& spacing)
     return Result::ok();
 }
 
-// True for a file inside a folder with no link on the way to it, which could lead out of the folder
-bool isInsideFolder (const File& file, const File& folder)
-{
-    if (! file.isAChildOf (folder))
-        return false;
-
-    for (auto part = file; part != folder; part = part.getParentDirectory())
-        if (part.isSymbolicLink())
-            return false;
-
-    return true;
-}
-
 // The file a call asks its image to be written to, none when it asks for none
 Result findOutput (const var& arguments, const YuiAgentHost& host, File& output)
 {
@@ -965,7 +970,7 @@ YuiAgentResult show (const var& arguments, const YuiAgentHost& host, bool draw)
             return YuiAgentResult::fail (loaded.getErrorMessage());
 
         // An interface with no size of its own takes the one of the image it is meant to look like
-        if (drawn.reference.isValid() && jmax (drawn.reference.getWidth(), drawn.reference.getHeight()) <= static_cast<int> (maximumSize))
+        if (drawn.reference.isValid() && jmax (drawn.reference.getWidth(), drawn.reference.getHeight()) <= static_cast<int> (maximumYuiToolSize))
             options.fallbackSize = Size<int> (drawn.reference.getWidth(), drawn.reference.getHeight()).to<float>();
     }
 

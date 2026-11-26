@@ -27,6 +27,9 @@ flat normals are generated. Materials follow the glTF metallic-roughness model:
 factors multiply their textures, the base color and emissive textures are sRGB,
 and alpha can be opaque, masked or blended.
 
+`addPrimitive()` returns a `Result`: a primitive that is not made of triangles
+of its vertices is not added, and the failure tells why.
+
 `addPrimitive()` also takes the joints and weights of a skinned primitive and
 its morph targets, see [Animation](animation.md#skins).
 
@@ -52,8 +55,9 @@ view.repaint();                                      // a SceneComponent draws w
 ```
 
 - **Same count, same order.** The indices refer to the vertices, so their
-  number can't change: another count asserts and changes nothing. To change
-  the topology, build another mesh.
+  number can't change: another count changes nothing, and `setVertices()`
+  returns a failed `Result` telling why. To change the topology, build another
+  mesh.
 - **Taken as they are.** Nothing is generated: the caller writes the
   positions, the normals and the tangents.
 - **They are copied** into the storage the primitive already has, so a call
@@ -150,7 +154,8 @@ What is converted:
 Primitives that are not triangles are skipped with a warning, and so are the
 joints beyond the four of `JOINTS_0` and the morph targets of texture
 coordinates and colors. Files that require an extension `yup_3d` does not
-support fail to load.
+support fail to load. Files that only use one load without what it changes,
+with a warning naming the extension.
 
 ```{note}
 Images are decoded with the image formats of `yup_graphics`. Link `libpng`,

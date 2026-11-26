@@ -92,22 +92,31 @@ const ComponentTypeInfo& TabBar::getClassTypeInfo()
                                  .property (
                                      TabBarIds::selectedTab,
                                      [] (const TabBar& c) { return c.getSelectedTabId().toString(); },
-                                     [] (TabBar& c, const String& v) { c.setSelectedTab (v.isEmpty() ? Identifier() : Identifier (v)); },
+                                     // No id is the first tab, the one selected as the tabs are added
+                                     [] (TabBar& c, const String& v) { c.setSelectedTab (v.isNotEmpty() ? Identifier (v) : c.getTabId (0)); },
                                      String(),
-                                     "The id of the selected tab.")
+                                     "The id of the selected tab, the first one when empty.")
                                  .readOnly (TabBarIds::indicatorBounds, &TabBar::getIndicatorBounds, {}, "The area marking the selected tab, which slides to the one selected next. Empty when no tab is selected.")
                                  .readOnly (TabBarIds::focusIndicatorVisible, &TabBar::isFocusIndicatorVisible, false, "Whether the bar shows that it has the keyboard focus.")
                                  .signal (ComponentSignal {
                                      .name = Identifier ("onSelectionChanged"),
                                      .connect = [] (Component& component, ComponentSignal::Handler handler)
                                      {
-                                         if (auto* bar = dynamic_cast<TabBar*> (&component))
+                                         auto* bar = dynamic_cast<TabBar*> (&component);
+
+                                         if (bar == nullptr)
+                                             return;
+
+                                         if (handler == nullptr)
                                          {
-                                             bar->onSelectionChanged = [handler = std::move (handler)] (const Identifier& tabId)
-                                             {
-                                                 handler ({ var (tabId.toString()) });
-                                             };
+                                             bar->onSelectionChanged = nullptr;
+                                             return;
                                          }
+
+                                         bar->onSelectionChanged = [handler = std::move (handler)] (const Identifier& tabId)
+                                         {
+                                             handler ({ var (tabId.toString()) });
+                                         };
                                      },
                                      .description = "Emitted with the selected tab id when the selection changes.",
                                      .arguments = { { Identifier ("tab"), ComponentProperty::Type::string } } })
@@ -486,6 +495,16 @@ void TabBar::resized()
     updateLayout (false, true);
 }
 
+void TabBar::visibilityChanged()
+{
+    updateFrameAttachment();
+}
+
+void TabBar::parentHierarchyChanged()
+{
+    updateFrameAttachment();
+}
+
 void TabBar::refreshDisplay (double lastFrameTimeSeconds)
 {
     // Without a duration, motions left over from before it was set to 0 finish at once.
@@ -511,6 +530,8 @@ void TabBar::refreshDisplay (double lastFrameTimeSeconds)
 
     if (advance (indicatorMotion))
         repaint();
+
+    updateFrameAttachment();
 }
 
 bool TabBar::keyDown (const KeyPress& key, const Point<float>& position)
@@ -821,7 +842,23 @@ void TabBar::updateLayout (bool animate, bool revealSelection)
                                   animate && ! appearing && animationDuration > 0.0);
     }
 
+    updateFrameAttachment();
     repaint();
+}
+
+void TabBar::updateFrameAttachment()
+{
+    const auto isMoving = [] (const Motion& motion)
+    {
+        return motion.progress < 1.0;
+    };
+
+    const auto needsFrames = isMoving (overflowMotion) || isMoving (indicatorMotion) || std::any_of (tabs.begin(), tabs.end(), [&isMoving] (const Tab& tab)
+    {
+        return isMoving (tab.motion);
+    });
+
+    frameAttachment.setActive (needsFrames && isShowing());
 }
 
 void TabBar::updateOverflowButtonContent (bool selectedIsHidden)

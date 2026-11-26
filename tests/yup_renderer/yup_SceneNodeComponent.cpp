@@ -154,6 +154,26 @@ TEST_F (SceneNodeComponentTests, AValueThatDoesNotPlaceANodeIsReported)
     expectVector (positionOf (*pair), 0.0f, 0.0f, 0.0f);
 }
 
+TEST_F (SceneNodeComponentTests, ANumberThatIsNotFiniteDoesNotPlaceANode)
+{
+    YuiDocument document;
+    load (document, "Scene3D { Node3D { id: placed; position: [1, 2, 3]; scale: 2; } }");
+
+    auto* placed = document.findById<SceneNodeComponent> ("placed");
+    ASSERT_NE (placed, nullptr);
+
+    // A node that is nowhere would take everything under it along: the value is reported, and places nothing
+    placed->setProperty (Identifier ("position"), numbers ({ 1.0, std::numeric_limits<double>::quiet_NaN(), 3.0 }));
+
+    expectDiagnostic (document, "Node3D.position: expected 3 numbers");
+    expectVector (positionOf (*placed), 0.0f, 0.0f, 0.0f);
+
+    placed->setProperty (Identifier ("scale"), std::numeric_limits<double>::infinity());
+
+    expectDiagnostic (document, "Node3D.scale: expected a number");
+    expectVector (scaleOf (*placed), 1.0f, 1.0f, 1.0f);
+}
+
 TEST_F (SceneNodeComponentTests, TheEntitiesFollowTheTreeOfTheComponents)
 {
     YuiDocument document;
@@ -263,7 +283,7 @@ TEST_F (SceneNodeComponentTests, AnEntityKeepsThePlaceOfItsComponentAmongItsSibl
     EXPECT_EQ (root.getChild (2), third.getEntity());
 }
 
-TEST_F (SceneNodeComponentTests, AnEntityGoesWithItsComponentAndComesBackUnderItsNewParent)
+TEST_F (SceneNodeComponentTests, AnEntityMovesWithItsComponentToAnotherParentOfItsScene)
 {
     SceneComponent view;
     SceneNodeComponent left, right, item, inside;
@@ -277,27 +297,265 @@ TEST_F (SceneNodeComponentTests, AnEntityGoesWithItsComponentAndComesBackUnderIt
 
     const auto scene = view.getScene();
     const auto before = item.getEntity();
+    const auto beforeInside = inside.getEntity();
     ASSERT_TRUE (before.isValid());
+    ASSERT_TRUE (beforeInside.isValid());
     ASSERT_EQ (left.getEntity().getNumChildren(), 1);
 
-    // To another parent: the entity is made again there, with what the component describes
+    // What code gives the entity, which no component describes
+    item.getEntity().attach<LightNode>().intensity = 7.0f;
+
+    // To another parent: the entity moves under the entity of that parent, with the ones under it and all they hold
     right.addAndMakeVisible (item);
 
-    EXPECT_FALSE (before.isValid());
+    EXPECT_EQ (item.getEntity(), before);
+    EXPECT_EQ (inside.getEntity(), beforeInside);
     EXPECT_EQ (left.getEntity().getNumChildren(), 0);
     ASSERT_EQ (right.getEntity().getNumChildren(), 1);
-    EXPECT_EQ (right.getEntity().getChild (0), item.getEntity());
-    EXPECT_EQ (inside.getEntity().getParent(), item.getEntity());
+    EXPECT_EQ (right.getEntity().getChild (0), before);
+    EXPECT_EQ (beforeInside.getParent(), before);
+    EXPECT_TRUE (beforeInside.isActive());
     expectVector (positionOf (item), 1.0f, 0.0f, 0.0f);
 
-    // Out of the scene: its entity goes, with the ones under it
-    const auto inScene = item.getEntity();
-    right.removeChildComponent (item);
+    ASSERT_NE (before.get<LightNode>(), nullptr);
+    EXPECT_FLOAT_EQ (before.get<LightNode>()->intensity, 7.0f);
 
-    EXPECT_FALSE (inScene.isValid());
+    // The frame of the scene finds the node in it: there is nothing to let go of
+    view.refreshDisplay (0.0);
+
+    EXPECT_EQ (item.getEntity(), before);
+    EXPECT_EQ (scene->getNumEntities(), 5);
+}
+
+TEST_F (SceneNodeComponentTests, ANodeTakenOutOfItsSceneKeepsItsEntityOutOfTheTreeUntilTheNextFrame)
+{
+    SceneComponent view;
+    SceneNodeComponent parent, item, inside;
+
+    view.addAndMakeVisible (parent);
+    parent.addAndMakeVisible (item);
+    item.addAndMakeVisible (inside);
+
+    const auto scene = view.getScene();
+    const auto entity = item.getEntity();
+    const auto insideEntity = inside.getEntity();
+    ASSERT_TRUE (entity.isValid());
+    ASSERT_TRUE (insideEntity.isValid());
+
+    parent.removeChildComponent (item);
+
+    // Out of the tree of the scene, so neither drawn nor updated, with the entities under it: the node may only
+    // be on its way to another parent, and still belongs to the scene
+    EXPECT_EQ (item.getEntity(), entity);
+    EXPECT_EQ (inside.getEntity(), insideEntity);
+    EXPECT_FALSE (entity.getParent().isValid());
+    EXPECT_FALSE (entity.isActive());
+    EXPECT_FALSE (insideEntity.isActive());
+    EXPECT_EQ (parent.getEntity().getNumChildren(), 0);
+    EXPECT_EQ (SceneComponent::findFor (item), &view);
+    EXPECT_EQ (SceneComponent::findFor (inside), &view);
+
+    // The next frame of the scene finds the node still out of it: its entity goes, with the ones under it
+    view.refreshDisplay (0.0);
+
+    EXPECT_FALSE (entity.isValid());
+    EXPECT_FALSE (insideEntity.isValid());
     EXPECT_FALSE (item.getEntity().isValid());
     EXPECT_FALSE (inside.getEntity().isValid());
-    EXPECT_EQ (right.getEntity().getNumChildren(), 0);
+    EXPECT_EQ (SceneComponent::findFor (item), nullptr);
+    EXPECT_EQ (SceneComponent::findFor (inside), nullptr);
+    EXPECT_EQ (scene->getNumEntities(), 2);
+
+    // Back in the scene after that, the entities are made again
+    parent.addAndMakeVisible (item);
+
+    ASSERT_TRUE (item.getEntity().isValid());
+    EXPECT_NE (item.getEntity(), entity);
+    EXPECT_EQ (item.getEntity().getParent(), parent.getEntity());
+    EXPECT_EQ (inside.getEntity().getParent(), item.getEntity());
+}
+
+TEST_F (SceneNodeComponentTests, ANodeDeletedOnItsWayOutOfItsSceneTakesItsEntitiesWithIt)
+{
+    SceneComponent view;
+    SceneNodeComponent child;
+    auto node = std::make_unique<SceneNodeComponent>();
+
+    view.addAndMakeVisible (*node);
+    node->addAndMakeVisible (child);
+
+    const auto scene = view.getScene();
+    const auto entity = node->getEntity();
+    const auto childEntity = child.getEntity();
+    ASSERT_TRUE (entity.isValid());
+    ASSERT_TRUE (childEntity.isValid());
+
+    // Taken out, then deleted before any frame of the scene: its entities do not wait for one
+    view.removeChildComponent (*node);
+    ASSERT_TRUE (entity.isValid());
+
+    node.reset();
+
+    EXPECT_FALSE (entity.isValid());
+    EXPECT_FALSE (childEntity.isValid());
+    EXPECT_FALSE (child.getEntity().isValid());
+    EXPECT_EQ (SceneComponent::findFor (child), nullptr);
+    EXPECT_EQ (scene->getNumEntities(), 1);
+
+    // And the frame has nothing left to release
+    view.refreshDisplay (0.0);
+    EXPECT_EQ (scene->getNumEntities(), 1);
+}
+
+TEST_F (SceneNodeComponentTests, ANodeMovedToAnotherSceneMakesItsEntitiesAgainThere)
+{
+    SceneComponent first, second;
+    SceneNodeComponent item, inside;
+
+    first.addAndMakeVisible (item);
+    item.addAndMakeVisible (inside);
+
+    const auto firstScene = first.getScene();
+    const auto entity = item.getEntity();
+    const auto insideEntity = inside.getEntity();
+    ASSERT_TRUE (entity.isValid());
+    ASSERT_TRUE (insideEntity.isValid());
+
+    second.addAndMakeVisible (item);
+
+    // An entity can't go to another scene: the ones the node had are gone at once, and made again where it is now
+    const auto secondScene = second.getScene();
+    ASSERT_NE (secondScene, nullptr);
+    EXPECT_NE (secondScene, firstScene);
+
+    EXPECT_FALSE (entity.isValid());
+    EXPECT_FALSE (insideEntity.isValid());
+    EXPECT_EQ (firstScene->getNumEntities(), 1);
+
+    const auto moved = item.getEntity();
+    ASSERT_TRUE (moved.isValid());
+    EXPECT_EQ (moved.getScene(), secondScene.get());
+    EXPECT_EQ (moved.getParent(), secondScene->getRoot());
+    EXPECT_EQ (inside.getEntity().getParent(), moved);
+    EXPECT_EQ (SceneComponent::findFor (item), &second);
+
+    // The scene it left has nothing to release, and leaves alone the entity the node has in the other one
+    first.refreshDisplay (0.0);
+
+    EXPECT_EQ (item.getEntity(), moved);
+    EXPECT_TRUE (moved.isValid());
+    EXPECT_EQ (secondScene->getNumEntities(), 3);
+}
+
+TEST_F (SceneNodeComponentTests, AnEntityKeptForANodeThatLeftGoesWhenItsSceneShowsAnotherOne)
+{
+    SceneComponent view;
+    SceneNodeComponent stay, gone;
+
+    view.addAndMakeVisible (stay);
+    view.addAndMakeVisible (gone);
+
+    const auto first = view.getScene();
+    const auto entity = gone.getEntity();
+    ASSERT_TRUE (entity.isValid());
+
+    view.removeChildComponent (gone);
+    ASSERT_TRUE (entity.isValid());
+
+    // The scene the node could come back to is not shown anymore: nothing of the components is left in it
+    const auto second = Scene::Ptr (new Scene());
+    view.setScene (second);
+
+    EXPECT_FALSE (entity.isValid());
+    EXPECT_FALSE (gone.getEntity().isValid());
+    EXPECT_EQ (SceneComponent::findFor (gone), nullptr);
+    EXPECT_EQ (first->getNumEntities(), 1);
+    EXPECT_EQ (stay.getEntity().getScene(), second.get());
+
+    // Coming back, the node makes its entity in the scene shown by then
+    view.addAndMakeVisible (gone);
+
+    ASSERT_TRUE (gone.getEntity().isValid());
+    EXPECT_EQ (gone.getEntity().getScene(), second.get());
+    EXPECT_EQ (second->getRoot().getNumChildren(), 2);
+}
+
+TEST_F (SceneNodeComponentTests, AnEntityKeptForANodeThatLeftGoesWhenItsDocumentLoadsAgain)
+{
+    const String text ("Scene3D { id: view; Node3D { id: group; } }");
+
+    YuiDocument document;
+    load (document, text);
+
+    auto* view = document.findById<SceneComponent> ("view");
+    auto* group = document.findById<SceneNodeComponent> ("group");
+
+    ASSERT_NE (view, nullptr);
+    ASSERT_NE (group, nullptr);
+
+    // A node made by code, which the document does not describe
+    SceneNodeComponent extra;
+    group->addAndMakeVisible (extra);
+
+    const auto scene = view->getScene();
+    const auto entity = extra.getEntity();
+    ASSERT_TRUE (entity.isValid());
+    ASSERT_EQ (scene->getNumEntities(), 3);
+
+    group->removeChildComponent (extra);
+    ASSERT_TRUE (entity.isValid());
+
+    // A load is a frame for what the document keeps: the node is not back in the scene by then
+    load (document, text);
+
+    ASSERT_EQ (document.findById<SceneComponent> ("view"), view);
+    EXPECT_FALSE (entity.isValid());
+    EXPECT_FALSE (extra.getEntity().isValid());
+    EXPECT_EQ (scene->getNumEntities(), 2);
+}
+
+TEST_F (SceneNodeComponentTests, ASceneThatGoesFirstLeavesNoEntityToTheNodesThatWereInIt)
+{
+    // The nodes outlive the scene they are in, and the scene it shows outlives both
+    SceneNodeComponent stay, child, gone;
+    Scene::Ptr scene;
+    Entity stayEntity, childEntity, goneEntity;
+
+    {
+        Component window;
+        SceneComponent view;
+
+        window.addAndMakeVisible (view);
+        view.addAndMakeVisible (stay);
+        view.addAndMakeVisible (gone);
+        stay.addAndMakeVisible (child);
+
+        scene = view.getScene();
+        stayEntity = stay.getEntity();
+        childEntity = child.getEntity();
+        goneEntity = gone.getEntity();
+
+        ASSERT_TRUE (stayEntity.isValid());
+        ASSERT_TRUE (childEntity.isValid());
+        ASSERT_TRUE (goneEntity.isValid());
+
+        // One of them is on its way out when the scene goes, with no frame left to release its entity
+        view.removeChildComponent (gone);
+        ASSERT_TRUE (goneEntity.isValid());
+    }
+
+    EXPECT_FALSE (goneEntity.isValid());
+    EXPECT_FALSE (gone.getEntity().isValid());
+    EXPECT_EQ (SceneComponent::findFor (gone), nullptr);
+
+    EXPECT_FALSE (stayEntity.isValid());
+    EXPECT_FALSE (childEntity.isValid());
+    EXPECT_FALSE (stay.getEntity().isValid());
+    EXPECT_FALSE (child.getEntity().isValid());
+    EXPECT_EQ (stay.getParentComponent(), nullptr);
+
+    ASSERT_NE (scene, nullptr);
+    EXPECT_EQ (scene->getNumEntities(), 1);
 }
 
 TEST_F (SceneNodeComponentTests, ANodeInsideAnOrdinaryComponentIsNotInTheScene)
@@ -635,6 +893,50 @@ TEST_F (SceneNodeComponentTests, ANodeThatCanNotBeBoundSaysSoOnceItLetGoOfTheEnt
     EXPECT_EQ (told[0], "Node3D.node: the model has no entity 'Dial'");
     EXPECT_FALSE (hadEntityWhenTold);
     expectVector (positionWhenTold, 1.0f, 2.0f, 3.0f);
+}
+
+TEST_F (SceneNodeComponentTests, AnEntityTwoNodesAreBoundToGetsBackWhatTheModelGaveItWhicheverLetsGoFirst)
+{
+    files["device.gltf"] = modelFile();
+
+    for (const auto firstGoesFirst : { true, false })
+    {
+        SCOPED_TRACE (firstGoesFirst ? "the first one lets go first" : "the second one lets go first");
+
+        YuiDocument document;
+        serve (document);
+        load (document, R"yui(
+            Scene3D {
+                Model3D {
+                    id: device; source: "device.gltf";
+
+                    Node3D { id: first; node: "Knob"; position: [0, 1, 0]; }
+                    Node3D { id: second; node: "Knob"; position: [0, 0, 5]; visible: false; }
+                }
+            })yui");
+
+        auto* device = document.findById<SceneModelComponent> ("device");
+        auto* first = document.findById<SceneNodeComponent> ("first");
+        auto* second = document.findById<SceneNodeComponent> ("second");
+
+        ASSERT_NE (device, nullptr);
+        ASSERT_NE (first, nullptr);
+        ASSERT_NE (second, nullptr);
+
+        const auto knob = first->getEntity();
+        ASSERT_TRUE (knob.isValid());
+        ASSERT_EQ (second->getEntity(), knob);
+        ASSERT_NE (knob.get<TransformNode>(), nullptr);
+
+        // Both drive the entity, where the last one to write shows. What the model gave it is what both took when
+        // they were bound, not what the first one had made of it by then
+        device->removeChildComponent (firstGoesFirst ? first : second);
+        device->removeChildComponent (firstGoesFirst ? second : first);
+
+        ASSERT_TRUE (knob.isValid());
+        expectVector (knob.get<TransformNode>()->getPosition(), 1.0f, 2.0f, 3.0f);
+        EXPECT_TRUE (knob.isVisible());
+    }
 }
 
 TEST_F (SceneNodeComponentTests, ABoundNodeTurningAJointBendsTheSkinBeforeTheSceneIsPainted)

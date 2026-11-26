@@ -76,29 +76,36 @@ void SceneLightComponent::setLightColor (Color newColor)
     setValue (color, newColor, SceneLightComponentIds::color);
 }
 
+void SceneLightComponent::setAmount (float& value, float newValue, const Identifier& property, const char* expected)
+{
+    // A value that is not a number is not at least 0 either: the light keeps the one it had
+    if (checkValue (property, newValue >= 0.0f && std::isfinite (newValue), expected))
+        setValue (value, newValue, property);
+}
+
 void SceneLightComponent::setIntensity (float newIntensity)
 {
-    setValue (settings.intensity, newIntensity, SceneLightComponentIds::intensity);
+    setAmount (settings.intensity, newIntensity, SceneLightComponentIds::intensity, "expected a brightness that is not negative");
 }
 
 void SceneLightComponent::setRange (float newRange)
 {
-    setValue (settings.range, newRange, SceneLightComponentIds::range);
+    setAmount (settings.range, newRange, SceneLightComponentIds::range, "expected a distance, or 0 for the light to fade with the distance alone");
 }
 
 void SceneLightComponent::setInnerConeAngle (float newAngle)
 {
-    setValue (settings.innerConeAngle, newAngle, SceneLightComponentIds::innerCone);
+    setAmount (settings.innerConeAngle, newAngle, SceneLightComponentIds::innerCone, "expected an angle that is not negative");
 }
 
 void SceneLightComponent::setOuterConeAngle (float newAngle)
 {
-    setValue (settings.outerConeAngle, newAngle, SceneLightComponentIds::outerCone);
+    setAmount (settings.outerConeAngle, newAngle, SceneLightComponentIds::outerCone, "expected an angle that is not negative");
 }
 
 void SceneLightComponent::setRadius (float newRadius)
 {
-    setValue (settings.radius, newRadius, SceneLightComponentIds::radius);
+    setAmount (settings.radius, newRadius, SceneLightComponentIds::radius, "expected a size, or 0 for a light without one");
 }
 
 void SceneLightComponent::setCastingShadows (bool shouldCastShadows)
@@ -121,7 +128,9 @@ void SceneLightComponent::updateLight()
     light.color = settings.color;
     light.intensity = settings.intensity;
     light.range = settings.range;
-    light.innerConeAngle = settings.innerConeAngle;
+
+    // A fade that would start beyond where the light ends does not happen: the light ends there
+    light.innerConeAngle = jmin (settings.innerConeAngle, settings.outerConeAngle);
     light.outerConeAngle = settings.outerConeAngle;
     light.radius = settings.radius;
     light.castsShadows = settings.castsShadows;

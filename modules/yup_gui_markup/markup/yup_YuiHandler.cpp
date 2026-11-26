@@ -56,6 +56,48 @@ void skipHandlerTrivia (const char* text, int& offset) noexcept
     }
 }
 
+// Reads the names of `(a, b) =>` at an offset, with comments where the parser takes them: anywhere whitespace goes.
+// Returns the offset of what follows the arrow, or nothing when the text does not start that way
+std::optional<int> readArgumentNames (const char* text, int offset, StringArray& names)
+{
+    if (text[offset] != '(')
+        return std::nullopt;
+
+    ++offset;
+
+    for (;;)
+    {
+        skipHandlerTrivia (text, offset);
+
+        const auto nameStart = offset;
+
+        if (CharacterFunctions::isLetter (text[offset]) || text[offset] == '_')
+            while (CharacterFunctions::isLetterOrDigit (text[offset]) || text[offset] == '_')
+                ++offset;
+
+        if (offset > nameStart)
+            names.add (String::fromUTF8 (text + nameStart, offset - nameStart));
+
+        skipHandlerTrivia (text, offset);
+
+        if (text[offset] != ',')
+            break;
+
+        ++offset;
+    }
+
+    if (text[offset] != ')')
+        return std::nullopt;
+
+    ++offset;
+    skipHandlerTrivia (text, offset);
+
+    if (text[offset] != '=' || text[offset + 1] != '>')
+        return std::nullopt;
+
+    return offset + 2;
+}
+
 std::optional<YuiHandler::Call> extractHandlerCall (const Expression& expr, char firstChar)
 {
     if (expr.getKind() == Expression::Kind::call && firstChar != '#')
@@ -95,30 +137,28 @@ ResultValue<YuiHandler> YuiHandler::parse (const String& text)
     static const String callExpectedError ("expected a call, like action (\"name\") or root.signal()");
 
     YuiHandler handler;
-    auto body = text.trim();
+    const auto* source = text.toRawUTF8();
+    int start = 0;
 
-    if (body.startsWithChar ('('))
+    skipHandlerTrivia (source, start);
+
+    StringArray names;
+
+    if (const auto afterNames = readArgumentNames (source, start, names))
     {
-        const auto close = body.indexOfChar (')');
-        const auto rest = close >= 0 ? body.substring (close + 1).trimStart() : String();
-
-        if (rest.startsWith ("=>"))
+        for (const auto& name : names)
         {
-            for (const auto& name : StringArray::fromTokens (body.substring (1, close), ",", {}))
-            {
-                const auto trimmed = name.trim();
-                if (trimmed.isEmpty())
-                    continue;
+            if (handler.argumentNames.contains (name))
+                return ResultValue<YuiHandler>::fail ("the argument '" + name + "' is named twice");
 
-                if (handler.argumentNames.contains (trimmed))
-                    return ResultValue<YuiHandler>::fail ("the argument '" + trimmed + "' is named twice");
-
-                handler.argumentNames.add (trimmed);
-            }
-
-            body = rest.substring (2).trim();
+            handler.argumentNames.add (name);
         }
+
+        start = *afterNames;
+        skipHandlerTrivia (source, start);
     }
+
+    const auto body = String::fromUTF8 (source + start).trim();
 
     if (body.startsWithChar ('{'))
     {

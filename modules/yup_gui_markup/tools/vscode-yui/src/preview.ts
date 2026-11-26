@@ -2,6 +2,7 @@ import * as crypto from "crypto";
 import * as path from "path";
 import * as vscode from "vscode";
 import { collectDocumentFiles, isNamedBy, noteMissingFiles, realPathOf } from "./documentFiles";
+import { toolColumnOf } from "./positions";
 import { maximumSize, PreviewModule, previewPage, zoomLevels } from "./previewPage";
 import { unsentFiles, YuiAgentAnswer, YuiToolFile } from "./tool";
 
@@ -130,6 +131,11 @@ export class YuiPreview {
                 this.document = editor.document;
                 void this.render ();
             }),
+            vscode.workspace.onDidCloseTextDocument (document => {
+                // A document that was closed is not shown again: no editor holds its text anymore
+                if (this.document !== undefined && document.uri.toString () === this.document.uri.toString ())
+                    this.document = undefined;
+            }),
             vscode.window.onDidChangeTextEditorSelection (event => {
                 if (this.panel !== undefined && this.ready)
                     this.postCaret (event.textEditor);
@@ -220,12 +226,22 @@ export class YuiPreview {
             return Promise.resolve (true);
 
         return new Promise (resolve => {
-            const timer = setTimeout (() => resolve (false), pageStartMs);
-
-            this.startWaiters.push (started => {
+            const started = (whether: boolean) => {
                 clearTimeout (timer);
-                resolve (started);
-            });
+                resolve (whether);
+            };
+
+            // A page that took too long is not waited for anymore
+            const timer = setTimeout (() => {
+                const index = this.startWaiters.indexOf (started);
+
+                if (index >= 0)
+                    this.startWaiters.splice (index, 1);
+
+                resolve (false);
+            }, pageStartMs);
+
+            this.startWaiters.push (started);
         });
     }
 
@@ -414,7 +430,10 @@ export class YuiPreview {
         if (editor === undefined || this.document === undefined || editor.document.uri.toString () !== this.document.uri.toString ())
             return;
 
-        this.post ({ type: "caret", line: editor.selection.active.line + 1, column: editor.selection.active.character + 1 });
+        const caret = editor.selection.active;
+
+        // The tool counts the characters before the caret, which an editor may write with two units each
+        this.post ({ type: "caret", line: caret.line + 1, column: toolColumnOf (editor.document.lineAt (caret.line).text, caret.character) });
     }
 
     private async render (): Promise<void> {

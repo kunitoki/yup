@@ -255,3 +255,36 @@ TEST_F (SceneComponentMetalTests, PaintsAllItsPixelsWhileItIsStillOpaque)
     EXPECT_NEAR (corner.getGreen(), 148, 2);
     EXPECT_NEAR (corner.getBlue(), 176, 2);
 }
+
+TEST_F (SceneComponentMetalTests, AHiddenSceneLetsGoOfWhatItWasRenderedIntoAndIsDrawnAgainOnceItShows)
+{
+    const Color backdrop (0xff28a0dc);
+
+    SceneComponent component;
+    component.setVisible (true);
+    component.setBounds (0.0f, 0.0f, 32.0f, 32.0f);
+    component.setScene (makeQuadScene (Color (0xff1a1a2e)));
+
+    auto image = paintOverBackdrop (component, backdrop);
+    ASSERT_TRUE (image.isValid());
+    ASSERT_NE (component.getRenderer().getPassOutput (SceneRenderer::PassOutput::sceneColor), nullptr);
+
+    // Hidden, nothing is left of the frames it was drawn with
+    component.setVisible (false);
+    EXPECT_EQ (component.getRenderer().getPassOutput (SceneRenderer::PassOutput::sceneColor), nullptr);
+
+    // Shown again, its next paint draws the scene as it was
+    component.setVisible (true);
+
+    image = paintOverBackdrop (component, backdrop);
+    ASSERT_TRUE (image.isValid());
+    EXPECT_NE (component.getRenderer().getPassOutput (SceneRenderer::PassOutput::sceneColor), nullptr);
+
+    const auto corner = image.getPixelColor (2, 2);
+    EXPECT_NEAR (corner.getRed(), 26, 2);
+    EXPECT_NEAR (corner.getGreen(), 26, 2);
+    EXPECT_NEAR (corner.getBlue(), 46, 2);
+
+    const auto center = image.getPixelColor (16, 16);
+    EXPECT_GT (center.getRed(), center.getBlue() + 60);
+}

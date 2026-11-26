@@ -41,6 +41,10 @@ namespace yup
     palette scoped by a `palette:` declaration, restyles the components whose values read
     palette roles.
 
+    A context only asks the window of its root for frames while it has styles to apply or to
+    animate: with every style applied and nothing running, it leaves that window free to skip
+    the frames it has nothing to paint in.
+
     The context also runs the `transition:` and `animation:` declarations through its
     StyleAnimator: a restyle changing a transitioned value starts a transition from the value
     shown before, and the animated values are written into the animated layer of the
@@ -112,7 +116,11 @@ public:
 
     //==============================================================================
     /** Restyles whatever is dirty, follows palette changes and advances the transitions and
-        animations, called once per frame.
+        animations.
+
+        The window of the root calls this before it paints a frame, for as long as the context
+        has something to do: a component to restyle, a change of the theme to follow or a
+        transition or an animation to run.
 
         @param elapsedSeconds The time elapsed since the previous frame, in seconds.
     */
@@ -120,6 +128,19 @@ public:
 
     /** Restyles whatever is dirty immediately, without waiting for the next frame. */
     void restyleNow();
+
+    /** Has the context look at the theme again in the frame that is starting.
+
+        A context with nothing to do asks for no frame, so it is told that a theme changed: the
+        window of its root does, for the contexts of its own components, when it starts a frame.
+        The context then compares the global theme with the one it knew in its refresh, as it
+        does in every other refresh.
+
+        Call it on the message thread, or with the message manager locked.
+
+        @see ComponentNative::hasThemeChanged, ApplicationTheme::getPaletteGeneration
+    */
+    void themeChanged();
 
     //==============================================================================
     /** Removes everything the context computed from the subtree, leaving explicit values alone. */
@@ -195,11 +216,21 @@ public:
         Loading needs no GPU, and reports what prevents it as a diagnostic (see @ref onDiagnostic):
         the file can't be read, the shader does not compile, or a property the block declares has
         a type a uniform can't take, or no member of its name that is large enough in the uniform
-        block of the shader. A shader is reported when it is loaded and not each time it is asked
+        block of the shader. So is a member named `resolution`, `scale` or `time` that no property
+        of the block fills and that is not what a shader is given there (see ShaderEffect), and a
+        shader with no variant for the graphics API of the window the root is in, when it is in
+        one. A shader is reported when it is loaded and not each time it is asked
         for, then again with the other problems of the stylesheet once its values are compiled
         again (see @ref setComponentResolver), as they are each time a document is loaded. Call
         this when the style is applied and not while painting, so that a shader is loaded on the
         message thread.
+
+        What the device of a window refuses of a shader that loaded is only known once it draws
+        it: a pipeline it fails to compile, or a variant it lacks when no window was known at
+        the load. The effect, or the drawing, that could not draw the shader keeps why (see
+        ShaderEffect::getDrawError and DrawingStyle::getShaderFailures) and has its component
+        restyled. That restyle reports it the same way, at the `shader` block and once for as
+        long as the shader is loaded, however many components it could not be drawn for.
 
         @param name  The name of the block, as written after `shader`.
 
@@ -312,6 +343,7 @@ private:
     ShaderEntry* findShaderEntry (const String& name);
     bool loadShader (const String& name, ShaderEntry& entry);
     void refreshShaders();
+    void reportShaderFailures (const Component& component);
     ComponentEffect::Ptr createEffect (Component& component, const StyleSheet::Declaration& effectDeclaration);
     bool applyEffects (Component& component,
                        ComponentCache& cache,

@@ -27,6 +27,21 @@ export interface YuiAgentAnswer {
     missing: string[];
 }
 
+/** Tells when who asked stopped waiting for the answer, as the token an editor gives with what it asks does. */
+export interface YuiToolCancellation {
+    readonly isCancellationRequested: boolean;
+    onCancellationRequested (listener: () => void): { dispose (): void };
+}
+
+/** How a command is asked for, beyond what it runs on. */
+export interface YuiToolAsking {
+    /** Names what is asked again and again, as the problems of a document: asked once more, what still waits to run under that name is not run. */
+    supersedes?: string;
+
+    /** Tells when the answer is not waited for anymore: a command still waiting to run is then not run. */
+    cancellation?: YuiToolCancellation;
+}
+
 /** Returns the files a host of the tool does not have as they are now, and remembers it is given them. */
 export function unsentFiles (sent: Map<string, string>, files: YuiToolFile[]): YuiToolFile[] {
     return files.filter (file => {
@@ -53,30 +68,76 @@ export function findToolScript (extensionPath: string): string | undefined {
     return found ? path.join (folder, moduleName + ".js") : undefined;
 }
 
+// How long a command is given to answer before the worker is taken to hang, which is what the page of the preview is given
+const answerMs = 30000;
+
+// How long a worker that stopped twice in a row waits before it is started again, twice as long for each stop after that
+const firstRetryMs = 2000;
+const maximumRetryMs = 60000;
+
+// How long a tool that stopped a number of times in a row waits before it is started again
+function retryDelayMs (stops: number): number {
+    return stops < 2 ? 0 : Math.min (maximumRetryMs, firstRetryMs * 2 ** (stops - 2));
+}
+
+/** A command asked for, until the worker answered it or it is known that it won't. */
+interface Waiting {
+    id: number;
+    asked: object;
+    files: YuiToolFile[];
+    supersedes: string | undefined;
+    listening?: { dispose (): void };
+    resolve (result: YuiToolResult | undefined): void;
+}
+
 /**
     Runs the commands of the tool, a WebAssembly module, in a worker thread.
 
     The first command starts the worker, which keeps the module and the files it was given for the
-    next ones. A worker that stops is started again, but not one that stops twice in a row: a module
+    next ones. It is given one command at a time, so those still waiting can be dropped: when what
+    they answer is asked again, or is not waited for anymore.
+
+    A worker that stops, or that does not answer a command in time, is started again for the next
+    one. One that stops again before it answered anything waits first, longer each time: a module
     that can't be loaded would otherwise be started for every command.
 */
 export class YuiTool {
     private worker: Worker | undefined;
-    private readonly waiting = new Map<number, (result: YuiToolResult | undefined) => void> ();
+    private readonly waiting: Waiting[] = [];
+    private running: Waiting | undefined;
+    private watchdog: NodeJS.Timeout | undefined;
     private readonly sent = new Map<string, string> ();
     private nextId = 0;
     private stops = 0;
+    private retryAt = 0;
+    private answered = false;
+    private told = false;
+    private disposed = false;
 
-    constructor (private readonly script: string, private readonly log: (message: string) => void) {
+    /**
+        @param failing Called once, the first time the tool stopped twice in a row and so waits before it starts again.
+    */
+    constructor (private readonly script: string, private readonly log: (message: string) => void, private readonly failing: () => void = () => undefined) {
     }
 
+    /** Whether the tool can be asked now: not while it waits to start again. */
     isAvailable (): boolean {
-        return this.stops < 2;
+        return ! this.disposed && (this.worker !== undefined || Date.now () >= this.retryAt);
+    }
+
+    /**
+        Lets a tool that waits to start again start with what it is asked next, because what it runs
+        on changed and may not stop it anymore. A tool that never answered is left to wait: what
+        stops it is not what it is given.
+    */
+    retry (): void {
+        if (this.answered)
+            this.retryAt = 0;
     }
 
     /** Runs a command on the files given, of which only those that changed are sent again. */
-    run (args: string[], files: YuiToolFile[] = []): Promise<YuiToolResult | undefined> {
-        return this.ask ({ args }, files);
+    run (args: string[], files: YuiToolFile[] = [], asking: YuiToolAsking = {}): Promise<YuiToolResult | undefined> {
+        return this.ask ({ args }, files, asking);
     }
 
     /** Returns the tools of an agent as the tool describes them, in JSON. */
@@ -91,31 +152,61 @@ export class YuiTool {
         return result === undefined ? undefined : { text: result.stdout, missing: result.missing };
     }
 
-    private ask (asked: object, files: YuiToolFile[]): Promise<YuiToolResult | undefined> {
-        const worker = this.start ();
-
-        if (worker === undefined)
+    private ask (asked: object, files: YuiToolFile[], asking: YuiToolAsking = {}): Promise<YuiToolResult | undefined> {
+        if (! this.isAvailable () || asking.cancellation?.isCancellationRequested === true)
             return Promise.resolve (undefined);
 
-        const changed = unsentFiles (this.sent, files);
-
         return new Promise (resolve => {
-            const id = this.nextId++;
+            const waiting: Waiting = { id: this.nextId++, asked, files, supersedes: asking.supersedes, resolve };
 
-            this.waiting.set (id, resolve);
-            worker.postMessage ({ ...asked, id, files: changed });
+            if (waiting.supersedes !== undefined) {
+                for (const earlier of this.waiting.filter (other => other.supersedes === waiting.supersedes))
+                    this.drop (earlier);
+            }
+
+            waiting.listening = asking.cancellation?.onCancellationRequested (() => this.drop (waiting));
+            this.waiting.push (waiting);
+            this.next ();
         });
     }
 
     dispose (): void {
         const worker = this.worker;
+        const running = this.running;
 
+        this.disposed = true;
         this.worker = undefined;
-        this.stops = 2;
-        this.finish (undefined);
+        this.running = undefined;
+        this.stopWatchdog ();
+
+        if (running !== undefined)
+            this.settle (running, undefined);
+
+        this.finish ();
 
         if (worker !== undefined)
             void worker.terminate ();
+    }
+
+    // Gives the worker the command that waited the longest, once it answered the one before
+    private next (): void {
+        if (this.running !== undefined || this.waiting.length === 0)
+            return;
+
+        const worker = this.start ();
+
+        if (worker === undefined) {
+            this.finish ();
+            return;
+        }
+
+        const running = this.waiting.shift () as Waiting;
+
+        this.running = running;
+        this.watchdog = setTimeout (() => this.stopped (worker, `it did not answer in ${answerMs / 1000} seconds`), answerMs);
+
+        // The files are those the worker lacks now, which is not what it lacked when the command was asked for
+        worker.postMessage ({ ...running.asked, id: running.id, files: unsentFiles (this.sent, running.files) });
     }
 
     private start (): Worker | undefined {
@@ -124,17 +215,31 @@ export class YuiTool {
 
         const worker = new Worker (path.join (__dirname, "toolWorker.js"), { workerData: { script: this.script } });
 
-        worker.on ("message", (answer: { id: number; error?: string; code: number; stdout: string; stderr: string; missing?: string[] }) => {
-            const resolve = this.waiting.get (answer.id);
+        worker.on ("message", (answer: { id: number; error?: string; stopping?: boolean; code: number; stdout: string; stderr: string; missing?: string[] }) => {
+            const running = this.running;
 
-            this.waiting.delete (answer.id);
+            if (this.worker !== worker || running === undefined || running.id !== answer.id)
+                return;
 
-            if (answer.error !== undefined)
+            // A worker that tells it ends is not given the commands that wait: they are for the next one
+            if (answer.error !== undefined && answer.stopping === true) {
+                this.stopped (worker, answer.error);
+                return;
+            }
+
+            this.running = undefined;
+            this.stopWatchdog ();
+
+            if (answer.error !== undefined) {
                 this.log (`the YUI tool failed: ${answer.error}`);
-            else
+            }
+            else {
                 this.stops = 0;
+                this.answered = true;
+            }
 
-            resolve?.(answer.error !== undefined ? undefined : { code: answer.code, stdout: answer.stdout, stderr: answer.stderr, missing: answer.missing ?? [] });
+            this.settle (running, answer.error !== undefined ? undefined : { code: answer.code, stdout: answer.stdout, stderr: answer.stderr, missing: answer.missing ?? [] });
+            this.next ();
         });
 
         worker.on ("error", error => this.stopped (worker, error.message));
@@ -149,17 +254,55 @@ export class YuiTool {
         if (this.worker !== worker)
             return;
 
+        const running = this.running;
+        const delay = retryDelayMs (++this.stops);
+
         this.worker = undefined;
-        ++this.stops;
-        this.log (`the YUI tool stopped: ${reason}`);
-        this.finish (undefined);
+        this.running = undefined;
+        this.retryAt = Date.now () + delay;
+        this.stopWatchdog ();
+        this.log (`the YUI tool stopped: ${reason}` + (delay > 0 ? `. It is not started again for ${delay / 1000} seconds` : ""));
+
+        // One that hangs, or that told it ends, is still there
+        void worker.terminate ();
+
+        if (running !== undefined)
+            this.settle (running, undefined);
+
+        if (delay > 0 && ! this.told) {
+            this.told = true;
+            this.failing ();
+        }
+
+        // What it was not given yet is for the next one, when one may start
+        this.next ();
     }
 
-    private finish (result: YuiToolResult | undefined): void {
-        for (const resolve of this.waiting.values ())
-            resolve (result);
+    private stopWatchdog (): void {
+        if (this.watchdog !== undefined) {
+            clearTimeout (this.watchdog);
+            this.watchdog = undefined;
+        }
+    }
 
-        this.waiting.clear ();
+    // Takes a command that still waits to run out of those the worker is given
+    private drop (waiting: Waiting): void {
+        const index = this.waiting.indexOf (waiting);
+
+        if (index >= 0) {
+            this.waiting.splice (index, 1);
+            this.settle (waiting, undefined);
+        }
+    }
+
+    private settle (waiting: Waiting, result: YuiToolResult | undefined): void {
+        waiting.listening?.dispose ();
+        waiting.resolve (result);
+    }
+
+    private finish (): void {
+        for (const waiting of this.waiting.splice (0))
+            this.settle (waiting, undefined);
     }
 }
 

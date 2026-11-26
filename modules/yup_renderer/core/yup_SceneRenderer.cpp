@@ -89,6 +89,17 @@ void addMaterialShaderSignature (FrameSignature& signature, const MaterialShader
     }
 }
 
+/** What prevented a draw list from drawing with a material shader, among the ones kept by identity, or nullptr. */
+const String* findMaterialShaderError (const std::vector<std::pair<uint64, String>>& errors, const MaterialShader& shader) noexcept
+{
+    const auto found = std::find_if (errors.begin(), errors.end(), [&shader] (const auto& error)
+    {
+        return error.first == shader.getIdentity();
+    });
+
+    return found != errors.end() ? &found->second : nullptr;
+}
+
 } // namespace
 
 //==============================================================================
@@ -768,6 +779,21 @@ struct SceneRenderer::Impl
         releaseReflectionTargets();
     }
 
+    /** Lets go of the intermediate textures of the last frame, see SceneRenderer::getPassOutput(). */
+    void clearPassOutputs() noexcept
+    {
+        sceneColorOutput = nullptr;
+        velocityOutput = nullptr;
+        gbufferNormalOutput = nullptr;
+        prepassNormalOutput = nullptr;
+        ambientOcclusionOutput = nullptr;
+        reflectionsOutput = nullptr;
+        indirectDiffuseOutput = nullptr;
+        circleOfConfusionOutput = nullptr;
+        depthOfFieldOutput = nullptr;
+        motionBlurOutput = nullptr;
+    }
+
     /** Nodes this renderer did not draw in its previous frame have no motion: their previous world is the current one. */
     void resolvePreviousTransforms()
     {
@@ -1095,6 +1121,7 @@ struct SceneRenderer::Impl
     MaterialTable materialTable;
     LightingPass lightingPass;
     ForwardPass forwardPass;
+    std::vector<std::pair<uint64, String>> materialShaderErrors; // By MaterialShader::getIdentity(): what prevented the last draw list from drawing with a shader
     PostChain postChain;
     std::unique_ptr<FogApply> fogApply;            // Created by the first frame drawing the scene's fog, see renderWorldFog()
     std::unique_ptr<FullscreenPass> debugViewPass; // Created by the first full frame with a debug view, see renderDebugView(), for the format of colorTarget, which never changes
@@ -1220,6 +1247,12 @@ const RenderCapabilities* SceneRenderer::getCapabilities() const noexcept
     return impl != nullptr && impl->capabilities.has_value() ? &*impl->capabilities : nullptr;
 }
 
+String SceneRenderer::getMaterialShaderError (const MaterialShader& shader) const
+{
+    const auto* error = impl != nullptr ? findMaterialShaderError (impl->materialShaderErrors, shader) : nullptr;
+    return error != nullptr ? *error : String();
+}
+
 bool SceneRenderer::isConverged() const noexcept
 {
     // A smeared frame is never final: the still frame after it shows the scene sharp (preflight R23)
@@ -1245,6 +1278,22 @@ void SceneRenderer::restartAccumulation() noexcept
     impl->shadowRenderer.invalidate();
     impl->accumulatedSamples = 0;
     impl->stillSamples = 0;
+}
+
+void SceneRenderer::releaseTargets() noexcept
+{
+    if (impl == nullptr)
+        return;
+
+    // What a frame of another size leaves of the one before: nothing to draw into, and nothing to carry on from
+    impl->colorTarget = nullptr;
+    impl->depthTexture = nullptr;
+    impl->clearPassOutputs();
+    impl->releasePassTargets();
+    impl->frameResources.releaseTextures();
+    impl->shadowRenderer.releaseTextures();
+
+    restartAccumulation();
 }
 
 GpuTexture::Ptr SceneRenderer::getPassOutput (PassOutput output) const
@@ -1408,18 +1457,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     {
         // A failed frame leaves no pass outputs behind
         if (impl != nullptr)
-        {
-            impl->sceneColorOutput = nullptr;
-            impl->velocityOutput = nullptr;
-            impl->gbufferNormalOutput = nullptr;
-            impl->prepassNormalOutput = nullptr;
-            impl->ambientOcclusionOutput = nullptr;
-            impl->reflectionsOutput = nullptr;
-            impl->indirectDiffuseOutput = nullptr;
-            impl->circleOfConfusionOutput = nullptr;
-            impl->depthOfFieldOutput = nullptr;
-            impl->motionBlurOutput = nullptr;
-        }
+            impl->clearPassOutputs();
 
         lastError = error;
         return nullptr;
@@ -1535,10 +1573,18 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     auto& drawList = impl->drawList;
 
     // The meshes of a material shader are colored by it where the forward pass can draw it into
-    // these targets: otherwise their materials shade them, deferred on the full tier
+    // these targets: otherwise their materials shade them, deferred on the full tier, and what
+    // prevents it is kept for getMaterialShaderError()
+    impl->materialShaderErrors.clear();
+
     const auto drawsMaterialShader = [&] (const MaterialShader::Ptr& shader)
     {
-        return impl->forwardPass.prepareMaterialShader (device, shader, targets, forwardSamples);
+        const auto prepared = impl->forwardPass.prepareMaterialShader (device, shader, targets, forwardSamples);
+
+        if (prepared.failed() && shader != nullptr && findMaterialShaderError (impl->materialShaderErrors, *shader) == nullptr)
+            impl->materialShaderErrors.emplace_back (shader->getIdentity(), prepared.getErrorMessage());
+
+        return prepared.wasOk();
     };
 
     // The raster tier lights each draw with its own selection, the full tier through the clusters

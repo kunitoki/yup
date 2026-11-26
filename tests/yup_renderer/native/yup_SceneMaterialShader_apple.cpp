@@ -140,4 +140,88 @@ TEST_F (SceneMaterialShaderMetalTests, AMaterialShowsTheColorItsPropertyGivesIts
     }
 }
 
+TEST_F (SceneMaterialShaderMetalTests, AMaterialTheRendererCanNotDrawWithIsReportedOnceAtItsBlock)
+{
+    // What a build embedding the variant of one tier leaves: the material compiled for the raster tier alone
+    const auto compiled = MaterialShader::createFromSource (files["fx/tint.glsl"].toString());
+    ASSERT_TRUE (compiled.wasOk()) << compiled.getErrorMessage();
+    ASSERT_NE (compiled.getReference()->getRasterBundle(), nullptr);
+
+    MemoryBlock raster;
+    ASSERT_TRUE (compiled.getReference()->getRasterBundle()->saveToMemoryBlock (raster, ShaderBundle::Compression::none).wasOk());
+    files["fx/tint.glsl.raster.ysl"] = raster;
+
+    const auto text = "shader Tint {\n"
+                      "    material: \"fx/tint.glsl\";\n"
+                      "    property tint: color = #ff0000;\n"
+                      "}\n"
+                      "Scene3D {\n"
+                      "    id: view;\n"
+                      "    Mesh3D { "
+                    + quadGeometry()
+                    + " Material3D { shader: Tint; } }\n"
+                      "    Mesh3D { position: [0, 0, -1]; "
+                    + quadGeometry()
+                    + " Material3D { shader: Tint; } }\n"
+                      "}";
+
+    YuiDocument document;
+    serve (document);
+
+    int numTold = 0;
+    DiagnosticListener listener (document, [&numTold] (const DataTreeDiagnostic&)
+    {
+        ++numTold;
+    });
+
+    ASSERT_TRUE (document.loadFromString (text).wasOk());
+    ASSERT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+
+    auto* view = document.findById<SceneComponent> ("view");
+    ASSERT_NE (view, nullptr);
+
+    auto settings = view->getRenderer().getRenderSettings();
+    settings.tier = RenderSettings::TierPreference::full;
+    view->getRenderer().setRenderSettings (settings);
+    view->setVisible (true);
+    view->setBounds (0.0f, 0.0f, 32.0f, 32.0f);
+
+    // The painting of the scene finds that the material has nothing to draw with on the full tier, and leaves
+    // the meshes to their materials
+    ASSERT_TRUE (paintFrame (*view).isValid());
+
+    const auto* capabilities = view->getRenderer().getCapabilities();
+    ASSERT_NE (capabilities, nullptr);
+
+    if (capabilities->getTier() != RenderCapabilities::Tier::full)
+        GTEST_SKIP() << "No full tier on this device";
+
+    EXPECT_EQ (numTold, 0) << DataTreeDiagnostic::join (document.getDiagnostics());
+
+    // The frame that follows tells it where the block names the file: once, for the two materials naming the shader
+    ASSERT_TRUE (paintFrame (*view).isValid());
+
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
+
+    const auto problem = document.getDiagnostics().front();
+    EXPECT_EQ (problem.message, "shader Tint: the renderer can't draw with it, which leaves the meshes to their material: it has no full tier variant");
+    EXPECT_EQ (problem.line, 2);
+    EXPECT_EQ (problem.property.toString(), "material");
+    EXPECT_TRUE (problem.isError());
+    EXPECT_EQ (numTold, 1);
+
+    // The frames that follow have nothing to add
+    ASSERT_TRUE (paintFrame (*view).isValid());
+    EXPECT_EQ (numTold, 1);
+
+    // It stands: a document forgets what it was told when it loads, and is told again
+    ASSERT_TRUE (document.loadFromString (text).wasOk());
+    ASSERT_EQ (document.findById<SceneComponent> ("view"), view);
+    ASSERT_TRUE (paintFrame (*view).isValid());
+
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics().front().message, problem.message);
+    EXPECT_EQ (document.getDiagnostics().front().line, 2);
+}
+
 #endif

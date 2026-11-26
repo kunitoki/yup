@@ -82,6 +82,14 @@ protected:
         root.getStyleContext()->refresh (elapsedSeconds);
     }
 
+    /** Puts a component in a window of its own, and returns the native that sends its frames. */
+    static StubComponentNative& makeWindow (Component& component)
+    {
+        auto* native = new StubComponentNative (component, ComponentNative::defaultFlags);
+        yup::ComponentTestHelper<Component>::attachNative (component, native);
+        return *native;
+    }
+
     static double glow (const Component& component)
     {
         return static_cast<double> (component.findProperty (Identifier ("glow")));
@@ -220,6 +228,12 @@ void main()
     static constexpr const char* brokenFragment = R"(#version 450
 layout(location = 0) out vec4 color;
 void main() { color = vec4 (missingValue); })";
+
+    /** A member of its own named as what a shader is given: two numbers where it is given the pixels of a unit. */
+    static constexpr const char* ownScaleFragment = R"(#version 450
+layout(set = 0, binding = 0) uniform Parameters { vec2 scale; } params;
+layout(location = 0) out vec4 color;
+void main() { color = vec4 (params.scale, 0.0, 1.0); })";
 
     /** The bytes of the bundle a build makes of a fragment shader: compiled behind the vertex stage of an image shader. */
     static MemoryBlock compileBundle (const char* fragment)
@@ -588,6 +602,150 @@ TEST_F (StyleContextTests, TransitionsFollowStyleChanges)
     advance (root, 0.6);
     EXPECT_DOUBLE_EQ (glow (root), 10.0);
     EXPECT_EQ (root.getStyleState()->getAnimatedValue (Identifier ("glow")), nullptr);
+}
+
+TEST_F (StyleContextTests, AsksForFramesOnlyWhileItHasStylesToApplyOrToAnimate)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.setBounds (0.0f, 0.0f, 200.0f, 100.0f);
+    window.setVisible (true);
+
+    Component root ("root");
+    Component knob ("knob");
+    knob.addStyleClass (Identifier ("knob"));
+    root.addAndMakeVisible (knob);
+    window.addAndMakeVisible (root);
+
+    auto sheet = YuiParser::parseStyleSheet ("style { .knob { glow: 2; transition: glow 1s; } .lit { glow: 12; } }");
+    ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
+    root.setStyleSheet (sheet.getReference());
+
+    // The frame that follows applies the styles, and with nothing left to do the window is free to idle
+    EXPECT_TRUE (native.hasFrameListeners());
+    native.callFrameListeners (0.0);
+    EXPECT_DOUBLE_EQ (glow (knob), 2.0);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    // A change is applied by the frame that follows it, in which its transition starts
+    knob.addStyleClass (Identifier ("lit"));
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    native.callFrameListeners (0.0);
+    EXPECT_DOUBLE_EQ (glow (knob), 2.0);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    native.callFrameListeners (0.5);
+    EXPECT_DOUBLE_EQ (glow (knob), 7.0);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    native.callFrameListeners (0.6);
+    EXPECT_DOUBLE_EQ (glow (knob), 12.0);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    // So is a transition started by a restyle asked for between two frames
+    knob.removeStyleClass (Identifier ("lit"));
+    restyle (root);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    native.callFrameListeners (0.5);
+    EXPECT_NEAR (glow (knob), 7.0, 1.0e-9);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    native.callFrameListeners (0.6);
+    EXPECT_DOUBLE_EQ (glow (knob), 2.0);
+    EXPECT_FALSE (native.hasFrameListeners());
+}
+
+TEST_F (StyleContextTests, AnIdleContextFollowsAChangeOfTheThemeInTheNextFrame)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.setBounds (0.0f, 0.0f, 200.0f, 100.0f);
+    window.setVisible (true);
+
+    Component root ("root");
+    window.addAndMakeVisible (root);
+
+    auto sheet = YuiParser::parseStyleSheet ("style { #root { glow: 2; } }");
+    ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
+    root.setStyleSheet (sheet.getReference());
+
+    int themeChanges = 0;
+    root.getStyleContext()->onPaletteChanged = [&themeChanges]
+    {
+        ++themeChanges;
+    };
+
+    native.callFrameListeners (0.0);
+    ASSERT_FALSE (native.hasFrameListeners());
+    ASSERT_FALSE (native.hasThemeChanged());
+
+    // The window is what notices: it has a frame to run, in which the context looks at the theme
+    theme->setPalette (ThemePalette ({}, ThemePalette::Mode::light));
+    EXPECT_FALSE (native.hasFrameListeners());
+    EXPECT_TRUE (native.hasThemeChanged());
+
+    native.callFrameListeners (0.0);
+    EXPECT_EQ (themeChanges, 1);
+    EXPECT_FALSE (native.hasFrameListeners());
+    EXPECT_FALSE (native.hasThemeChanged());
+
+    // Another theme becoming the global one is followed the same way
+    const ApplicationTheme::Ptr otherTheme (new ApplicationTheme());
+    ApplicationTheme::setGlobalTheme (otherTheme);
+    EXPECT_TRUE (native.hasThemeChanged());
+
+    native.callFrameListeners (0.0);
+    EXPECT_EQ (themeChanges, 2);
+    EXPECT_FALSE (native.hasFrameListeners());
+    EXPECT_FALSE (native.hasThemeChanged());
+
+    ApplicationTheme::setGlobalTheme (theme);
+}
+
+TEST_F (StyleContextTests, AWindowTellsOnlyTheContextsOfItsOwnComponentsThatAThemeChanged)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.setBounds (0.0f, 0.0f, 200.0f, 100.0f);
+    window.setVisible (true);
+
+    Component otherWindow ("otherWindow");
+    auto& otherNative = makeWindow (otherWindow);
+    otherWindow.setBounds (0.0f, 0.0f, 200.0f, 100.0f);
+    otherWindow.setVisible (true);
+
+    auto sheet = YuiParser::parseStyleSheet ("style { #root { glow: 2; } }");
+    ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
+
+    Component root ("root");
+    window.addAndMakeVisible (root);
+    root.setStyleSheet (sheet.getReference());
+
+    Component otherRoot ("root");
+    otherWindow.addAndMakeVisible (otherRoot);
+    otherRoot.setStyleSheet (sheet.getReference());
+
+    int themeChanges = 0;
+    int otherThemeChanges = 0;
+    root.getStyleContext()->onPaletteChanged = [&themeChanges] { ++themeChanges; };
+    otherRoot.getStyleContext()->onPaletteChanged = [&otherThemeChanges] { ++otherThemeChanges; };
+
+    native.callFrameListeners (0.0);
+    otherNative.callFrameListeners (0.0);
+
+    theme->setPalette (ThemePalette ({}, ThemePalette::Mode::light));
+
+    // Each window follows the theme in a frame of its own: one running its frame reaches no context of the other
+    native.callFrameListeners (0.0);
+    EXPECT_EQ (themeChanges, 1);
+    EXPECT_EQ (otherThemeChanges, 0);
+    EXPECT_TRUE (otherNative.hasThemeChanged());
+
+    otherNative.callFrameListeners (0.0);
+    EXPECT_EQ (otherThemeChanges, 1);
+    EXPECT_FALSE (otherNative.hasThemeChanged());
 }
 
 TEST_F (StyleContextTests, TheFirstStyleIsNotTransitioned)
@@ -2001,7 +2159,7 @@ TEST_F (StyleContextTests, ReportsOnceWhatPreventsAShaderFromLoading)
 
     const auto loaded = document.loadFromString ("shader Broken { fragment: \"fx/broken.frag\"; }\n"
                                                  "shader NoMember { fragment: \"fx/crt.frag\"; property gain: number = 1; }\n"
-                                                 "shader NoType { fragment: \"fx/crt.frag\"; property intensity: string = \"high\"; }\n"
+                                                 "shader NoType { fragment: \"fx/crt.frag\"; property tint: string = \"high\"; }\n"
                                                  "shader TooSmall { fragment: \"fx/crt.frag\"; property intensity: color = #ff0000; }\n"
                                                  "style { #a { effect: Broken; } #b { effect: NoMember; } #c { effect: NoType; } #d { effect: TooSmall; } }\n"
                                                  "Component { Component { id: a; } Component { id: b; } Component { id: c; } Component { id: d; } }");
@@ -2021,7 +2179,7 @@ TEST_F (StyleContextTests, ReportsOnceWhatPreventsAShaderFromLoading)
     EXPECT_EQ (diagnostics[1].line, 2);
     EXPECT_EQ (diagnostics[1].element.getProperty ("name").toString(), "gain");
 
-    EXPECT_TRUE (diagnostics[2].message.startsWith ("The property 'intensity' of the shader 'NoType' can't be of type 'string'")) << diagnostics[2].message;
+    EXPECT_TRUE (diagnostics[2].message.startsWith ("The property 'tint' of the shader 'NoType' can't be of type 'string'")) << diagnostics[2].message;
     EXPECT_EQ (diagnostics[2].line, 3);
 
     EXPECT_EQ (diagnostics[3].message, "The member 'intensity' of the uniform block of the shader 'TooSmall' is too small for a color");
@@ -2034,6 +2192,30 @@ TEST_F (StyleContextTests, ReportsOnceWhatPreventsAShaderFromLoading)
     const auto reads = assetReads["fx/crt.frag"];
     EXPECT_EQ (countProblemsOfARestyle (*document.getRoot()), 0u);
     EXPECT_EQ (assetReads["fx/crt.frag"], reads);
+}
+
+TEST_F (StyleContextTests, ReportsAMemberAShaderIsGivenThatItsBlockDeclaresAsSomethingElse)
+{
+    setAsset ("fx/scaled.frag", ownScaleFragment);
+
+    YuiDocument document;
+    serveAssets (document);
+
+    const auto loaded = document.loadFromString ("shader Scaled { fragment: \"fx/scaled.frag\"; }\n"
+                                                 "shader Placed { fragment: \"fx/scaled.frag\"; property scale: point; }\n"
+                                                 "style { #a { effect: Scaled; } #b { effect: Placed; } }\n"
+                                                 "Component { Component { id: a; } Component { id: b; } }");
+    ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
+
+    // The pixels of a unit would be written over the two numbers of the shader: told where the shader is declared
+    const auto& diagnostics = document.getDiagnostics();
+    ASSERT_EQ (diagnostics.size(), 1u) << DataTreeDiagnostic::join (diagnostics);
+    EXPECT_EQ (diagnostics[0].message, "The member 'scale' of the uniform block of the shader 'Scaled' is not a float, which is what a shader is given there: declare a property 'scale' to set it");
+    EXPECT_EQ (diagnostics[0].line, 1);
+    EXPECT_EQ (document.findById ("a")->getComponentEffect(), nullptr);
+
+    // A property of that name fills the member, which the shader is then not given
+    EXPECT_NE (getShaderEffect (document.findById ("b")), nullptr);
 }
 
 TEST_F (StyleContextTests, ReportsAShaderReadingTwoTexturesSelectedAsAnEffect)

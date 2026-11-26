@@ -81,6 +81,11 @@ TEST_F (TextEditorTests, ConstructorInitializesCorrectly)
     EXPECT_FALSE (editor->isReadOnly());
 }
 
+TEST_F (TextEditorTests, LetsWhatIsBehindItsRoundedBoxShow)
+{
+    EXPECT_FALSE (editor->isOpaque());
+}
+
 TEST_F (TextEditorTests, SetTextUpdatesContent)
 {
     editor->setText (kSingleText);
@@ -795,6 +800,45 @@ TEST_F (TextEditorTests, SingleLineTextStaysCenteredInEditorShorterThanALine)
 
     EXPECT_NEAR (5.0f, editor->getCaretBounds().getCenterY(), 1.0f);
 }
+
+#if YUP_MODAL_LOOPS_PERMITTED
+TEST_F (TextEditorTests, ABlinkOfTheCaretRepaintsTheCaretAndNotTheEditor)
+{
+    Component window ("window");
+    auto* native = new StubComponentNative (window, ComponentNative::defaultFlags);
+    yup::ComponentTestHelper<Component>::attachNative (window, native);
+    window.setBounds (0.0f, 0.0f, 300.0f, 100.0f);
+    window.setVisible (true);
+
+    editor->setBounds (0.0f, 0.0f, 200.0f, 30.0f);
+    editor->setText ("Hello World", dontSendNotification);
+    editor->setCaretPosition (5);
+    window.addAndMakeVisible (*editor);
+
+    // The caret blinks in an editor that has the keyboard focus
+    editor->focusGained();
+    const auto shown = editor->isCaretVisible();
+    native->repaintAreas.clearQuick();
+
+    for (int i = 0; i < 200 && editor->isCaretVisible() == shown; ++i)
+        MessageManager::getInstance()->runDispatchLoopUntil (10);
+
+    ASSERT_NE (editor->isCaretVisible(), shown);
+
+    const auto caret = editor->getCaretBounds();
+    ASSERT_FALSE (caret.isEmpty());
+    ASSERT_EQ (native->getRepaintAreas().getNumRectangles(), 1);
+
+    const auto repainted = native->getRepaintAreas().getRectangles()[0];
+    EXPECT_NEAR (repainted.getX(), caret.getX(), 0.01f);
+    EXPECT_NEAR (repainted.getY(), caret.getY(), 0.01f);
+    EXPECT_NEAR (repainted.getWidth(), caret.getWidth(), 0.01f);
+    EXPECT_NEAR (repainted.getHeight(), caret.getHeight(), 0.01f);
+
+    editor->focusLost();
+    window.removeChildComponent (*editor);
+}
+#endif
 
 /* TODO: moveCaretToWordEnd/moveCaretToWordStart is private
 TEST_F (TextEditorTests, DoubleClickSelectsWord)

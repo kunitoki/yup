@@ -451,10 +451,11 @@ bool hasNoRootComponent (const String& text, const YuiLoader& loader, const Stri
     // The loader knows what a file imports by its path in the source, which starts with the folder of the file
     const auto folder = mainPath.substring (0, mainPath.lastIndexOfChar ('/') + 1);
 
+    // The file counts as imported already, by its name: one importing it back adds no second copy of it
     const auto parsed = YuiParser::parse (text, [&loader, &folder] (const String& path)
     {
         return loader.getLoadedText (folder + path);
-    });
+    }, mainPath.substring (folder.length()));
 
     return parsed.wasOk() && findYuiToolRootIndex (parsed.document) < 0;
 }
@@ -1334,11 +1335,22 @@ Rectangle<float> findYuiToolPaintArea (const Component& component, const Compone
 
 //==============================================================================
 
+bool isYuiToolNumber (const String& text)
+{
+    return text.containsAnyOf ("0123456789") && text.containsOnly ("0123456789.") && text.indexOfChar ('.') == text.lastIndexOfChar ('.');
+}
+
 std::optional<Size<float>> parseYuiToolSize (const String& text)
 {
-    const Size<float> size { text.upToFirstOccurrenceOf ("x", false, true).getFloatValue(), text.fromFirstOccurrenceOf ("x", false, true).getFloatValue() };
+    const auto width = text.upToFirstOccurrenceOf ("x", false, true);
+    const auto height = text.fromFirstOccurrenceOf ("x", false, true);
 
-    if (size.getWidth() < 1.0f || size.getHeight() < 1.0f)
+    if (! isYuiToolNumber (width) || ! isYuiToolNumber (height))
+        return std::nullopt;
+
+    const Size<float> size { width.getFloatValue(), height.getFloatValue() };
+
+    if (jmin (size.getWidth(), size.getHeight()) < 1.0f || jmax (size.getWidth(), size.getHeight()) > maximumYuiToolSize)
         return std::nullopt;
 
     return size;
@@ -1383,7 +1395,7 @@ std::optional<bool> readYuiToolViewOption (int argc, char** argv, int& index, Yu
 
         if (! size.has_value())
         {
-            std::cerr << "invalid size, expected <width>x<height>: " << value << "\n";
+            std::cerr << "invalid size, expected <width>x<height> in logical pixels, each from 1 to " << static_cast<int> (maximumYuiToolSize) << ": " << value << "\n";
             return false;
         }
 
@@ -1671,7 +1683,7 @@ void YuiToolSignals::feed (Component& component)
     {
         if (analyzer->getState() == nullptr)
         {
-            auto& fed = spectrums.emplace_back (Fed { &component, std::make_unique<SpectrumAnalyzerState>() });
+            auto& fed = spectrums.emplace_back (Fed { &component, std::make_unique<SpectrumAnalyzerState> (2048, 2048) });
             analyzer->setState (fed.state.get());
             analyzer->setSampleRate (sampleRate);
         }
@@ -1680,7 +1692,7 @@ void YuiToolSignals::feed (Component& component)
     {
         if (spectrogram->getState() == nullptr)
         {
-            auto& fed = spectrums.emplace_back (Fed { &component, std::make_unique<SpectrumAnalyzerState>() });
+            auto& fed = spectrums.emplace_back (Fed { &component, std::make_unique<SpectrumAnalyzerState> (2048, 2048) });
             spectrogram->setState (fed.state.get());
             spectrogram->setSampleRate (sampleRate);
         }

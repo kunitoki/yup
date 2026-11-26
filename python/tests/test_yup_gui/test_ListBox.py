@@ -384,9 +384,9 @@ def test_the_scroll_bars_are_components_of_the_list_box():
 def test_style_ids_are_exposed():
     assert str(yup.ListBox.Style.backgroundColorId) == "listBoxBackground"
     assert str(yup.ListBox.Style.outlineColorId) == "listBoxOutline"
-    assert str(yup.ListBox.Style.rowBackgroundColorId) == "rowBackground"
-    assert str(yup.ListBox.Style.selectedRowBackgroundColorId) == "selectedRowBackground"
-    assert str(yup.ListBox.Style.hoveredRowBackgroundColorId) == "hoveredRowBackground"
+    assert str(yup.ListBox.Style.rowBackgroundColorId) == "listBoxRowBackground"
+    assert str(yup.ListBox.Style.selectedRowBackgroundColorId) == "listBoxSelectedRowBackground"
+    assert str(yup.ListBox.Style.hoveredRowBackgroundColorId) == "listBoxHoveredRowBackground"
 
     assert str(yup.ListBoxItem.Style.textColorId) == "listBoxItemText"
     assert str(yup.ListBoxItem.Style.textColorSelectedId) == "listBoxItemTextSelected"

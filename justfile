@@ -158,10 +158,15 @@ ltc_tables:
   cmake --build build --config Release -j4
   build/yup_ltc_fitter --output "{{justfile_directory()}}/modules/yup_renderer/core/yup_LtcTables.inc"
 
-[doc("time the Scene3D demo target frames on the GPU: ACTION is run, record (the baseline) or compare (with it)")]
+[doc("time the Scene3D target benchmarks on the GPU: ACTION is run, record (the baseline) or compare (with it)")]
 [macos]
-perf_3d ACTION="run" CONFIG="Release" FILTER="SceneRendererBenchmarkTests.DISABLED_DemoTargetFrameTimes":
+perf_3d ACTION="run" CONFIG="Release" FILTER="SceneRendererBenchmarkTests.DISABLED_*TargetFrameTimes":
   uv run python tools/perf.py --just "{{just_executable()}}" {{ACTION}} {{CONFIG}} "{{FILTER}}"
+
+[doc("time the 2D painting, restyling and document benchmarks: ACTION is run, record (the baseline) or compare (with it)")]
+[macos]
+perf_2d ACTION="run" CONFIG="Release" FILTER="PaintBenchmarkTests.DISABLED_*":
+  uv run python tools/perf.py --just "{{just_executable()}}" --suite 2d {{ACTION}} {{CONFIG}} "{{FILTER}}"
 
 #==================================================================================================
 # YDSP tooling
@@ -228,8 +233,8 @@ vscode_yui:
   sh tools/package-tool.sh
   npm install
   npm run compile
-  npx --yes @vscode/vsce package -o vscode-yui.vsix
-  npx --yes @vscode/vsce ls --tree
+  npx --no-install vsce package -o vscode-yui.vsix
+  npx --no-install vsce ls --tree
   code --install-extension vscode-yui.vsix --force
 
 #==================================================================================================

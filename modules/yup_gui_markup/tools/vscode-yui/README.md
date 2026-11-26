@@ -88,7 +88,7 @@ platform.
   toolbar choosing what is shown, its size, its zoom and its theme, guides
   showing the bounds of its components and statistics of how it is drawn
 - **SVG import**: **YUI: Import SVG as Drawing** converts an `.svg` into a
-  `drawing` block and opens it in a new editor
+  `drawing` block, saves it as the `.yui` file you choose and opens it
 - **Tools for agents**: **YUI: Set Up Agent Tools** gives the coding agents of
   a workspace, such as Claude Code and GitHub Copilot, the problems, the layout
   and an image of the `.yui` documents they write. See
@@ -102,11 +102,16 @@ comments, so a formatter would drop them.
 | Setting | Default | Description |
 |---|---|---|
 | `yui.lint.enabled` | `true` | Report problems while editing. |
-| `yui.lint.models` | empty | Path to a JSON file declaring the application models, absolute or relative to the workspace folder of the linted document. When empty, a document uses `<document>.models.json` next to it. Documents are linted again when their models file is created, edited or deleted. |
+| `yui.lint.models` | empty | Path to a JSON file declaring the application models, absolute or relative to the workspace folder of the linted document. When empty, a document uses `<document>.models.json` next to it. Documents are linted again when their models file is created, edited or deleted. Each folder of a workspace can set its own. |
 | `yui.preview.size` | `auto` | The size of the preview: `auto`, `panel` or `<width>x<height>` in logical pixels, such as `640x400`. See [Preview](#preview). |
 | `yui.preview.theme` | `auto` | The theme the preview is shown with: `auto` follows the VSCode color theme, `light` and `dark` set it. |
 | `yui.mcp.enabled` | `false` | Serve the [tools for agents](#tools-for-agents) on this machine. **YUI: Set Up Agent Tools** turns it on for a workspace. |
 | `yui.mcp.port` | `7391` | The port they are served on, at `http://127.0.0.1:<port>/mcp`. Each window serving them needs its own. |
+
+In a workspace that is not trusted (Restricted Mode) the extension checks,
+completes and previews documents as usual, but does not serve the tools for
+agents, and ignores what the workspace sets for `yui.mcp.enabled`,
+`yui.mcp.port` and `yui.lint.models`.
 
 A document that binds to a model (`value <=> params.cutoff;`) reads something
 that only exists inside the application, so without a models file those
@@ -213,6 +218,10 @@ preview alike:
 - A file larger than 16 MB, or the files of a document beyond 64 MB together,
   are left out: a warning at the top of the document and under the preview
   tells which, and the document is checked and shown as if they were missing.
+- A file is read when it is in a folder of the workspace or in the folder of
+  the document, where it really is. One that is elsewhere, or that a link
+  leads elsewhere to, is left out the same way: open the folder holding both
+  to have it read.
 
 The preview draws a `Scene3D` with the raster tier of the YUP renderer, as any
 OpenGL device does: forward shading, antialiased by multisampling. An
@@ -242,7 +251,11 @@ the `.mcp.json` at its root, which Claude Code and GitHub Copilot read:
 ```json
 {
   "mcpServers": {
-    "yui": { "type": "http", "url": "http://127.0.0.1:7391/mcp" }
+    "yui": {
+      "type": "http",
+      "url": "http://127.0.0.1:7391/mcp",
+      "headers": { "Authorization": "Bearer <token>" }
+    }
   }
 }
 ```
@@ -250,12 +263,33 @@ the `.mcp.json` at its root, which Claude Code and GitHub Copilot read:
 - Documents are read as they are in their editors, so unsaved changes count.
 - The tools that draw run in the preview panel, which opens beside the editor
   when it is closed. What it shows is left alone.
-- The server only listens on this machine and only reads the files of the
-  workspace. A document importing a file outside the workspace is checked
-  without that file. The models of `yui.lint.models` are read wherever they
-  are.
+- The server only listens on this machine, and only answers who sends its
+  token: the port can be reached by every user and program of the machine.
+  The token is made once, kept in the secret storage of VS Code and written
+  to `.mcp.json` as the `Authorization` header. It is a secret: the file is
+  made readable by its owner only.
+- The token is kept out of your commits. In a git repository, a `.mcp.json`
+  that is neither tracked nor ignored is first ignored for your clone only,
+  by a line naming it in `.git/info/exclude`, which is never committed: the
+  `.gitignore` of the project is left alone. A `.mcp.json` that is tracked,
+  or that a rule of the project keeps from being ignored (`!.mcp.json`), is
+  not written, as is one git could not be told to ignore: the command tells
+  so and offers to copy the entry of the
+  server, token included, for you to add to your own agent configuration,
+  which is outside the repository: `copilot mcp add` and `claude mcp add`
+  write there. Outside a git repository the file is written, and keeping it
+  out of version control is left to you.
+- A `.mcp.json` listing the server without its token, as one written before
+  the server asked for it or on another machine, is brought up to date when
+  the server starts, in the same way: one that is tracked is left as it is,
+  and told about until the entry of the server is taken out of it. Agents
+  started before that need to read the file again.
+- The server only reads the files of the workspace. A document importing a
+  file outside the workspace is checked without that file. The models of
+  `yui.lint.models` are read wherever they are.
 - It writes one kind of file: the `.png` a call that draws names as `output`,
   inside the workspace.
+- It is only served from a trusted workspace.
 - Each window serves its own workspace on its own port. When the port set is
   taken, the command finds the next free one and writes it to the workspace
   settings and to `.mcp.json`.

@@ -119,7 +119,11 @@ public:
     /** Returns true when this type is, or derives from, a type with the given name. */
     bool isSubtypeOf (const Identifier& otherTypeName) const;
 
-    /** Returns true when this type is, or derives from, the given type. */
+    /** Returns true when this type is, or derives from, the given type.
+
+        The types are compared by identity, following the base types: another type info of the same
+        name is another type, whose accessors may be those of another class.
+    */
     bool isSubtypeOf (const ComponentTypeInfo& other) const;
 
     //==============================================================================
@@ -324,7 +328,10 @@ inline constexpr bool isComponentSeriesElement = std::is_same_v<ElementType, flo
 #endif
 
 //==============================================================================
-/** Builds a signal descriptor bound to a `std::function<void (Args...)>` member on @p T. */
+/** Builds a signal descriptor bound to a `std::function<void (Args...)>` member on @p T.
+
+    Connecting a null handler disconnects the signal, leaving the member null as on a new component.
+*/
 template <class T, class U, class... Args>
     requires std::derived_from<T, Component> && std::derived_from<T, U>
 ComponentSignal makeSignal (Identifier name,
@@ -336,13 +343,21 @@ ComponentSignal makeSignal (Identifier name,
         .name = std::move (name),
         .connect = [member] (Component& component, ComponentSignal::Handler handler)
         {
-            if (auto* target = dynamic_cast<T*> (&component))
+            auto* target = dynamic_cast<T*> (&component);
+
+            if (target == nullptr)
+                return;
+
+            if (handler == nullptr)
             {
-                target->*member = [handler = std::move (handler)] (Args... args)
-                {
-                    handler ({ detail::ComponentPropertyValueTraits<std::decay_t<Args>>::toVar (args)... });
-                };
+                target->*member = nullptr;
+                return;
             }
+
+            target->*member = [handler = std::move (handler)] (Args... args)
+            {
+                handler ({ detail::ComponentPropertyValueTraits<std::decay_t<Args>>::toVar (args)... });
+            };
         },
         .description = std::move (description),
         .arguments = std::move (arguments)

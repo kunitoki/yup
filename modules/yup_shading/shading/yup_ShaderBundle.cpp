@@ -103,6 +103,30 @@ String readStringRaw (InputStream& s, String& error)
     return String::fromUTF8 (static_cast<const char*> (buf.getData()), static_cast<int> (len));
 }
 
+// A stage or a language read from the bundle is checked against the ones there are, and sets `error` when it is none of them
+
+ShaderStage readStage (InputStream& s, String& error)
+{
+    const auto value = s.readInt();
+
+    if (value >= static_cast<int> (ShaderStage::vertex) && value <= static_cast<int> (ShaderStage::tessEval))
+        return static_cast<ShaderStage> (value);
+
+    error = "ShaderBundle: unknown shader stage";
+    return ShaderStage::vertex;
+}
+
+ShaderLanguage readLanguage (InputStream& s, String& error)
+{
+    const auto value = s.readInt();
+
+    if (value >= static_cast<int> (ShaderLanguage::glsl) && value <= static_cast<int> (ShaderLanguage::wgsl))
+        return static_cast<ShaderLanguage> (value);
+
+    error = "ShaderBundle: unknown shader language";
+    return ShaderLanguage::glsl;
+}
+
 // Reads each [fourcc, size, data] chunk from `s`, calling handler(fourcc, subStream) for each.
 // The sub-stream contains exactly `size` bytes; padding is consumed before the next iteration.
 // Stops at the first error, whoever set it.
@@ -305,14 +329,18 @@ Result ShaderBundle::saveToStream (OutputStream& stream, Compression compression
     if (packedLength <= 0)
         return Result::fail ("ShaderBundle: compression failed");
 
-    buf.reset();
-
-    writeChunk (kFourCC_RIFF, [&]
+    // What packs tighter than a load expands is written as it is, which every load function reads too
+    if (static_cast<int64> (rawLength) <= packedLength * kMaxCompressionRatio)
     {
-        buf.writeInt (static_cast<int> (kFourCC_YSLZ));
-        buf.writeInt (rawLength);
-        buf.write (packed.get(), static_cast<size_t> (packedLength));
-    });
+        buf.reset();
+
+        writeChunk (kFourCC_RIFF, [&]
+        {
+            buf.writeInt (static_cast<int> (kFourCC_YSLZ));
+            buf.writeInt (rawLength);
+            buf.write (packed.get(), static_cast<size_t> (packedLength));
+        });
+    }
 
     if (! stream.write (buf.getData(), buf.getDataSize()))
         return Result::fail ("ShaderBundle: failed to write to stream");
@@ -412,7 +440,7 @@ ResultValue<ShaderBundle> ShaderBundle::loadFromStream (InputStream& stream)
 
         ShaderInfo info;
         info.stage = stage;
-        info.language = static_cast<ShaderLanguage> (vartStream.readInt());
+        info.language = readLanguage (vartStream, loadError);
         info.entryPoint = readStringRaw (vartStream, loadError);
         info.source = readStringRaw (vartStream, loadError);
 
@@ -458,8 +486,8 @@ ResultValue<ShaderBundle> ShaderBundle::loadFromStream (InputStream& stream)
         if (shdrStream.getNumBytesRemaining() < 8)
             return;
 
-        const auto stage = static_cast<ShaderStage> (shdrStream.readInt());
-        const auto srcLang = static_cast<ShaderLanguage> (shdrStream.readInt());
+        const auto stage = readStage (shdrStream, loadError);
+        const auto srcLang = readLanguage (shdrStream, loadError);
         MemoryBlock spirv;
 
         iterateChunks (shdrStream, loadError, [&] (uint32_t fourcc, MemoryInputStream& sub)

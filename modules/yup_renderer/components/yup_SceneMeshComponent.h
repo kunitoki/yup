@@ -50,10 +50,12 @@ namespace yup
     They make one Mesh with one primitive, on the MeshNode of the entity, drawn with the
     default material unless a `Material3D` is written inside the mesh or above it. The mesh is
     built again when an array changes: once for the arrays set together, when the values the
-    document applies are all in or before the next frame, and by getMesh(). Arrays that do
+    document applies are all in, before the next frame or when the scene is painted before it,
+    and by getMesh(). Arrays that do
     not fit together draw nothing and are reported in the diagnostics of the document: a
-    length that is not a multiple of what each vertex takes, another number of normals, uvs or
-    colors than of vertices, or an index that is not one of a vertex.
+    number that is not finite, a length that is not a multiple of what each vertex takes,
+    another number of normals, uvs or colors than of vertices, or an index that is not a whole
+    number or not the one of a vertex.
 
     @see SceneNodeComponent, SceneMaterialComponent, Mesh
 */
@@ -81,6 +83,10 @@ public:
     /** @internal */
     const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
+    //==============================================================================
+    /** @internal Builds the mesh when an array changed since, and keeps what is wrong with the arrays for getMesh() to tell: what a scene painted before its next frame calls. */
+    void updateMesh();
+
 protected:
     //==============================================================================
     /** @internal */
@@ -99,6 +105,8 @@ private:
     var indices;
     Mesh::Ptr mesh;
     bool isMeshOutdated = false;
+    Identifier untoldProperty; // The array the mesh that was last built has a problem with, until it is told
+    String untoldProblem;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SceneMeshComponent)
 };

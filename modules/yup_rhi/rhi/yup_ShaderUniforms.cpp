@@ -54,7 +54,8 @@ ShaderUniforms::ShaderUniforms (const ShaderReflection::ResourceBinding& block)
         member.columnStride = reflected.matrixStride;
         member.numRows = reflected.vecSize;
 
-        if (member.numElements == 0)
+        // An array without a stride would hold any number of elements in the room of one
+        if (member.numElements == 0 || (member.numElements > 1 && member.elementStride == 0))
             continue;
 
         // The reflection may come from a file: a member reaching past the block is left out, so set() stays inside the bytes
@@ -97,6 +98,11 @@ int ShaderUniforms::getNumComponents (StringRef name) const noexcept
 {
     const auto* member = findMember (name);
     return member != nullptr ? static_cast<int> (member->numElements * member->numColumns * member->numRows) : 0;
+}
+
+bool ShaderUniforms::hasSameLayoutAs (const ShaderUniforms& other) const noexcept
+{
+    return bytes.size() == other.bytes.size() && members == other.members;
 }
 
 //==============================================================================

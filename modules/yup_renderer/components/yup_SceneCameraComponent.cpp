@@ -55,8 +55,14 @@ void SceneCameraComponent::setValue (Value& value, const Value& newValue, const 
 
     value = newValue;
 
+    // What is wrong with the planes is told before the change: who hears about either may destroy the camera
+    const BailOutChecker checker (this);
+
     updateCamera();
-    notifyPropertyChanged (property);
+    updatePlanesProblem();
+
+    if (! checker.shouldBailOut())
+        notifyPropertyChanged (property);
 }
 
 void SceneCameraComponent::setProjection (CameraNode::Projection newProjection)
@@ -66,22 +72,27 @@ void SceneCameraComponent::setProjection (CameraNode::Projection newProjection)
 
 void SceneCameraComponent::setFieldOfView (float newFieldOfView)
 {
-    setValue (settings.yFov, newFieldOfView, SceneCameraComponentIds::fov);
+    // A value that is not a number is neither above 0 nor below half a turn
+    if (checkValue (SceneCameraComponentIds::fov, newFieldOfView > 0.0f && newFieldOfView < MathConstants<float>::pi, "expected an angle above 0 and below 180deg"))
+        setValue (settings.yFov, newFieldOfView, SceneCameraComponentIds::fov);
 }
 
 void SceneCameraComponent::setNearPlane (float newDistance)
 {
-    setValue (settings.zNear, newDistance, SceneCameraComponentIds::nearPlane);
+    if (checkValue (SceneCameraComponentIds::nearPlane, newDistance > 0.0f && std::isfinite (newDistance), "expected a distance above 0"))
+        setValue (settings.zNear, newDistance, SceneCameraComponentIds::nearPlane);
 }
 
 void SceneCameraComponent::setFarPlane (float newDistance)
 {
-    setValue (settings.zFar, newDistance, SceneCameraComponentIds::farPlane);
+    if (checkValue (SceneCameraComponentIds::farPlane, newDistance >= 0.0f && std::isfinite (newDistance), "expected a distance, or 0 for a perspective camera to see infinitely far"))
+        setValue (settings.zFar, newDistance, SceneCameraComponentIds::farPlane);
 }
 
 void SceneCameraComponent::setOrthographicSize (float newSize)
 {
-    setValue (settings.yMag, newSize, SceneCameraComponentIds::orthographicSize);
+    if (checkValue (SceneCameraComponentIds::orthographicSize, newSize > 0.0f && std::isfinite (newSize), "expected a size above 0"))
+        setValue (settings.yMag, newSize, SceneCameraComponentIds::orthographicSize);
 }
 
 void SceneCameraComponent::setActive (bool shouldBeActive)
@@ -127,6 +138,19 @@ void SceneCameraComponent::updateCamera()
     repaintScene();
 }
 
+void SceneCameraComponent::updatePlanesProblem()
+{
+    // An orthographic camera sees between its two planes: it has no infinite far one
+    const auto isUsable = settings.projection != CameraNode::Projection::orthographic || settings.zFar > settings.zNear;
+
+    if (isUsable == ! hasPlanesProblem)
+        return;
+
+    // Told last, and once for as long as it stands: who hears about it may destroy the camera
+    hasPlanesProblem = ! isUsable;
+    checkValue (SceneCameraComponentIds::projection, isUsable, "an orthographic camera sees up to its far plane, which has to be beyond its near one");
+}
+
 void SceneCameraComponent::updateActiveCamera()
 {
     if (auto* view = SceneComponent::findFor (*this))
@@ -137,6 +161,10 @@ void SceneCameraComponent::entityChanged()
 {
     updateCamera();
     updateActiveCamera();
+
+    // The scene the camera is now in is the one to tell what is wrong with its planes
+    hasPlanesProblem = false;
+    updatePlanesProblem();
 }
 
 void SceneCameraComponent::parentHierarchyChanged()

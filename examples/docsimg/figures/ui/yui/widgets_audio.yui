@@ -26,8 +26,6 @@ drawing Meter {
 }
 
 drawing Keys {
-    rect { bounds: bounds; fill: palette.surface; }
-
     repeat i in 0 .. len (keyNotes) {
         rect { id: white; bounds: keyBounds[i].reduced (0.5); cornerRadius: 2; visible: ! keyBlack[i];
                fill: keyPressed[i] ? palette.accent : palette.text; }

@@ -282,6 +282,21 @@ foreach (module ${target_test_modules})
     file (GLOB imported_sources "${CMAKE_CURRENT_LIST_DIR}/${module}/*.cpp")
     list (REMOVE_ITEM imported_sources "${module_main}")
 
+    # Only module.cpp and module.mm are compiled: a test file they don't include would
+    # silently never be built nor run, so it is an error
+    file (READ "${module_main}" module_includes)
+    if (EXISTS "${CMAKE_CURRENT_LIST_DIR}/${module}/module.mm")
+        file (READ "${CMAKE_CURRENT_LIST_DIR}/${module}/module.mm" module_mm_includes)
+        string (APPEND module_includes "\n${module_mm_includes}")
+    endif()
+
+    file (GLOB module_test_files RELATIVE "${CMAKE_CURRENT_LIST_DIR}/${module}" "${CMAKE_CURRENT_LIST_DIR}/${module}/yup_*.cpp")
+    foreach (test_file ${module_test_files})
+        if (NOT module_includes MATCHES "#[ \t]*include[ \t]+\"${test_file}\"")
+            _yup_message (FATAL_ERROR "tests/${module}/${test_file} is never compiled: add #include \"${test_file}\" to tests/${module}/module.cpp")
+        endif()
+    endforeach()
+
     yup_standalone_app (
         TARGET_NAME ${module_target_name}
         TARGET_VERSION ${target_version}

@@ -61,7 +61,7 @@ layout(set = 0, binding = 0) uniform Parameters
     vec4 resolution;    // filled in: the width and the height of the picture in pixels, then 1 / width and 1 / height
     float intensity;    // property intensity: number
     float scale;        // filled in: the pixels a unit of the component takes, 2 on a dense display
-    float time;         // filled in: seconds, which has the component painted again at every frame
+    float time;         // filled in: seconds, which has the effect drawn again at every frame
 } params;
 
 layout(set = 0, binding = 1) uniform texture2D source;         // what the component painted
@@ -199,13 +199,19 @@ Three members are filled in when the block has them, without being declared:
 
 - `resolution` is a `vec2`, or a `vec4` that also gets `1 / width` and
   `1 / height`, the size of one pixel in `uv`.
-- A shader whose block has `time` is animated: its component is painted again
-  at every frame of its window while it is showing. The time starts at 0 and
+- A shader whose block has `time` is animated: it is drawn again at every
+  frame of its window while it is showing. As the effect of a component it is
+  drawn over what the component painted last, which is not painted again;
+  painted by a drawing, it has its component painted again. The time starts at 0 and
   starts again every hour, so an animation whose period divides 3600 seconds
   loops without a jump. A shader without `time` costs nothing between paints.
 - Declaring a property of one of these names takes the member back:
   `property time: number;` lets the document set the time itself, and nothing
   asks for frames anymore.
+- A member of one of these names is filled this way whatever the shader means
+  by it. One the block declares as something else, such as a `vec2 scale` of
+  its own, is reported and the shader is not used: give the member another
+  name, or declare a property of that name to set it.
 
 ## Series
 
@@ -302,7 +308,8 @@ Column {
 - The pointer is not moved with the pixels: a shader that shifts or bends the
   picture leaves the components where they are for the mouse.
 - Where the shader can't run, without a GPU for example, the component is drawn
-  as it is.
+  as it is, and a shader with `time` asks for no frame. A shader the graphics
+  API of the window can't draw is [reported](#diagnostics) at its block.
 
 ## Painted by a drawing
 
@@ -583,6 +590,8 @@ shader Crt: ShaderBundleCompiler: SPIR-V compilation failed for stage fragment: 
 The property 'label' of the shader 'Crt' can't be of type 'string': a shader takes a number, an integer, a boolean, a color, a point, a rectangle or a number[]
 The uniform block of the shader 'Crt' has no member 'gain'
 The member 'intensity' of the uniform block of the shader 'Crt' is too small for a color
+The member 'scale' of the uniform block of the shader 'Crt' is not a float, which is what a shader is given there: declare a property 'scale' to set it
+The shader 'Crt' has no variant for the graphics API of its window: compile it for every language yup_shader_bundler targets
 ```
 
 A shader used where it can't be:
@@ -599,9 +608,20 @@ A shader used where it can't be:
 | A `use` in a `filter` | `Screen/layer[0]/filter[0]/use[0]: unknown property 'in2'` |
 
 A component whose effect can't be used is drawn as it is, and a drawing whose
-shader could not be loaded paints everything but that shader. Nothing is
-reported while painting: a shader the device can't draw shows nothing, or
-leaves its component or its layer as they are.
+shader could not be loaded paints everything but that shader.
+
+A shader that loaded can still be one the device of the window can't draw: a
+bundle built for other graphics APIs, when no window was there to tell at the
+load, or a pipeline the driver fails to compile. That is only known once the
+shader is first drawn, which shows nothing, or leaves its component or its
+layer as they are. Nothing is reported while the window is painted: the
+failure is logged, and reported once at the block of the shader when the
+document next restyles the component, at the next frame of its window:
+
+```text
+The shader 'Crt' can't be drawn: Shader bundle has no vertex variant for the current graphics API
+The shader 'Sum' can't be drawn: The shader reads 3 textures, a filter gives it two at most
+```
 
 [`yup_yui_tool verify`](tooling.md) loads every shader of the files it checks,
 so the same messages stop a build that embeds them with `VERIFY`.
@@ -656,8 +676,10 @@ The classes behind the block are public, for interfaces built in code:
   is given, not an image file.
 - No vertex stage, so no geometry of its own.
 - One type for a property name in a document.
-- A shader given the `time` repaints its whole component at every frame. For a
-  small animated picture in a large interface, give it a component of its own.
+- A shader given the `time` and painted by a drawing repaints its whole
+  component at every frame. For a small animated picture in a large interface,
+  give it a component of its own. As the effect of a component it is drawn
+  again without the component being painted again.
 - The time of a shader painted by a drawing starts again when the drawing is
   made again: when its shader is reloaded, or when the document is built
   again. The one of an effect keeps going across a reload of its shader.

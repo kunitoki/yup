@@ -27,7 +27,8 @@ namespace yup::detail
 /** Adds the properties the spectrum displays share to the type of one: its window, its ranges and its sample rate.
 
     An end of a range written past the other one moves it out of its way, so that a document writes them in any
-    order, and a value a range can't take is ignored.
+    order, and a value a range can't take is ignored. A level outside of the limits of SpectrumAnalysis is brought
+    back to them.
 */
 template <class Display>
 void addSpectrumDisplayProperties (ComponentTypeBuilder<Display>& builder)
@@ -68,13 +69,19 @@ void addSpectrumDisplayProperties (ComponentTypeBuilder<Display>& builder)
         }, 20000.0f, "The highest frequency shown, in Hz.")
         .property ("minDecibels", &D::getMinDecibels, [] (D& d, float v)
         {
-            if (std::isfinite (v))
-                d.setDecibelRange (v, d.getMaxDecibels() > v ? d.getMaxDecibels() : v + 1.0f);
+            if (! std::isfinite (v))
+                return;
+
+            v = jlimit (SpectrumAnalysis::lowestDecibels, SpectrumAnalysis::highestDecibels - 1.0f, v);
+            d.setDecibelRange (v, d.getMaxDecibels() > v ? d.getMaxDecibels() : v + 1.0f);
         }, -100.0f, "The level at the bottom of the scale, in dB.")
         .property ("maxDecibels", &D::getMaxDecibels, [] (D& d, float v)
         {
-            if (std::isfinite (v))
-                d.setDecibelRange (d.getMinDecibels() < v ? d.getMinDecibels() : v - 1.0f, v);
+            if (! std::isfinite (v))
+                return;
+
+            v = jlimit (SpectrumAnalysis::lowestDecibels + 1.0f, SpectrumAnalysis::highestDecibels, v);
+            d.setDecibelRange (d.getMinDecibels() < v ? d.getMinDecibels() : v - 1.0f, v);
         }, 0.0f, "The level at the top of the scale, in dB.")
         .property ("sampleRate", &D::getSampleRate, [] (D& d, double v)
         {

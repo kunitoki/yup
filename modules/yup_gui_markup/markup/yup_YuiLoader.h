@@ -39,10 +39,12 @@ namespace yup
     Any file of the source can be overridden with a text held in memory (see
     @ref setOverride), so an editor can load its unsaved changes through the loader.
 
-    Every load goes through YuiDocument::loadFromString, so a reload updates the interface
-    in place and a failing one keeps the last good interface. On desktop platforms, a file
-    source can be watched: when the main file or one of its imports changes on disk, the
-    document is reloaded on the message thread.
+    Every load goes through the document (see YuiDocument::load), so a reload updates the
+    interface in place and a failing one keeps the last good interface. A main text that
+    can't be read fails the load as one that can't be parsed does: the document lists it as
+    its problem and tells its listeners. On desktop platforms, a file source can be watched:
+    when the main file or one of its imports changes on disk, the document is reloaded on the
+    message thread.
 
     The source also holds the other files the document refers to, such as the source of a
     shader or a model: the loader sets the asset reader of its document, which reads them from

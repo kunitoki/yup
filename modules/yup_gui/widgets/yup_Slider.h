@@ -49,9 +49,16 @@ public:
         RotaryVerticalDrag,   /**< A rotary knob that responds to vertical dragging. */
         IncDecButtons,        /**< A slider with increment/decrement buttons. */
         TwoValueHorizontal,   /**< A horizontal two-value range slider. */
-        TwoValueVertical,     /**< A vertical two-value range slider. */
-        ThreeValueHorizontal, /**< A horizontal three-value slider (min, mid, max). */
-        ThreeValueVertical    /**< A vertical three-value slider (min, mid, max). */
+        TwoValueVertical      /**< A vertical two-value range slider. */
+    };
+
+    /** The thumbs a slider can have. */
+    enum class Thumb
+    {
+        none,     /**< No thumb. */
+        value,    /**< The thumb of the value of a linear slider. */
+        minValue, /**< The thumb of the lower value of a two-value slider. */
+        maxValue  /**< The thumb of the upper value of a two-value slider. */
     };
 
     /** Defines the text entry box position for sliders with text boxes. */
@@ -102,7 +109,7 @@ public:
     virtual void valueChanged();
 
     //==============================================================================
-    /** Sets the minimum value for two-value and three-value sliders.
+    /** Sets the minimum value for two-value sliders.
 
         @param newMinValue The new minimum value
         @param notification Whether to send change notifications
@@ -112,13 +119,13 @@ public:
                       NotificationType notification = sendNotification,
                       bool allowNudgingOfOtherValues = false);
 
-    /** Returns the minimum value for two-value and three-value sliders. */
+    /** Returns the minimum value for two-value sliders. */
     double getMinValue() const;
 
     /** Returns the minimum value as a normalised position (0.0 to 1.0) along the range. */
     double getMinValueNormalised() const;
 
-    /** Sets the maximum value for two-value and three-value sliders.
+    /** Sets the maximum value for two-value sliders.
 
         @param newMaxValue The new maximum value
         @param notification Whether to send change notifications
@@ -128,7 +135,7 @@ public:
                       NotificationType notification = sendNotification,
                       bool allowNudgingOfOtherValues = false);
 
-    /** Returns the maximum value for two-value and three-value sliders. */
+    /** Returns the maximum value for two-value sliders. */
     double getMaxValue() const;
 
     /** Returns the maximum value as a normalised position (0.0 to 1.0) along the range. */
@@ -151,6 +158,10 @@ public:
 
     //==============================================================================
     /** Sets the slider's range using a NormalisableRange.
+
+        A range that is empty or reversed has no position to give the values: it is refused, and the
+        slider keeps the range it has.
+
         @param newRange The new range with optional skew and step parameters
     */
     void setRange (const NormalisableRange<double>& newRange);
@@ -212,9 +223,38 @@ public:
     int getPressedStep() const noexcept { return pressedStep; }
 
     //==============================================================================
+    /** Returns the area of the thumb of a linear slider, in its coordinates. Empty for a slider of another type.
+
+        The thumb is centered where the value is along the track, and has the size the `thumbSize` property
+        gives it. It is where the theme paints it and what a press grabs: a press on the track beside it
+        brings it under the pointer first. A slider of a bar type paints none, and ends its bar at the
+        center of this area.
+
+        @see getSliderBounds, getMinThumbBounds, getMaxThumbBounds
+    */
+    Rectangle<float> getThumbBounds() const;
+
+    /** Returns the area of the thumb of the lower value of a two-value slider. Empty for a slider of another type.
+
+        @see getThumbBounds
+    */
+    Rectangle<float> getMinThumbBounds() const;
+
+    /** Returns the area of the thumb of the upper value of a two-value slider. Empty for a slider of another type.
+
+        @see getThumbBounds
+    */
+    Rectangle<float> getMaxThumbBounds() const;
+
+    /** Returns the thumb the pointer is over or, while the slider is dragged, the one that is dragged. */
+    Thumb getHoveredThumb() const;
+
+    //==============================================================================
     /** Sets the number of decimal places to use when displaying values.
 
-        @param decimalPlaces Number of decimal places (negative for automatic)
+        The default theme shows the value of a slider of type IncDecButtons with 3 decimal places at most.
+
+        @param decimalPlaces Number of decimal places (0 or less for as many as the value needs)
     */
     void setNumDecimalPlacesToDisplay (int decimalPlaces);
 
@@ -339,6 +379,8 @@ public:
     /** @internal */
     void mouseDown (const MouseEvent& event) override;
     /** @internal */
+    void mouseMove (const MouseEvent& event) override;
+    /** @internal */
     void mouseUp (const MouseEvent& event) override;
     /** @internal */
     void mouseDrag (const MouseEvent& event) override;
@@ -352,6 +394,10 @@ public:
     void focusGained() override;
     /** @internal */
     void focusLost() override;
+    /** @internal */
+    void enablementChanged() override;
+    /** @internal */
+    void visibilityChanged() override;
     /** @internal */
     Rectangle<float> getSliderBounds() const;
 
@@ -382,10 +428,10 @@ private:
     DragMode getDragModeForMousePosition (Point<float> mousePos) const;
     bool isMouseOverSliderArea (Point<float> mousePos) const;
 
-    // New methods for improved linear slider handling
-    Rectangle<float> getThumbBounds() const;
-    bool isMouseOverThumb (Point<float> mousePos) const;
-    float getThumbSize() const;
+    Rectangle<float> getThumbBoundsAt (double normalisedValue) const;
+    double getNormalisedValueAt (Point<float> position) const;
+    void endInteraction (const MouseEvent& event);
+    void cancelInteraction();
 
     Rectangle<float> getStepButtonBounds (int direction) const;
     void stepValue (int direction);
@@ -420,6 +466,7 @@ private:
     bool isMouseOverSlider = false;
 
     DragMode dragMode = notDragging;
+    Point<float> pointerPosition;
     Point<float> mouseDownPosition;
     Point<float> mouseDragStartPosition;
     double valueOnMouseDown = 0.0;

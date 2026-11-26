@@ -233,6 +233,44 @@ TEST_F (PrefabTests, LinksRunOncePerInstanceWithTheEntityOfEveryPart)
     EXPECT_NE (first.get<LinkNode>()->linked, second.get<LinkNode>()->linked);
 }
 
+TEST_F (PrefabTests, PartsOfAnEntityDestroyedWhileBuildingAreLeftOut)
+{
+    auto prefab = Prefab::Ptr (new Prefab ("lamp"));
+    auto& bulb = prefab->getRoot().addChild ("bulb");
+    bulb.attach<CounterNode> (1).attach<TransformNode> (Vector3<float> (0.0f, 1.0f, 0.0f));
+    bulb.addChild ("filament").addChild ("coil");
+    prefab->getRoot().addChild ("shade");
+
+    std::vector<Entity> linked;
+    prefab->addLink ([&linked] (Span<const Entity> entities)
+    {
+        linked.assign (entities.begin(), entities.end());
+    });
+
+    // The bulb is destroyed as soon as its first node is attached
+    const auto connection = scene.onAttach<CounterNode>().connect ([] (Entity entity, CounterNode&)
+    {
+        entity.destroy();
+    });
+
+    const auto numEntities = scene.getNumEntities();
+    const auto lamp = prefab->instantiate (scene);
+
+    // Nothing is made for what the bulb held, which would hang on the root of the scene
+    EXPECT_EQ (scene.getNumEntities(), numEntities + 2);
+    EXPECT_EQ (scene.getRoot().getNumChildren(), 1);
+    ASSERT_EQ (lamp.getNumChildren(), 1);
+    EXPECT_EQ (lamp.getChild (0).getName(), "shade");
+
+    // The links get an invalid entity for each part that made none
+    ASSERT_EQ (linked.size(), 5u);
+    EXPECT_EQ (linked[0], lamp);
+    EXPECT_FALSE (linked[1].isValid());
+    EXPECT_FALSE (linked[2].isValid());
+    EXPECT_FALSE (linked[3].isValid());
+    EXPECT_EQ (linked[4], lamp.getChild (0));
+}
+
 TEST_F (PrefabTests, LinksRunInTheOrderTheyWereAdded)
 {
     auto prefab = Prefab::Ptr (new Prefab());

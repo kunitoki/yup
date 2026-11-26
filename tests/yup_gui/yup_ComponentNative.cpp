@@ -165,6 +165,7 @@ public:
 
     using ComponentNative::callFrameListeners;
     using ComponentNative::hasFrameListeners;
+    using ComponentNative::hasThemeChanged;
 
     RectangleList<float> repaintAreas;
     std::optional<float> requestedFrameRate;

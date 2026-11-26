@@ -383,3 +383,128 @@ TEST_F (SceneMeshComponentTests, AMeshThatKeepsChangingIsBuiltOnceByTheNextFrame
         EXPECT_EQ (Internals::getNumChangedMeshes (view), 2);
     }
 }
+
+TEST_F (SceneMeshComponentTests, NumbersThatAreNotFiniteAndIndicesThatAreNotWholeDrawNothingAndAreReported)
+{
+    YuiDocument document;
+    load (document, "Scene3D { id: view; Mesh3D { id: quad; " + quadGeometry() + " } }");
+
+    auto* quad = document.findById<SceneMeshComponent> ("quad");
+    ASSERT_NE (quad, nullptr);
+    ASSERT_NE (meshOf (*quad), nullptr);
+
+    const Identifier vertices ("vertices"), indices ("indices");
+
+    // A vertex that is nowhere would make the bounds of the mesh, and all that is fitted to them, meaningless
+    for (const auto nowhere : { std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity() })
+    {
+        quad->setProperty (vertices, numbers ({ -1.0, -1.0, 0.0, 1.0, nowhere, 0.0, 1.0, 1.0, 0.0, -1.0, 1.0, 0.0 }));
+
+        EXPECT_EQ (quad->getMesh(), nullptr);
+        EXPECT_EQ (meshOf (*quad), nullptr);
+    }
+
+    expectDiagnostic (document, "Mesh3D.vertices: expected numbers");
+
+    // An index between two vertices is not taken for one of them
+    quad->setProperty (vertices, numbers ({ -1.0, -1.0, 0.0, 1.0, -1.0, 0.0, 1.0, 1.0, 0.0, -1.0, 1.0, 0.0 }));
+    quad->setProperty (indices, numbers ({ 0.0, 1.5, 2.0, 0.0, 2.0, 3.0 }));
+
+    EXPECT_EQ (quad->getMesh(), nullptr);
+    EXPECT_EQ (meshOf (*quad), nullptr);
+    expectDiagnostic (document, "Mesh3D.indices: the index 1.5 is not a whole number");
+
+    quad->setProperty (indices, numbers ({ 0.0, 1.0, 2.0, 0.0, 2.0, 3.0 }));
+    EXPECT_NE (quad->getMesh(), nullptr);
+}
+
+TEST_F (SceneMeshComponentTests, AScenePaintedBeforeItsNextFrameDrawsTheMeshItsArraysMake)
+{
+    YuiDocument document;
+    load (document, "Scene3D { id: view; Mesh3D { id: quad; " + quadGeometry() + " } }");
+
+    auto* view = showSceneOf (document);
+    auto* quad = document.findById<SceneMeshComponent> ("quad");
+
+    ASSERT_NE (view, nullptr);
+    ASSERT_NE (quad, nullptr);
+
+    const auto first = meshOf (*quad);
+    ASSERT_NE (first, nullptr);
+
+    StringArray told;
+
+    const DiagnosticListener listener (document, [&told] (const DataTreeDiagnostic& diagnostic)
+    {
+        told.add (diagnostic.message);
+    });
+
+    // What a snapshot does: the scene is painted with no display frame since its arrays changed. Without a theme
+    // nothing is written where no GPU draws the scene
+    ApplicationTheme::setGlobalTheme (nullptr);
+
+    quad->setProperty (Identifier ("vertices"), numbers ({ 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 2.0, 0.0 }));
+    quad->setProperty (Identifier ("indices"), numbers ({ 0.0, 1.0, 2.0 }));
+    EXPECT_EQ (meshOf (*quad), first);
+
+    paintWithoutGpu (*view);
+
+    const auto second = meshOf (*quad);
+    ASSERT_NE (second, nullptr);
+    EXPECT_NE (second, first);
+    EXPECT_EQ (second->getPrimitive (0).vertices.size(), 3u);
+
+    // Arrays that do not fit together draw nothing by then, and what is wrong with them is told by the frame that
+    // follows: who hears of it may let go of the scene, which a scene being painted could not stand
+    quad->setProperty (Identifier ("indices"), numbers ({ 0.0, 1.0, 9.0 }));
+    paintWithoutGpu (*view);
+
+    EXPECT_EQ (meshOf (*quad), nullptr);
+    EXPECT_TRUE (told.isEmpty()) << told.joinIntoString ("; ");
+
+    view->refreshDisplay (0.0);
+
+    ASSERT_EQ (told.size(), 1);
+    EXPECT_EQ (told[0], "Mesh3D.indices: the index 9 is not the one of a vertex, there are 3");
+}
+
+TEST_F (SceneMeshComponentTests, AMeshMovedToAnotherParentOfItsSceneKeepsTheMeshItBuilt)
+{
+    SceneComponent view;
+    SceneNodeComponent left, right;
+    SceneMeshComponent mesh;
+
+    view.addAndMakeVisible (left);
+    view.addAndMakeVisible (right);
+    left.addAndMakeVisible (mesh);
+
+    mesh.setProperty (Identifier ("vertices"), numbers ({ 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0 }));
+    view.refreshDisplay (0.0);
+
+    const auto built = meshOf (mesh);
+    ASSERT_NE (built, nullptr);
+
+    // The entity moves with the component: the mesh on it is not built again
+    right.addAndMakeVisible (mesh);
+
+    EXPECT_EQ (mesh.getEntity().getParent(), right.getEntity());
+    EXPECT_EQ (meshOf (mesh), built);
+    EXPECT_EQ (Internals::getNumChangedMeshes (view), 0);
+
+    view.refreshDisplay (0.0);
+    EXPECT_EQ (meshOf (mesh), built);
+
+    // Arrays that change on its way are built by the scene the mesh still belongs to, where it comes back
+    right.removeChildComponent (mesh);
+    mesh.setProperty (Identifier ("vertices"), numbers ({ 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 2.0, 0.0 }));
+    left.addAndMakeVisible (mesh);
+
+    EXPECT_EQ (meshOf (mesh), built);
+
+    view.refreshDisplay (0.0);
+
+    const auto rebuilt = meshOf (mesh);
+    ASSERT_NE (rebuilt, nullptr);
+    EXPECT_NE (rebuilt, built);
+    expectVector (rebuilt->getPrimitive (0).vertices[1].position, 2.0f, 0.0f, 0.0f);
+}

@@ -5,13 +5,15 @@
       {"pattern": "^\\.github/(actions/smart_ci/|tools/smart_ci\\.py$|smart_ci_config\\.json$|workflows/(ci\\.yml$|build_))", "targets": ["all"]},
       {"pattern": "^codecov\\.yml$", "targets": ["all"]},
       {"pattern": "^CMakeLists\\.txt$", "targets": ["all"]},
-      {"pattern": "^cmake/.*", "targets": ["all"]},
+      {"pattern": "^cmake/(?!tools/yui_tool/).*", "targets": ["all"]},
       {"pattern": "^thirdparty/[^/]+$", "targets": ["all"]}
     ],
     "skip": [
       {"pattern": "^\\.github/.*", "targets": []},
       {"pattern": "^docs/.*", "targets": []},
       {"pattern": "^tools/.*", "targets": []},
+      {"pattern": "^cmake/tools/yui_tool/.*", "targets": []},
+      {"pattern": "^modules/[^/]+/tools/vscode-[^/]+/.*", "targets": []},
       {"pattern": "^website/.*", "targets": []},
       {"pattern": "^\\.vscode/.*", "targets": []},
       {"pattern": "^[^/]+\\.(md|svg|jpg|png)$", "targets": []},

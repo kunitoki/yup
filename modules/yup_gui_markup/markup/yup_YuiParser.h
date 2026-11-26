@@ -71,6 +71,9 @@ public:
     //==============================================================================
     /** Parses a `.yui` text, stopping at the first error.
 
+        The files the text imports are not read: each `import` stays an element of the document,
+        which YuiBuilder reports as unresolved.
+
         @param text  The text to parse.
 
         @returns The document, or the diagnostic of the first error.
@@ -84,9 +87,16 @@ public:
 
         Every `import "path";` is replaced by the blocks of the imported text, recursively, so
         the document holds everything in import order and no `import` element. Each path is
-        imported once, the first time it is met, which also makes import cycles harmless.
+        imported once, the first time it is met, which also makes the cycles between imported
+        files harmless. The text itself has no path here: a file importing it back imports it
+        once more, as any other file (see the overload taking its path).
+
         Nested import paths are normalized and resolved relative to the directory of the file
-        importing them before being passed to @p resolveImport.
+        importing them before being passed to @p resolveImport. A path starting with `/` is
+        relative to the directory of the text parsed, whatever file imports it.
+
+        The merged document has at most one root component: one in an imported file is an
+        error when another text has one too.
 
         @param text           The text to parse.
         @param resolveImport  Returns the text of an imported path.
@@ -96,6 +106,21 @@ public:
                  the source map carry the import path of the elements coming from imports.
     */
     static ParseResult parse (const String& text, const ImportResolver& resolveImport);
+
+    /** Parses the text of a `.yui` file along with the files it imports, which can import it back.
+
+        This is the parse above for a text that has a path among the files it imports from, as
+        the main file a YuiLoader loads has: its path counts as imported already, so a file
+        importing the text back imports nothing.
+
+        @param text           The text to parse.
+        @param resolveImport  Returns the text of an imported path.
+        @param mainPath       The path a file next to the text imports it by, which is its file
+                              name. An empty path is the text of no file.
+
+        @returns The merged document, or the diagnostic of the first error.
+    */
+    static ParseResult parse (const String& text, const ImportResolver& resolveImport, const String& mainPath);
 
     /** Parses a `.yui` text and builds the stylesheet of its blocks.
 

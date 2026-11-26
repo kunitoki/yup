@@ -356,14 +356,15 @@ struct DrawingStyle::Slot
 };
 
 /* What a style keeps for a shader it runs: the shader its resolver found and, for one it paints, the texture it was drawn
-   into last with the uniforms it was given, and whether the device could not draw it. */
+   into last with the uniforms it was given. And why the device could not draw it, where it is painted or in the filter
+   running it, empty while it is drawn. */
 struct DrawingStyle::ShaderState
 {
     GpuImageShader::Ptr shader;
     GpuDevice::Ptr device;
     GpuTarget::Ptr target;
     ShaderUniforms drawn;
-    bool failed = false;
+    String error;
 
     // The textures holding the series the shader samples, one for each texture it declares
     std::vector<detail::ShaderSeriesTexture> series;
@@ -3074,6 +3075,53 @@ std::vector<DrawingStyle::Shader> DrawingStyle::getShaders() const
     return used;
 }
 
+std::vector<DrawingStyle::ShaderFailure> DrawingStyle::getShaderFailures() const
+{
+    std::vector<ShaderFailure> failures;
+
+    for (size_t i = 0; i < compiled->shaders.size(); ++i)
+    {
+        const auto& kept = shaderStates[i];
+
+        if (kept.error.isEmpty())
+            continue;
+
+        ShaderFailure failure;
+        failure.shader.shader = kept.shader;
+        failure.message = kept.error;
+
+        for (const auto& dependency : compiled->shaderDependencies)
+        {
+            if (dependency.name == compiled->shaders[i]->shader->name)
+                failure.shader.block = dependency.block;
+        }
+
+        failures.push_back (std::move (failure));
+    }
+
+    return failures;
+}
+
+void DrawingStyle::releaseResources()
+{
+    // With the device goes what it refused: the shaders are asked of the device of the next window
+    for (size_t i = 0; i < compiled->shaders.size(); ++i)
+    {
+        auto& kept = shaderStates[i];
+
+        kept.target = nullptr;
+        kept.series.clear();
+        kept.device = nullptr;
+        kept.error.clear();
+    }
+
+    for (auto& source : patternSources)
+        source->releaseResources();
+
+    for (auto& [node, source] : filterSources)
+        source->releaseResources();
+}
+
 ResultValue<DrawingStyle::Ptr> DrawingStyle::createWithShaders (const ShaderResolver& shaderResolver, DataTreeDiagnostic* failure) const
 {
     auto* target = targetComponent.get();
@@ -4176,16 +4224,22 @@ void DrawingStyle::drawShader (Graphics& g, const Node& node, Slot& slot, const 
                      && kept.drawn == picture.uniforms
                      && ! seriesChanged;
 
+    // What this device refused before is not asked of it again, nor told again
+    const bool wasRefused = kept.error.isNotEmpty() && kept.device == device;
+
     const auto texture = isKept ? kept.target->asTexture()
                                 : detail::runImageShader (g.getGraphicsContext(),
                                                           kept.device,
                                                           kept.target,
-                                                          kept.failed,
+                                                          kept.error,
                                                           *kept.shader,
                                                           picture.uniforms,
                                                           picture.width,
                                                           picture.height,
                                                           Span<const GpuTexture::Ptr> (inputs.data(), static_cast<size_t> (textureNames.size())));
+
+    if (! wasRefused && kept.error.isNotEmpty())
+        detail::requestShaderFailureReport (targetComponent.get());
 
     if (texture == nullptr)
     {
@@ -4296,7 +4350,33 @@ bool DrawingStyle::drawFilteredLayer (Graphics& g, const Node& node, const Paint
     const ScopedValueSetter<const Graphics*> parentScope (source->parent, std::addressof (g));
     const ScopedValueSetter<int> rowsScope (source->numRows, numRows);
 
-    return g.drawSource (*source, region);
+    const bool drawn = g.drawSource (*source, region);
+
+    // What prevented the filter from running a shader it has is kept where the shader is used: a primitive for each child
+    const auto& filterState = source->getFilterState();
+    int primitive = 0;
+
+    for (const auto& child : filterNode.children)
+    {
+        const bool hasFailed = primitive++ == filterState.getFailedPrimitive();
+
+        if (child->shader == nullptr)
+            continue;
+
+        // A shader that is not loaded was told when it was not: only what a shader could not be drawn for is kept
+        auto& kept = shaderStates[(size_t) child->shader->index];
+        const auto error = hasFailed && kept.shader != nullptr ? filterState.getShaderError() : String();
+
+        if (error == kept.error)
+            continue;
+
+        kept.error = error;
+
+        if (error.isNotEmpty())
+            detail::requestShaderFailureReport (targetComponent.get());
+    }
+
+    return drawn;
 }
 
 void DrawingStyle::drawFilteredContent (Graphics& g, const FilterSource& source)

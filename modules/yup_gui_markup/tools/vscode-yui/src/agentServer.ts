@@ -1,3 +1,4 @@
+import * as crypto from "crypto";
 import * as http from "http";
 import { localhostHostValidation, localhostOriginValidation, toNodeHandler } from "@modelcontextprotocol/node";
 import { CallToolResult, ContentBlock, createMcpHandler, Server, Tool } from "@modelcontextprotocol/server";
@@ -24,6 +25,22 @@ export interface AgentBackend {
 /** The path of the server, which a client is given with its address. */
 export const agentEndpoint = "/mcp";
 
+/**
+    Tells whether what a request sends as its `Authorization` header is the token of a server, as
+    `Bearer <token>`. An empty token is the one of nobody.
+*/
+export function hasToken (authorization: string | undefined, token: string): boolean {
+    const given = /^Bearer +(\S+)$/i.exec (authorization ?? "")?.[1];
+
+    if (given === undefined || token.length === 0)
+        return false;
+
+    // Digests have one length whatever is sent, and comparing them takes the same time wherever they differ
+    const digest = (value: string) => crypto.createHash ("sha256").update (value).digest ();
+
+    return crypto.timingSafeEqual (digest (given), digest (token));
+}
+
 function toToolResult (answer: AgentToolAnswer): CallToolResult {
     const content: ContentBlock[] = [{ type: "text", text: answer.text }];
 
@@ -38,10 +55,12 @@ function toToolResult (answer: AgentToolAnswer): CallToolResult {
 
     It only listens on the loopback address and refuses the requests made for another host or from
     the page of another one, which is how a web page would reach a server of the machine it is
-    shown on. Each request is answered on its own, with nothing kept between two of them.
+    shown on. It then only answers who sends its token: the port can be reached by every user and
+    every program of the machine, who are not given it. Each request is answered on its own, with
+    nothing kept between two of them.
 */
 export class AgentServer {
-    private constructor (private readonly server: http.Server, private readonly close: () => Promise<void>, readonly port: number) {
+    private constructor (private readonly server: http.Server, private readonly close: () => Promise<void>, readonly port: number, private readonly token: string) {
     }
 
     /** The address a client is given. */
@@ -49,8 +68,17 @@ export class AgentServer {
         return `http://127.0.0.1:${this.port}${agentEndpoint}`;
     }
 
-    /** Starts listening on a port, or on any free one when given 0. It fails when the port is taken. */
-    static async start (backend: AgentBackend, port: number, version: string): Promise<AgentServer> {
+    /** The headers a client is given with the address, which hold the token it is answered for. */
+    get headers (): Record<string, string> {
+        return { Authorization: `Bearer ${this.token}` };
+    }
+
+    /**
+        Starts listening on a port, or on any free one when given 0. It fails when the port is taken.
+
+        @param token What a request must send to be answered, as `Authorization: Bearer <token>`.
+    */
+    static async start (backend: AgentBackend, port: number, version: string, token: string): Promise<AgentServer> {
         const handler = createMcpHandler (async () => {
             const described = await backend.describe ();
             const server = new Server ({ name: "vscode-yui", version }, { capabilities: { tools: {} }, instructions: described.instructions });
@@ -69,6 +97,13 @@ export class AgentServer {
             // The guards answer what they refuse themselves
             if (! validateHost (request, response) || ! validateOrigin (request, response))
                 return;
+
+            // Nothing is told, not even which paths there are, to who does not send the token
+            if (! hasToken (request.headers.authorization, token)) {
+                response.writeHead (401, { "Content-Type": "application/json", "WWW-Authenticate": "Bearer" });
+                response.end (JSON.stringify ({ jsonrpc: "2.0", error: { code: -32000, message: "The request does not send the token of the server" }, id: null }));
+                return;
+            }
 
             let path: string | undefined;
 
@@ -97,7 +132,7 @@ export class AgentServer {
 
         const address = server.address ();
 
-        return new AgentServer (server, () => handler.close (), typeof address === "object" && address !== null ? address.port : port);
+        return new AgentServer (server, () => handler.close (), typeof address === "object" && address !== null ? address.port : port, token);
     }
 
     /** Stops listening, ending the requests being answered. */

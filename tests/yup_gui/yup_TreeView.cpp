@@ -265,6 +265,21 @@ protected:
         return (static_cast<float> (row) + fraction) * tree->getDefaultItemHeight();
     }
 
+    /** Puts a component in a window of its own, and returns the native that sends its frames. */
+    static StubComponentNative& makeWindow (Component& component)
+    {
+        auto* native = new StubComponentNative (component, ComponentNative::defaultFlags);
+        yup::ComponentTestHelper<Component>::attachNative (component, native);
+        return *native;
+    }
+
+    /** Sends frames to a window until nothing in it asks for one, giving up after a second of them. */
+    static void runFramesUntilIdle (StubComponentNative& native)
+    {
+        for (int frame = 0; frame < 60 && native.hasFrameListeners(); ++frame)
+            native.callFrameListeners (1.0 / 60.0);
+    }
+
     std::unique_ptr<TreeView> tree;
 };
 
@@ -367,6 +382,42 @@ TEST_F (TreeViewTests, FillsItselfFromThePathsOfItsItems)
     // A root set another way is not one of paths
     buildTree();
     EXPECT_TRUE (tree->getItems().isEmpty());
+}
+
+TEST_F (TreeViewTests, TellsItsItemsChangedWhenAnotherRootReplacesTheOneMadeFromPaths)
+{
+    struct ItemsListener : ComponentListener
+    {
+        void componentPropertyChanged (Component&, const Identifier& name) override
+        {
+            if (name == Identifier ("items"))
+                ++numChanges;
+        }
+
+        int numChanges = 0;
+    };
+
+    ItemsListener listener;
+    tree->addComponentListener (&listener);
+
+    tree->setItems (StringArray { "Sources/main.cpp", "README.md" });
+    EXPECT_EQ (listener.numChanges, 1);
+
+    // The paths are no longer what the tree shows, which is told to what reads them
+    tree->setRootItem (std::make_unique<TestItem> ("root", true));
+    EXPECT_TRUE (tree->getItems().isEmpty());
+    EXPECT_EQ (listener.numChanges, 2);
+
+    // A root replacing one set that way leaves the items as they were: none
+    tree->setRootItem (nullptr);
+    EXPECT_EQ (listener.numChanges, 2);
+
+    // Paths replacing others are told once
+    tree->setItems (StringArray { "One" });
+    tree->setItems (StringArray { "One", "Two" });
+    EXPECT_EQ (listener.numChanges, 4);
+
+    tree->removeComponentListener (&listener);
 }
 
 TEST_F (TreeViewTests, RowsMakeRoomForItemsThatPaintAnIcon)
@@ -1178,6 +1229,110 @@ TEST_F (TreeViewTests, DraggingNearTheEdgeAutoScrolls)
     runFrames (10);
 
     EXPECT_FLOAT_EQ (scrolled, tree->getScrollPosition());
+}
+
+TEST_F (TreeViewTests, AsksForFramesOnlyWhileItemsOpenOrClose)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.setBounds (0.0f, 0.0f, 300.0f, 240.0f);
+    window.setVisible (true);
+    window.addAndMakeVisible (*tree);
+
+    auto& root = buildTree();
+    root.setOpen (true);
+    tree->setExpandAnimationTime (0.2);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    find ("a").setOpen (true);
+    EXPECT_TRUE (native.hasFrameListeners());
+    EXPECT_LT (heightOf ("a0"), 1.0f);
+
+    runFramesUntilIdle (native);
+
+    EXPECT_FALSE (native.hasFrameListeners());
+    EXPECT_FLOAT_EQ (24.0f, heightOf ("a0"));
+
+    find ("a").setOpen (false);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    runFramesUntilIdle (native);
+
+    EXPECT_FALSE (native.hasFrameListeners());
+    EXPECT_EQ ("root,a,b,c", rowNames());
+
+    window.removeChildComponent (*tree);
+}
+
+TEST_F (TreeViewTests, AsksForFramesWhileADragScrollsItOrWaitsOverAClosedItem)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.setBounds (0.0f, 0.0f, 300.0f, 240.0f);
+    window.setVisible (true);
+    window.addAndMakeVisible (*tree);
+
+    buildFlatTree (40);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    // In the middle of the tree a drag over leaves waits for nothing
+    tree->itemDragMove (dragAt (tree->getHeight() * 0.5f));
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    tree->itemDragMove (dragAt (tree->getHeight() - 2.0f));
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    for (int frame = 0; frame < 10; ++frame)
+        native.callFrameListeners (1.0 / 60.0);
+
+    EXPECT_GT (tree->getScrollPosition(), 0.0f);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    tree->itemDragExit (dragAt (tree->getHeight() - 2.0f));
+    runFramesUntilIdle (native);
+
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    window.removeChildComponent (*tree);
+}
+
+TEST_F (TreeViewTests, AHiddenTreeAsksForNoFrameAndGoesOnOpeningWhenItShowsAgain)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.setBounds (0.0f, 0.0f, 300.0f, 240.0f);
+    window.setVisible (true);
+    window.addAndMakeVisible (*tree);
+
+    auto& root = buildTree();
+    root.setOpen (true);
+    tree->setExpandAnimationTime (0.2);
+
+    find ("a").setOpen (true);
+
+    for (int frame = 0; frame < 3; ++frame)
+        native.callFrameListeners (1.0 / 60.0);
+
+    ASSERT_TRUE (native.hasFrameListeners());
+
+    const auto grown = heightOf ("a0");
+    EXPECT_GT (grown, 1.0f);
+    EXPECT_LT (grown, 24.0f);
+
+    // Hiding a parent hides the tree
+    window.setVisible (false);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    window.setVisible (true);
+    EXPECT_TRUE (native.hasFrameListeners());
+    EXPECT_FLOAT_EQ (grown, heightOf ("a0"));
+
+    runFramesUntilIdle (native);
+
+    EXPECT_FALSE (native.hasFrameListeners());
+    EXPECT_FLOAT_EQ (24.0f, heightOf ("a0"));
+
+    window.removeChildComponent (*tree);
 }
 
 TEST_F (TreeViewTests, DraggedItemsLeaveOutItemsInsideOtherDraggedItems)

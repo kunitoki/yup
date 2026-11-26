@@ -43,8 +43,70 @@ protected:
 #endif
     }
 
+    /** Puts a component in a window of its own, and returns the native that sends its frames. */
+    static StubComponentNative& makeWindow (Component& component)
+    {
+        auto* native = new StubComponentNative (component, ComponentNative::defaultFlags);
+        yup::ComponentTestHelper<Component>::attachNative (component, native);
+        return *native;
+    }
+
     MessageManager* mm = nullptr;
     std::unique_ptr<ProgressBar> progressBar;
+
+    /** Counts the paths a component paints, with no GPU. */
+    class PathCounter final : public rive::Renderer
+    {
+    public:
+        using rive::Renderer::drawImage;
+        using rive::Renderer::drawImageMesh;
+
+        void save() override {}
+
+        void restore() override {}
+
+        void transform (const rive::Mat2D&) override {}
+
+        void drawPath (rive::RenderPath*, rive::RenderPaint*) override { ++numPaths; }
+
+        void clipPath (rive::RenderPath*) override {}
+
+        void drawImage (const rive::RenderImage*, rive::ImageSampler, rive::BlendMode, float) override {}
+
+        void drawImageMesh (const rive::RenderImage*,
+                            rive::ImageSampler,
+                            rive::rcp<rive::RenderBuffer>,
+                            rive::rcp<rive::RenderBuffer>,
+                            rive::rcp<rive::RenderBuffer>,
+                            uint32_t,
+                            uint32_t,
+                            rive::BlendMode,
+                            float) override {}
+
+        void modulateOpacity (float) override {}
+
+        int numPaths = 0;
+    };
+
+    /** Returns how many paths the bar is painted with by the default theme. */
+    int countPathsPaintedByTheDefaultTheme()
+    {
+        const auto oldTheme = ApplicationTheme::getGlobalTheme();
+        ApplicationTheme::setGlobalTheme (createThemeVersion1());
+
+        auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+        PathCounter counter;
+
+        {
+            Graphics g (*context, counter);
+            g.setDrawingArea ({ 0.0f, 0.0f, 200.0f, 30.0f });
+            progressBar->paint (g);
+        }
+
+        ApplicationTheme::setGlobalTheme (oldTheme);
+
+        return counter.numPaths;
+    }
 };
 
 //==============================================================================
@@ -398,6 +460,110 @@ TEST_F (ProgressBarTests, RefreshDisplayWithVeryLargeFrameTime)
     progressBar->refreshDisplay (10.0); // 10 seconds
 
     EXPECT_TRUE (true);
+}
+
+TEST_F (ProgressBarTests, ThePhaseAdvancesWithTheTimeOfTheFrames)
+{
+    progressBar->setProgress (-1.0, dontSendNotification);
+    ASSERT_TRUE (progressBar->isIndeterminate());
+
+    // A cycle takes two seconds
+    progressBar->refreshDisplay (0.5);
+    EXPECT_NEAR (progressBar->getAnimationPhase(), 0.25, 1.0e-9);
+
+    progressBar->refreshDisplay (1.0);
+    EXPECT_NEAR (progressBar->getAnimationPhase(), 0.75, 1.0e-9);
+
+    // And starts again, however long a frame took
+    progressBar->refreshDisplay (1.0);
+    EXPECT_NEAR (progressBar->getAnimationPhase(), 0.25, 1.0e-9);
+
+    progressBar->refreshDisplay (10.0);
+    EXPECT_NEAR (progressBar->getAnimationPhase(), 0.25, 1.0e-9);
+
+    // A bar showing a progress leaves the phase where it is
+    progressBar->setProgress (0.5, dontSendNotification);
+    progressBar->refreshDisplay (1.0);
+    EXPECT_NEAR (progressBar->getAnimationPhase(), 0.25, 1.0e-9);
+}
+
+TEST_F (ProgressBarTests, AsksForFramesOnlyWhileItIsIndeterminate)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.setBounds (0.0f, 0.0f, 300.0f, 100.0f);
+    window.setVisible (true);
+    window.addAndMakeVisible (*progressBar);
+
+    progressBar->setProgress (0.5, dontSendNotification);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    progressBar->setProgress (-1.0, dontSendNotification);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    native.callFrameListeners (0.5);
+    EXPECT_NEAR (progressBar->getAnimationPhase(), 0.25, 1.0e-9);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    progressBar->setProgress (1.0, dontSendNotification);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    window.removeChildComponent (*progressBar);
+}
+
+TEST_F (ProgressBarTests, AHiddenIndeterminateBarAsksForNoFrameUntilItShows)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.setBounds (0.0f, 0.0f, 300.0f, 100.0f);
+    window.setVisible (true);
+    window.addAndMakeVisible (*progressBar);
+
+    progressBar->setProgress (-1.0, dontSendNotification);
+    ASSERT_TRUE (native.hasFrameListeners());
+
+    // Hiding a parent hides the bar
+    window.setVisible (false);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    window.setVisible (true);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    // A bar made indeterminate while hidden starts when it shows
+    progressBar->setProgress (0.5, dontSendNotification);
+    progressBar->setVisible (false);
+    progressBar->setProgress (-1.0, dontSendNotification);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    progressBar->setVisible (true);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    native.callFrameListeners (0.5);
+    EXPECT_NEAR (progressBar->getAnimationPhase(), 0.25, 1.0e-9);
+
+    window.removeChildComponent (*progressBar);
+}
+
+TEST_F (ProgressBarTests, AnIndeterminateBarLowerThanAPixelPaintsNoRibbons)
+{
+    progressBar->setProgress (-1.0, dontSendNotification);
+    const auto numPathsWithRibbons = countPathsPaintedByTheDefaultTheme();
+
+    // A bar showing no progress is its track alone
+    progressBar->setProgress (0.0, dontSendNotification);
+    EXPECT_GT (numPathsWithRibbons, countPathsPaintedByTheDefaultTheme());
+
+    // The ribbons are as wide as the bar is high: lower than a pixel it has none to paint, and is its track alone too
+    for (const auto height : { 0.6f, 0.25f })
+    {
+        progressBar->setBounds (0.0f, 0.0f, 200.0f, height);
+
+        progressBar->setProgress (0.0, dontSendNotification);
+        const auto numTrackPaths = countPathsPaintedByTheDefaultTheme();
+
+        progressBar->setProgress (-1.0, dontSendNotification);
+        EXPECT_EQ (countPathsPaintedByTheDefaultTheme(), numTrackPaths) << height;
+    }
 }
 
 //==============================================================================

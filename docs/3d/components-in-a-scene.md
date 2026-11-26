@@ -70,6 +70,14 @@ screen->addAndMakeVisible (panel);                  // shown on the screen, and 
   `emissive`, for an interface that glows like a screen, and `baseColor`, for
   one lit as the rest of the object.
 - A component added to the `SceneComponent` itself stays flat, over the scene.
+- A node moved to another parent of its scene keeps its entity, with the
+  model it instantiated and what it shows. Removed, it keeps it out of the
+  tree of the scene until the next frame, which destroys it unless the node is
+  back in the scene by then. A scene that is hidden has that frame once it
+  shows again.
+- A mesh made of several primitives shows the components on all of them, with
+  one material: give the node a `SceneMaterialComponent` to choose it, which a
+  warning asks for otherwise.
 
 The nodes take the pointer where they are shown, to the triangle, so they are
 components for the mouse too: they have the hover and pressed states, a mouse

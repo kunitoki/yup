@@ -357,6 +357,13 @@ comp.setStyle (customButtonStyle);
 ComponentStyle::Ptr s = comp.getStyle();
 ```
 
+A style set on a component paints what it likes of it: rounded shapes,
+translucent colors, or nothing at all in places. So the component is not
+painted as an opaque one while it has the style, whatever `isOpaque()` returns:
+its parent is painted behind it, and the style needs no background of its own.
+The same holds for a [drawing](#painting-a-component-from-a-drawing), which is
+a style set on the component.
+
 ### Registering a type-wide style on the theme
 
 ```cpp
@@ -366,6 +373,10 @@ theme->setComponentStyle<TextButton> (customButtonStyle);
 
 This makes all `TextButton` instances use the custom style, unless a specific
 instance has called `comp.setStyle()` with its own override.
+
+A type-wide style leaves the opaque state of the components as it is: for a
+type that is opaque, it has to paint every pixel of the bounds with an opaque
+color.
 
 ### Removing a style
 

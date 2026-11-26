@@ -42,7 +42,15 @@ namespace yup
     hands the view over to the next. A camera that is not active has no CameraNode. Without
     any active camera the scene falls back on a camera of a model, or on its default one.
 
-    The depth of field of CameraNode has no property: set it on the CameraNode of getEntity().
+    The depth of field of CameraNode has no property: set it on the CameraNode of getEntity(),
+    which keeps it for as long as the camera is active and keeps its entity, so also when it
+    moves to another parent of its scene.
+
+    A value a camera can't have is reported in the diagnostics of the document, and the camera
+    keeps the one it had: a field of view that is not above 0 and below 180deg, a near plane or
+    an orthographic size that is not above 0, a far plane that is negative, and for any of them
+    a value that is not a finite number. So is an orthographic camera whose far plane is not
+    beyond its near one, as `far: 0` leaves it: it has no infinite far plane.
 
     @see SceneNodeComponent, CameraNode
 */
@@ -131,10 +139,12 @@ private:
     void setValue (Value& value, const Value& newValue, const Identifier& property);
 
     void updateCamera();
+    void updatePlanesProblem();
     void updateActiveCamera();
 
     CameraNode settings; // The values the CameraNode of the entity is given, which it only has while the camera is active
     bool active = true;
+    bool hasPlanesProblem = false; // An orthographic camera whose far plane is not beyond its near one, as it was last told
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SceneCameraComponent)
 };

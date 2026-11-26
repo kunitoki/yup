@@ -56,6 +56,29 @@ public:
     */
     void registerType (const ComponentTypeInfo& typeInfo);
 
+    /** Registers a type info unless one is registered under its type name already.
+
+        @param typeInfo    The type info to register. It must outlive the registry entry.
+
+        @see registerDefaultTypes
+    */
+    void registerDefaultType (const ComponentTypeInfo& typeInfo);
+
+    /** Registers type infos, each unless one is registered under its type name already, locking the
+        registry once for them all.
+
+        This is how a module registers the types it comes with, as registerBuiltInComponentTypes()
+        does: they are registered when something first needs them, which may be after an
+        application registered a type of its own under one of their names, and that one stays.
+
+        @code
+        ComponentTypeRegistry::getInstance().registerDefaultTypes ({ Knob::getClassTypeInfo(), Fader::getClassTypeInfo() });
+        @endcode
+
+        @param typeInfos    The type infos to register. They must outlive their registry entries.
+    */
+    void registerDefaultTypes (std::initializer_list<std::reference_wrapper<const ComponentTypeInfo>> typeInfos);
+
     /** Finds a registered type info by name, or nullptr when it is not registered. */
     const ComponentTypeInfo* findType (const Identifier& typeName) const;
 
@@ -73,7 +96,11 @@ private:
 };
 
 //==============================================================================
-/** Registers the type infos of the built-in yup_gui components into the registry. */
+/** Registers the type infos of the built-in yup_gui components into the registry.
+
+    A type registered before under the name of one of them is left in place (see
+    ComponentTypeRegistry::registerDefaultTypes).
+*/
 YUP_API void registerBuiltInComponentTypes();
 
 } // namespace yup

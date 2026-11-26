@@ -369,6 +369,15 @@ public:
     {
         return comp.takeEffectDirtyRegion (renderContinuous);
     }
+
+    /** Returns whether a component keeps any of the canvases it paints itself into. */
+    static bool keepsCanvases (const Component& comp)
+    {
+        return comp.cachedTextureCanvas != nullptr
+            || comp.effectOffscreenCanvas != nullptr
+            || comp.filterIntermediateCanvas != nullptr
+            || comp.presentedCanvas != nullptr;
+    }
 };
 
 } // namespace yup
@@ -2985,7 +2994,7 @@ TEST_F (ComponentTest, InternalMouseDispatch)
     const MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float> (10.0f, 10.0f));
     const MouseWheelData wheel (0.0f, 10.0f);
 
-    // Invisible component → every handler returns early.
+    // Invisible component → every handler but the release returns early: a press has to end.
     root->setVisible (false);
     ComponentHelper::triggerMouseEnter (*root, event);
     ComponentHelper::triggerMouseExit (*root, event);
@@ -3110,6 +3119,84 @@ TEST_F (ComponentTest, DisabledComponentsOnlyReceiveTheEndOfMouseInteractions)
     EXPECT_EQ (listener.exits, 1);
 
     child->removeMouseListener (&listener);
+}
+
+TEST_F (ComponentTest, AComponentHiddenWhilePressedStillGetsTheRelease)
+{
+    struct ReleaseCounter : public MouseListener
+    {
+        void mouseUp (const MouseEvent&) override { ++ups; }
+
+        int ups = 0;
+    };
+
+    ReleaseCounter listener;
+    child->addMouseListener (&listener);
+    root->setVisible (true);
+    parent->setVisible (true);
+    child->setVisible (true);
+
+    const MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float> (10.0f, 10.0f));
+
+    ComponentHelper::triggerMouseDown (*child, event);
+    ASSERT_TRUE (child->isPressed());
+
+    // The press has to end, or what it began in the component never does
+    child->setVisible (false);
+    ComponentHelper::triggerMouseUp (*child, event);
+
+    EXPECT_EQ (listener.ups, 1);
+    EXPECT_FALSE (child->isPressed());
+    EXPECT_FALSE (root->isPressed());
+
+    child->removeMouseListener (&listener);
+}
+
+TEST_F (ComponentTest, AnEffectThatIsNotActiveMapsNoPoint)
+{
+    struct IdleShiftEffect : ComponentEffect
+    {
+        void apply (Graphics&, GpuTexture::Ptr, Rectangle<float>) override {}
+
+        bool isActive() const override { return false; }
+
+        std::optional<Point<float>> displayToContent (Point<float> displayPoint, Rectangle<float>) const override
+        {
+            return displayPoint + Point<float> (10.0f, 0.0f);
+        }
+
+        std::optional<Point<float>> contentToDisplay (Point<float> contentPoint, Rectangle<float>) const override
+        {
+            return contentPoint - Point<float> (10.0f, 0.0f);
+        }
+    };
+
+    child->setComponentEffect (new IdleShiftEffect());
+
+    // The child is at 25, 25 in its parent, and is shown where it is laid out
+    const auto local = child->getLocalPointFromParent ({ 30.0f, 30.0f });
+    ASSERT_TRUE (local.has_value());
+    EXPECT_FLOAT_EQ (local->getX(), 5.0f);
+    EXPECT_FLOAT_EQ (local->getY(), 5.0f);
+
+    const auto inParent = child->getParentPointFromLocal ({ 5.0f, 5.0f });
+    ASSERT_TRUE (inParent.has_value());
+    EXPECT_FLOAT_EQ (inParent->getX(), 30.0f);
+    EXPECT_FLOAT_EQ (inParent->getY(), 30.0f);
+}
+
+TEST_F (ComponentTest, ATypeInfoThatDoesNotExtendTheClassIsNotTaken)
+{
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
+    GTEST_SKIP() << "A type info that does not extend the one of the class triggers an assertion when assertions are enabled or logged";
+#endif
+
+    const ComponentTypeInfo unrelated (Identifier ("Unrelated"), nullptr, {});
+
+    // Its accessors would take the component for one of another class
+    child->setTypeInfo (&unrelated);
+
+    EXPECT_EQ (&child->getTypeInfo(), &Component::getClassTypeInfo());
 }
 
 TEST_F (ComponentTest, GesturesAreNotWantedByDefault)
@@ -3514,6 +3601,56 @@ TEST_F (ComponentRepaintRegionTest, AnOpaqueChildWithAnEffectDoesNotHideTheParen
     EXPECT_EQ (1, root->paintCount);
 }
 
+TEST_F (ComponentRepaintRegionTest, AnOpaqueChildWithAnEffectThatIsNotActiveHidesTheParent)
+{
+    struct IdleEffect : ComponentEffect
+    {
+        void apply (Graphics&, GpuTexture::Ptr, Rectangle<float>) override {}
+
+        bool isActive() const override { return false; }
+    };
+
+    // With nothing to apply the child is painted as it is without an effect, covering what is behind it
+    left->setComponentEffect (new IdleEffect());
+
+    Graphics g (*context, *renderer, 1.0f);
+    ComponentHelper::triggerPaint (*root, g, region ({ { 0, 0, 5, 5 } }), false);
+
+    EXPECT_EQ (0, root->paintCount);
+    EXPECT_EQ (1, left->paintCount);
+}
+
+TEST_F (ComponentRepaintRegionTest, AnOpaqueChildWithAStyleSetOnItDoesNotHideTheParent)
+{
+    struct HollowStyle : ComponentStyle
+    {
+        void paint (Graphics&, const ApplicationTheme&, const Component&) override {}
+    };
+
+    // A style paints what it likes of the child: rounded or translucent shapes leave pixels to the parent
+    left->setStyle (ComponentStyle::Ptr (new HollowStyle()));
+    EXPECT_TRUE (left->isOpaque());
+
+    {
+        Graphics g (*context, *renderer, 1.0f);
+        ComponentHelper::triggerPaint (*root, g, region ({ { 0, 0, 5, 5 } }), false);
+    }
+
+    EXPECT_EQ (1, root->paintCount);
+    EXPECT_EQ (1, left->paintCount);
+
+    // Without the style the child covers the parent again
+    left->setStyle (nullptr);
+
+    {
+        Graphics g (*context, *renderer, 1.0f);
+        ComponentHelper::triggerPaint (*root, g, region ({ { 0, 0, 5, 5 } }), false);
+    }
+
+    EXPECT_EQ (1, root->paintCount);
+    EXPECT_EQ (2, left->paintCount);
+}
+
 TEST_F (ComponentRepaintRegionTest, AnOpaqueChildDrawnTranslucentDoesNotHideTheParent)
 {
     left->setOpacity (0.5f);
@@ -3654,6 +3791,123 @@ TEST_F (ComponentTransformClipGpuTest, ChildOfRotatedParentIsClippedToTheParentO
 
     EXPECT_GT (image.getPixelColor (50, 48).getAlpha(), 0);
     EXPECT_EQ (0, image.getPixelColor (25, 24).getAlpha());
+}
+
+TEST_F (ComponentTransformClipGpuTest, AComponentLeavingItsWindowKeepsNoCanvasOfIt)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    Component window;
+    ComponentHelper::attachMockNative (window);
+    window.setBounds (0.0f, 0.0f, 64.0f, 64.0f);
+    window.setVisible (true);
+
+    FillComponent shown;
+    shown.setBounds (0.0f, 0.0f, 32.0f, 32.0f);
+    window.addAndMakeVisible (shown);
+
+    ASSERT_NE (shown.renderToTexture (*gpuContext), nullptr);
+    EXPECT_TRUE (ComponentHelper::keepsCanvases (shown));
+
+    // What it painted itself into belongs to the device of the window: none of it is kept past it
+    window.removeChildComponent (shown);
+    EXPECT_FALSE (ComponentHelper::keepsCanvases (shown));
+
+    // It is painted again for whatever shows it next
+    EXPECT_NE (shown.renderToTexture (*gpuContext), nullptr);
+    EXPECT_TRUE (ComponentHelper::keepsCanvases (shown));
+}
+
+// =============================================================================
+// What a component keeps of its window is released when it leaves it
+// =============================================================================
+
+class ComponentWindowResourcesTests : public ::testing::Test
+{
+protected:
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    /** Counts the times it is told to release what it keeps, and how many of them a component was still in a window. */
+    class ReleaseCountingEffect : public ComponentEffect
+    {
+    public:
+        explicit ReleaseCountingEffect (const Component& windowToWatch)
+            : window (windowToWatch)
+        {
+        }
+
+        void apply (Graphics&, GpuTexture::Ptr, Rectangle<float>) override {}
+
+        void releaseResources() override
+        {
+            ++numReleases;
+
+            if (window.getNativeComponent() != nullptr)
+                ++numReleasesInAWindow;
+        }
+
+        const Component& window;
+        int numReleases = 0;
+        int numReleasesInAWindow = 0;
+    };
+
+    using EffectPtr = ReferenceCountedObjectPtr<ReleaseCountingEffect>;
+
+    Component window;
+    Component panel;
+    Component leaf;
+};
+
+TEST_F (ComponentWindowResourcesTests, AComponentRemovedFromAWindowReleasesTheEffectsOfItsSubtree)
+{
+    ComponentHelper::attachMockNative (window);
+    window.addChildComponent (panel);
+    panel.addChildComponent (leaf);
+
+    const EffectPtr windowEffect (new ReleaseCountingEffect (window));
+    const EffectPtr panelEffect (new ReleaseCountingEffect (window));
+    const EffectPtr leafEffect (new ReleaseCountingEffect (window));
+    window.setComponentEffect (windowEffect);
+    panel.setComponentEffect (panelEffect);
+    leaf.setComponentEffect (leafEffect);
+
+    // Nothing is released while the components stay where they are, or move inside their parent
+    window.addChildComponent (panel, 0);
+    EXPECT_EQ (panelEffect->numReleases, 0);
+    EXPECT_EQ (leafEffect->numReleases, 0);
+
+    // The window is still there to release with when a part of it is taken away
+    window.removeChildComponent (panel);
+    EXPECT_EQ (panelEffect->numReleases, 1);
+    EXPECT_EQ (panelEffect->numReleasesInAWindow, 1);
+    EXPECT_EQ (leafEffect->numReleases, 1);
+    EXPECT_EQ (leafEffect->numReleasesInAWindow, 1);
+    EXPECT_EQ (windowEffect->numReleases, 0);
+
+    // Out of a window there is nothing of one to release
+    panel.removeChildComponent (leaf);
+    EXPECT_EQ (leafEffect->numReleases, 1);
+}
+
+TEST_F (ComponentWindowResourcesTests, AComponentTakenOffTheDesktopReleasesItsSubtreeBeforeItsWindowIsGone)
+{
+    window.addChildComponent (panel);
+    panel.addChildComponent (leaf);
+
+    ComponentHelper::attachMockNative (window);
+    ComponentHelper::setOnDesktop (window, true);
+
+    const EffectPtr windowEffect (new ReleaseCountingEffect (window));
+    const EffectPtr leafEffect (new ReleaseCountingEffect (window));
+    window.setComponentEffect (windowEffect);
+    leaf.setComponentEffect (leafEffect);
+
+    window.removeFromDesktop();
+    EXPECT_EQ (window.getNativeComponent(), nullptr);
+
+    // Each was told while the window was there, whose rendering context its GPU objects are released with
+    EXPECT_EQ (windowEffect->numReleasesInAWindow, 1);
+    EXPECT_EQ (leafEffect->numReleasesInAWindow, 1);
 }
 
 // =============================================================================
@@ -4963,6 +5217,20 @@ protected:
         ComponentHelper::takeEffectDirtyRegion (comp, false);
     }
 
+    /** An effect with a parameter, which tells the components it is set on when the parameter changes. */
+    struct TunableEffect : ComponentEffect
+    {
+        void apply (Graphics&, GpuTexture::Ptr, Rectangle<float>) override {}
+
+        void setAmount (float newAmount)
+        {
+            if (std::exchange (amount, newAmount) != newAmount)
+                invalidate();
+        }
+
+        float amount = 0.0f;
+    };
+
     Component comp;
 };
 
@@ -5004,6 +5272,27 @@ TEST_F (ComponentEffectDamageTests, ContinuousOrTranslucentRenderingRepaintsEver
     EXPECT_FALSE (ComponentHelper::takeEffectDirtyRegion (comp, false).has_value());
 }
 
+TEST_F (ComponentEffectDamageTests, AComponentWithAStyleSetOnItRepaintsEverything)
+{
+    struct HollowStyle : ComponentStyle
+    {
+        void paint (Graphics&, const ApplicationTheme&, const Component&) override {}
+    };
+
+    // What a style leaves unpainted is not covered again, so nothing can be painted over what was kept
+    comp.setStyle (ComponentStyle::Ptr (new HollowStyle()));
+    ComponentHelper::takeEffectDirtyRegion (comp, false);
+
+    comp.repaint (Rectangle<float> (10.0f, 10.0f, 5.0f, 5.0f));
+    EXPECT_FALSE (ComponentHelper::takeEffectDirtyRegion (comp, false).has_value());
+
+    comp.setStyle (nullptr);
+    ComponentHelper::takeEffectDirtyRegion (comp, false);
+
+    comp.repaint (Rectangle<float> (10.0f, 10.0f, 5.0f, 5.0f));
+    EXPECT_TRUE (ComponentHelper::takeEffectDirtyRegion (comp, false).has_value());
+}
+
 TEST_F (ComponentEffectDamageTests, AManuallyCompositedChildDamagesTheWholeParent)
 {
     Component child;
@@ -5043,6 +5332,93 @@ TEST_F (ComponentEffectDamageTests, DamageReachingIntoThePaintMarginRepaintsEver
     // The margin is not covered by an opaque fill, so it cannot be painted over
     comp.repaint (Rectangle<float> (95.0f, 10.0f, 10.0f, 5.0f));
     EXPECT_FALSE (ComponentHelper::takeEffectDirtyRegion (comp, false).has_value());
+}
+
+TEST_F (ComponentEffectDamageTests, NothingDamagedLeavesNothingToPaintAgainWhateverTheComponent)
+{
+    // What was kept is painted over where it was damaged only: with no damage nothing has to cover it again
+    comp.setOpaque (false);
+
+    auto region = ComponentHelper::takeEffectDirtyRegion (comp, false);
+    ASSERT_TRUE (region.has_value());
+    EXPECT_EQ (0, region->getNumRectangles());
+
+    comp.setOpaque (true);
+    comp.enableRenderingUnclipped (true);
+
+    region = ComponentHelper::takeEffectDirtyRegion (comp, false);
+    ASSERT_TRUE (region.has_value());
+    EXPECT_EQ (0, region->getNumRectangles());
+
+    // A window rendering continuously paints everything at every frame
+    EXPECT_FALSE (ComponentHelper::takeEffectDirtyRegion (comp, true).has_value());
+}
+
+TEST_F (ComponentEffectDamageTests, AnEffectThatChangedDamagesNothingOfItsComponent)
+{
+    const ReferenceCountedObjectPtr<TunableEffect> effect (new TunableEffect());
+    comp.setComponentEffect (effect);
+    ComponentHelper::takeEffectDirtyRegion (comp, false);
+
+    effect->setAmount (0.5f);
+
+    auto region = ComponentHelper::takeEffectDirtyRegion (comp, false);
+    ASSERT_TRUE (region.has_value());
+    EXPECT_EQ (0, region->getNumRectangles());
+
+    // A repaint is what tells that the component paints something else
+    comp.repaint();
+
+    region = ComponentHelper::takeEffectDirtyRegion (comp, false);
+    ASSERT_TRUE (region.has_value());
+    ASSERT_EQ (1, region->getNumRectangles());
+    EXPECT_EQ (region->getRectangle (0), comp.getLocalBounds());
+}
+
+TEST_F (ComponentEffectDamageTests, AComponentThatIsNotShowingRepaintsEverything)
+{
+    Component parent;
+    parent.addChildComponent (comp);
+    ASSERT_FALSE (comp.isShowing());
+
+    // The repaints of a component that is not showing are not kept, so nothing tells what changed in it
+    EXPECT_FALSE (ComponentHelper::takeEffectDirtyRegion (comp, false).has_value());
+}
+
+TEST_F (ComponentEffectDamageTests, AComponentShownAgainRepaintsWhatItKept)
+{
+    Component parent;
+    parent.setBounds (0.0f, 0.0f, 200.0f, 200.0f);
+    parent.setVisible (true);
+    parent.addChildComponent (comp);
+    ComponentHelper::takeEffectDirtyRegion (comp, false);
+
+    // What changes while a parent hides the component asks for no repaint
+    parent.setVisible (false);
+    comp.repaint (Rectangle<float> (10.0f, 10.0f, 5.0f, 5.0f));
+    parent.setVisible (true);
+
+    const auto region = ComponentHelper::takeEffectDirtyRegion (comp, false);
+    ASSERT_TRUE (region.has_value());
+    ASSERT_EQ (1, region->getNumRectangles());
+    EXPECT_EQ (region->getRectangle (0), comp.getLocalBounds());
+}
+
+TEST_F (ComponentEffectDamageTests, DisablingAParentRepaintsWhatAComponentKept)
+{
+    Component parent;
+    parent.setBounds (0.0f, 0.0f, 200.0f, 200.0f);
+    parent.setVisible (true);
+    parent.addChildComponent (comp);
+    ComponentHelper::takeEffectDirtyRegion (comp, false);
+
+    // The component is painted in the state of its parent, whose own repaint does not reach what the component keeps
+    parent.setEnabled (false);
+
+    const auto region = ComponentHelper::takeEffectDirtyRegion (comp, false);
+    ASSERT_TRUE (region.has_value());
+    ASSERT_EQ (1, region->getNumRectangles());
+    EXPECT_EQ (region->getRectangle (0), comp.getLocalBounds());
 }
 
 // =============================================================================
@@ -5102,19 +5478,39 @@ TEST_F (ComponentHeadlessRenderTest, AManuallyCompositedComponentIsLeftToItsPres
     EXPECT_EQ (1, comp.paintCount);
 }
 
-TEST_F (ComponentHeadlessRenderTest, AnEffectWithoutAnOffscreenTargetDrawsNothingAndConsumesTheDamage)
+TEST_F (ComponentHeadlessRenderTest, AnEffectWithoutAnOffscreenTargetPaintsDirectlyAndConsumesTheDamage)
 {
+    CountingComponent child;
+    child.setBounds (10.0f, 10.0f, 10.0f, 10.0f);
+    comp.addAndMakeVisible (child);
+
     auto effect = ReferenceCountedObjectPtr<ApplyCountingComponentEffect> (new ApplyCountingComponentEffect());
     comp.setComponentEffect (effect);
 
     paintComponent();
 
-    EXPECT_EQ (0, comp.paintCount);
+    // Without a GPU the component and its children are painted as they are, with no effect
+    EXPECT_EQ (1, comp.paintCount);
+    EXPECT_EQ (1, child.paintCount);
     EXPECT_EQ (0, effect->applyCount);
 
     const auto remaining = ComponentHelper::takeEffectDirtyRegion (comp, false);
     ASSERT_TRUE (remaining.has_value());
     EXPECT_EQ (0, remaining->getNumRectangles());
+}
+
+TEST_F (ComponentHeadlessRenderTest, ACachedComponentWithAnEffectAndNoOffscreenTargetPaintsDirectly)
+{
+    CountingComponent child;
+    child.setBounds (10.0f, 10.0f, 10.0f, 10.0f);
+    comp.addAndMakeVisible (child);
+    comp.setCachedToTexture (true);
+    comp.setComponentEffect (new ApplyCountingComponentEffect());
+
+    paintComponent();
+
+    EXPECT_EQ (1, comp.paintCount);
+    EXPECT_EQ (1, child.paintCount);
 }
 
 TEST_F (ComponentHeadlessRenderTest, ACachedComponentWithoutAnOffscreenTargetPaintsDirectly)

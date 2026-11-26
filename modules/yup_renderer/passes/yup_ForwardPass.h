@@ -122,9 +122,11 @@ public:
         so the items of a shader that cannot be drawn are shaded by their materials: a shader
         without the variant of the tier, or whose pipelines the device does not compile.
 
-        @returns True when render() draws the items of @p shader with it into these targets.
+        @returns Whether render() draws the items of @p shader with it into these targets, or
+                 what prevents it: that the shader has no variant for the tier, or what the
+                 device said of its pipelines.
     */
-    bool prepareMaterialShader (const GpuDevice::Ptr& device, const MaterialShader::Ptr& shader, const Targets& targets, uint32_t sampleCount);
+    Result prepareMaterialShader (const GpuDevice::Ptr& device, const MaterialShader::Ptr& shader, const Targets& targets, uint32_t sampleCount);
 
     /** Draws @p opaque then @p blend items, after clearing the targets and drawing the visible
         environment when @p clear is set, or over the loaded targets otherwise.

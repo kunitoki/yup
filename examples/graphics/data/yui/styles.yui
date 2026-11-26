@@ -33,14 +33,14 @@ style {
     .light   { palette: Porcelain; }
 
     // Selectors, from the least to the most specific
-    TextButton          { cornerRadius: radius; }
-    .primary            { backgroundColor: palette.accent; textColor: palette.onAccent; }
-    .brand              { backgroundColor: brand; textColor: #1b1b1e; }
-    #reset              { textColor: #ff5544; outlineColor: #ff5544; }
-    [text="[text]"]     { cornerRadius: 16; }
-    .bar > ToggleButton { cornerRadius: 0; }
-    :checked            { backgroundToggledColor: #2e9e5b; }
-    :disabled           { opacity: 0.35; }
+    TextButton           { cornerRadius: radius; }
+    .primary             { backgroundColor: palette.accent; textColor: palette.onAccent; }
+    .brand               { backgroundColor: brand; textColor: #1b1b1e; }
+    #reset               { textColor: #ff5544; outlineColor: #ff5544; }
+    [text="[text]"]      { cornerRadius: 16; }
+    .bar > ToggleButton  { cornerRadius: 0; }
+    ToggleButton:checked { backgroundToggledColor: #2e9e5b; }
+    :disabled            { opacity: 0.35; }
 
     // States with a transition between their values
     .morph         { cursor: hand; cornerRadius: 4; backgroundColor: palette.surfaceRaised;

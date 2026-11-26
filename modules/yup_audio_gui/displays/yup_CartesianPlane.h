@@ -136,17 +136,24 @@ public:
     /** Get the current Y axis range */
     Range<double> getYRange() const { return { yMin, yMax }; }
 
-    /** Set the scaling type for X axis */
+    /** Set the scaling type for X axis.
+
+        A logarithmic scale needs a range above zero: asked on another one, the axis is linear
+        until its range is above zero.
+    */
     void setXScaleType (AxisScaleType scaleType);
 
-    /** Set the scaling type for Y axis */
+    /** Set the scaling type for Y axis.
+
+        @see setXScaleType
+    */
     void setYScaleType (AxisScaleType scaleType);
 
-    /** Get the X axis scale type */
-    AxisScaleType getXScaleType() const { return xScaleType; }
+    /** Get the X axis scale type: linear while a logarithmic one is asked on a range that is not above zero */
+    AxisScaleType getXScaleType() const { return xMin > 0.0 ? xScaleType : AxisScaleType::linear; }
 
-    /** Get the Y axis scale type */
-    AxisScaleType getYScaleType() const { return yScaleType; }
+    /** Get the Y axis scale type: linear while a logarithmic one is asked on a range that is not above zero */
+    AxisScaleType getYScaleType() const { return yMin > 0.0 ? yScaleType : AxisScaleType::linear; }
 
     //==============================================================================
     // Margins configuration
@@ -163,11 +170,12 @@ public:
     //==============================================================================
     // Title configuration
 
-    /** Set the plot title */
-    void setTitle (const String& title) override;
+    /** Set the plot title.
 
-    /** Get the current title */
-    const String& getTitle() const { return titleText; }
+        The title of the plot is the one of the component: Component::getTitle() returns it, and
+        it is the title of the window when the plot is one.
+    */
+    void setTitle (const String& title) override;
 
     /** Set title font and size */
     void setTitleFont (const Font& font);
@@ -342,7 +350,6 @@ private:
     EdgeSpacing<int> margins { 60, 30, 20, 25 };
 
     // Title
-    String titleText;
     Font titleFont;
     Color titleColor { Colors::white };
     Justification titleJustification { Justification::center };

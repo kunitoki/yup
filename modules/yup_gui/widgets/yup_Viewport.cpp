@@ -187,6 +187,16 @@ void Viewport::resized()
     updateViewPosition();
 }
 
+void Viewport::visibilityChanged()
+{
+    updateFrameAttachment();
+}
+
+void Viewport::parentHierarchyChanged()
+{
+    updateFrameAttachment();
+}
+
 void Viewport::refreshDisplay (double lastFrameTimeSeconds)
 {
     const auto deltaSeconds = jlimit (0.0, 1.0 / 15.0, lastFrameTimeSeconds);
@@ -197,6 +207,8 @@ void Viewport::refreshDisplay (double lastFrameTimeSeconds)
 
     if (horizontalMoving || verticalMoving)
         updateViewPositionFromScroller();
+
+    updateFrameAttachment();
 }
 
 bool Viewport::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
@@ -250,6 +262,8 @@ void Viewport::gesturePan (const GestureEvent& event)
             verticalScroller.stop();
             break;
     }
+
+    updateFrameAttachment();
 }
 
 void Viewport::componentResized (Component& component)
@@ -328,6 +342,17 @@ void Viewport::updateViewPosition()
 {
     if (viewedComponent != nullptr)
         viewedComponent->setTopLeft ({ -viewPosition.getX(), -viewPosition.getY() });
+}
+
+void Viewport::updateFrameAttachment()
+{
+    // A pan is timed by the frames, for the speed it lets go with
+    const auto needsFrames = [] (const KineticScroller& scroller)
+    {
+        return scroller.isDragging() || scroller.isAnimating();
+    };
+
+    frameAttachment.setActive ((needsFrames (horizontalScroller) || needsFrames (verticalScroller)) && isShowing());
 }
 
 } // namespace yup

@@ -87,7 +87,7 @@ const ComponentTypeInfo& TreeView::getClassTypeInfo()
                                  .color ("dropIndicatorColor", Style::dropIndicatorColorId)
                                  .color ("itemHoveredColor", Style::itemHoveredColorId)
                                  .property (TreeViewIds::rootItemVisible, &TreeView::isRootItemVisible, &TreeView::setRootItemVisible, true, "Whether the root item has a visible row.")
-                                 .property (TreeViewIds::items, &TreeView::getItems, &TreeView::setItems, {}, "The paths of the items of a tree of plain texts, their levels separated by '/': \"Sources/main.cpp\" is an item in another.")
+                                 .property (TreeViewIds::items, &TreeView::getItems, &TreeView::setItems, {}, "The paths of the items of a tree of plain texts, their levels separated by '/': \"Sources/main.cpp\" is an item in another. A path given twice is one item, and a text cannot hold a '/'.")
                                  .property (TreeViewIds::openCloseButtonsVisible, &TreeView::areOpenCloseButtonsVisible, &TreeView::setOpenCloseButtonsVisible, true, "Whether disclosure buttons are shown.")
                                  .property (TreeViewIds::indentSize, &TreeView::getIndentSize, &TreeView::setIndentSize, 20.0, "How far each tree level is indented, in points.")
                                  .property (TreeViewIds::defaultItemHeight, &TreeView::getDefaultItemHeight, &TreeView::setDefaultItemHeight, 24.0, "The default row height in points.")
@@ -363,6 +363,9 @@ void TreeView::setItems (const StringArray& newItems)
 
     auto* newRoot = root.get();
 
+    // The paths replacing those the root was made from are told once, when they are in
+    itemsRoot = nullptr;
+
     setRootItem (std::move (root));
     setRootItemVisible (false);
 
@@ -383,6 +386,7 @@ void TreeView::setRootItem (std::unique_ptr<TreeViewItem> newRootItem)
     jassert (newRootItem == nullptr || newRootItem->getParentItem() == nullptr);
 
     // A root given here is not the one made from paths, until setItems says it is
+    const bool hadItems = itemsRoot != nullptr && ! itemPaths.isEmpty();
     itemsRoot = nullptr;
 
     finishAnimation();
@@ -407,6 +411,9 @@ void TreeView::setRootItem (std::unique_ptr<TreeViewItem> newRootItem)
     --bulkUpdateDepth;
 
     rebuildRows ({}, nullptr);
+
+    if (hadItems)
+        notifyPropertyChanged (TreeViewIds::items);
 }
 
 TreeViewItem* TreeView::getRootItem() const noexcept
@@ -777,6 +784,16 @@ void TreeView::resized()
     list->setBounds (getLocalBounds());
 }
 
+void TreeView::visibilityChanged()
+{
+    updateFrameAttachment();
+}
+
+void TreeView::parentHierarchyChanged()
+{
+    updateFrameAttachment();
+}
+
 void TreeView::paintOverChildren (Graphics& g)
 {
     if (! dropTarget.has_value())
@@ -818,7 +835,10 @@ void TreeView::refreshDisplay (double lastFrameTimeSeconds)
     }
 
     if (! activeDrag.has_value())
+    {
+        updateFrameAttachment();
         return;
+    }
 
     if (autoScrollSpeed != 0.0f)
     {
@@ -838,6 +858,8 @@ void TreeView::refreshDisplay (double lastFrameTimeSeconds)
                 updateDragState (*activeDrag);
         }
     }
+
+    updateFrameAttachment();
 }
 
 bool TreeView::keyDown (const KeyPress& key, const Point<float>& position)
@@ -1474,6 +1496,7 @@ void TreeView::expandItem (TreeViewItem& item)
     }
 
     refreshItem (item);
+    updateFrameAttachment();
     jassert (isRowListInSync());
 }
 
@@ -1526,6 +1549,7 @@ void TreeView::collapseItem (TreeViewItem& item)
         refreshItem (item);
     }
 
+    updateFrameAttachment();
     jassert (isRowListInSync());
     item.itemOpennessChanged (false);
 }
@@ -1788,6 +1812,7 @@ void TreeView::updateDragState (const DragAndDropSourceDetails& details)
     }
 
     dropTarget = findDropTarget (details);
+    updateFrameAttachment();
     repaint();
 }
 
@@ -1855,6 +1880,14 @@ void TreeView::clearDragState()
 
     if (hadDropTarget)
         repaint();
+}
+
+void TreeView::updateFrameAttachment()
+{
+    const auto needsFrames = animation.has_value()
+                          || (activeDrag.has_value() && (autoScrollSpeed != 0.0f || hoverExpandItem != nullptr));
+
+    frameAttachment.setActive (needsFrames && isShowing());
 }
 
 } // namespace yup

@@ -44,7 +44,8 @@ namespace yup
     @endcode
 
     Code building components from a description of its own implements the interface, and calls
-    @ref registerDocument and @ref unregisterDocument around the time its root can be asked for.
+    @ref attachToRoot each time it has another root and @ref detachFromRoot before it goes. The
+    root is what knows its document: there is no list of the documents there are.
 
     @see Component, DataTreeDiagnostic, DataTreeSourceMap
 
@@ -109,7 +110,9 @@ public:
     public:
         virtual ~Listener() = default;
 
-        /** Called after each load of the document, successful or not. */
+        /** Called after each load of the document, successful or not, and each time its interface is
+            built again without a load: after a change of its tree or of the range of a repeat.
+        */
         virtual void documentLoaded (ComponentDocument& document) {}
 
         /** Called when a file the document refers to changed, for what read it to read it again.
@@ -150,21 +153,23 @@ protected:
     //==============================================================================
     ComponentDocument() = default;
 
-    /** Makes the document the one @ref findFor returns for its components.
+    /** Makes the document the one @ref findFor returns for its root and the components inside it.
 
-        Call it once @ref getRoot can be called: at the end of a constructor, not from this one.
+        Call it each time @ref getRoot gives another component, as soon as it does: the components
+        made under the root look for their document while they are given their values. Not from
+        the constructor of this class, where the root can't be asked for. A document that has no
+        root anymore is found by no component.
+
+        A component is the root of one document: the last one attached to it.
     */
-    void registerDocument();
+    void attachToRoot();
 
     /** Stops @ref findFor from returning the document.
 
         Call it first thing in a destructor: the components destroyed with the document may look
         for it, and would ask for the root of a document that is going.
     */
-    void unregisterDocument();
-
-    /** Returns the registered documents, in the order they were registered. */
-    static const std::vector<ComponentDocument*>& getRegisteredDocuments();
+    void detachFromRoot();
 
     /** Tells the listeners that the document was loaded. */
     void notifyDocumentLoaded();
@@ -183,6 +188,7 @@ protected:
 private:
     //==============================================================================
     ListenerList<Listener> documentListeners;
+    WeakReference<Component> attachedRoot;
 
     YUP_DECLARE_WEAK_REFERENCEABLE (ComponentDocument)
     YUP_DECLARE_NON_COPYABLE (ComponentDocument)

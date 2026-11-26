@@ -1123,6 +1123,56 @@ TEST_F (ShaderBundleTests, MoreVariantsThanABundleHoldsFail)
     EXPECT_TRUE (tooMany.getErrorMessage().contains ("too many shader variants")) << tooMany.getErrorMessage();
 }
 
+TEST_F (ShaderBundleTests, StageOrLanguageThereIsNoneOfFails)
+{
+    const auto valid = makeBundleWithEveryChunk();
+    ASSERT_TRUE (ShaderBundle::loadFromMemoryBlock (valid).wasOk());
+
+    const auto shader = findChunk (valid, "SHDR");
+    const auto variant = findChunk (valid, "VART");
+    ASSERT_NE (shader, 0u);
+    ASSERT_NE (variant, 0u);
+
+    // A shader holds its stage then the language of its source, and a variant its language, each after the chunk header
+    for (const auto& [offset, expected] : { std::pair { shader + 8, "unknown shader stage" },
+                                            std::pair { shader + 12, "unknown shader language" },
+                                            std::pair { variant + 8, "unknown shader language" } })
+    {
+        for (const auto value : { 6u, 0x7fffffffu, 0xffffffffu })
+        {
+            auto bundle = valid;
+            setUInt32 (bundle, offset, value);
+
+            const auto result = ShaderBundle::loadFromMemoryBlock (bundle);
+            ASSERT_TRUE (result.failed()) << expected << " for " << value << " at " << offset;
+            EXPECT_TRUE (result.getErrorMessage().contains (expected)) << result.getErrorMessage();
+        }
+    }
+}
+
+TEST_F (ShaderBundleTests, BundlePackingTighterThanALoadExpandsIsSavedUncompressed)
+{
+    // A megabyte of one character packs to a few bytes, far below the 256th of its size a load expands
+    auto info = makeSyntheticShaderInfo (ShaderStage::fragment, ShaderLanguage::glsl);
+    info.source = String::repeatedString (" ", 1 << 20);
+
+    ShaderBundle original;
+    original.addShader (info);
+
+    for (const auto compression : { ShaderBundle::Compression::fast, ShaderBundle::Compression::high })
+    {
+        MemoryBlock mem;
+        ASSERT_TRUE (original.saveToMemoryBlock (mem, compression).wasOk());
+        ASSERT_GE (mem.getSize(), 16u);
+        EXPECT_EQ (memcmp (static_cast<const char*> (mem.getData()) + 8, "YSLB", 4), 0);
+
+        const auto loaded = ShaderBundle::loadFromMemoryBlock (mem);
+        ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
+        ASSERT_EQ (loaded.getReference().getShaders().size(), 1u);
+        EXPECT_EQ (loaded.getReference().getShaders().front().source.length(), 1 << 20);
+    }
+}
+
 TEST_F (ShaderBundleTests, BundleCutAnywhereFails)
 {
     const auto valid = makeBundleWithEveryChunk();

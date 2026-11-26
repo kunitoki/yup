@@ -362,10 +362,10 @@ Result ForwardPass::prepare (const GpuDevice::Ptr& device, const Targets& target
     return variant.failed() ? Result::fail (variant.getErrorMessage()) : Result::ok();
 }
 
-bool ForwardPass::prepareMaterialShader (const GpuDevice::Ptr& device, const MaterialShader::Ptr& shader, const Targets& targets, uint32_t sampleCount)
+Result ForwardPass::prepareMaterialShader (const GpuDevice::Ptr& device, const MaterialShader::Ptr& shader, const Targets& targets, uint32_t sampleCount)
 {
     if (device == nullptr || shader == nullptr || targets.color == nullptr || targets.depth == nullptr)
-        return false;
+        return Result::fail ("No device, no shader or no forward targets");
 
     const auto colorFormat = targets.color->getFormat();
     const auto depthFormat = targets.depth->getFormat();
@@ -395,7 +395,7 @@ bool ForwardPass::prepareMaterialShader (const GpuDevice::Ptr& device, const Mat
         existing = std::prev (materialPipelines.end());
     }
 
-    return (*existing)->error.isEmpty();
+    return (*existing)->error.isEmpty() ? Result::ok() : Result::fail ((*existing)->error);
 }
 
 const ForwardPass::MaterialPipelines* ForwardPass::findMaterialPipelines (const SceneDrawList::DrawItem& item, const Variant& variant) const

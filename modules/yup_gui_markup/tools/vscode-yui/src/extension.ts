@@ -3,10 +3,11 @@ import * as path from "path";
 import * as vscode from "vscode";
 import { YuiAgentBackend } from "./agentBackend";
 import { YuiAgentTools } from "./agentSetup";
-import { collectDocumentFiles, isNamedBy, realPathOf, runUntilFilesAreGiven, setUnsavedTexts, toolPathOf } from "./documentFiles";
-import { registerLanguageFeatures } from "./language";
+import { SharedDiagnostics } from "./diagnostics";
+import { collectDocumentFiles, isNamedBy, realPathOf, runUntilFilesAreGiven, setReadableFolders, setUnsavedTexts, toolPathOf } from "./documentFiles";
+import { characterIn, registerLanguageFeatures } from "./language";
 import { YuiPreview } from "./preview";
-import { errorMessage, findToolScript, YuiTool, YuiToolFile, YuiToolResult } from "./tool";
+import { errorMessage, findToolScript, YuiTool, YuiToolAsking, YuiToolFile, YuiToolResult } from "./tool";
 
 const lintDebounceMs = 300;
 
@@ -41,15 +42,21 @@ class YuiSession {
     private readonly outlines = new Map<string, { version: number; outline: Promise<Record<string, unknown> | undefined> }> ();
     private readonly timers = new Map<string, NodeJS.Timeout> ();
     private readonly sequences = new Map<string, number> ();
-    private readonly lintedUris = new Map<string, string[]> ();
     private readonly reportedModels = new Set<string> ();
+
+    // A file imported by two open documents has its problems told by the check of each, and shows them all once
+    private readonly problems = new SharedDiagnostics<vscode.Diagnostic> (item =>
+        `${item.severity} ${item.range.start.line}:${item.range.start.character} ${item.range.end.line}:${item.range.end.character} ${item.message}`);
 
     constructor (private readonly context: vscode.ExtensionContext,
                  private readonly output: vscode.OutputChannel,
                  private readonly diagnostics: vscode.DiagnosticCollection) {
         const script = this.toolScript ();
 
-        this.tool = script === undefined ? undefined : new YuiTool (script, message => this.log (message));
+        this.tool = script === undefined ? undefined : new YuiTool (script, message => this.log (message), () => {
+            void vscode.window.showWarningMessage ("The YUI tool stopped twice in a row: diagnostics, completions and the tools for agents are off until it runs again. See the YUI output channel.");
+        });
+
         void vscode.commands.executeCommand ("setContext", "yui.hasTool", this.tool !== undefined);
 
         if (this.tool === undefined)
@@ -84,24 +91,32 @@ class YuiSession {
     }
 
     /** Runs a command of the tool on the files given, which are named as the tool knows them. */
-    async run (args: string[], files: YuiToolFile[] = []): Promise<YuiToolResult | undefined> {
-        return this.tool?.run (args, files);
+    async run (args: string[], files: YuiToolFile[] = [], asking: YuiToolAsking = {}): Promise<YuiToolResult | undefined> {
+        return this.tool?.run (args, files, asking);
     }
 
     /**
         Asks the tool about a document as it is in its editor, with the files it names.
 
-        @param command A command of the tool answering in JSON: outline, complete, definition or hover.
-        @param args    Its arguments after the document.
-        @returns What it answered, or nothing when there is no tool or it could not answer.
+        @param command      A command of the tool answering in JSON: outline, complete, definition or hover.
+        @param args         Its arguments after the document.
+        @param cancellation Tells when the editor stopped waiting for the answer. What is asked with one is asked by
+                            the editor for itself: asked again, what of it still waits to run is not run.
+        @returns What it answered, or nothing when there is no tool, it could not answer or the answer is not waited for.
     */
-    async ask (document: vscode.TextDocument, command: string, args: string[] = []): Promise<Record<string, unknown> | undefined> {
+    async ask (document: vscode.TextDocument, command: string, args: string[] = [], cancellation?: vscode.CancellationToken): Promise<Record<string, unknown> | undefined> {
         if (! isYuiDocument (document) || ! this.hasTool ())
             return undefined;
 
         const collected = await collectDocumentFiles (document, this.modelsPath (document));
+
+        // Reading the files took a while, in which the editor may have asked for something else
+        if (cancellation?.isCancellationRequested === true)
+            return undefined;
+
         const models = command === "complete" && collected.models.length > 0 ? ["--models", collected.models] : [];
-        const result = await this.run ([command, collected.main, ...args, ...models], collected.files);
+        const asking: YuiToolAsking = cancellation === undefined ? {} : { supersedes: `${command} ${document.uri.toString ()}`, cancellation };
+        const result = await this.run ([command, collected.main, ...args, ...models], collected.files, asking);
 
         if (result === undefined)
             return undefined;
@@ -152,8 +167,11 @@ class YuiSession {
     /** Lints again the open documents whose models file, or a file they name, was created, changed or deleted. */
     fileChanged (file: string): void {
         for (const document of vscode.workspace.textDocuments) {
-            if (isYuiDocument (document) && (isNamedBy (document.uri.fsPath, file) || this.wantedModelsPath (document).file === file))
+            if (isYuiDocument (document) && (isNamedBy (document.uri.fsPath, file) || this.wantedModelsPath (document).file === file)) {
+                // What the tool told the document is made of counted the file as it was
+                this.outlines.delete (document.uri.toString ());
                 this.lintSoon (document);
+            }
         }
     }
 
@@ -174,6 +192,9 @@ class YuiSession {
         if (! isYuiDocument (document))
             return;
 
+        // A document is checked because it, or what it reads, is new or changed: a tool that stopped may not stop on it
+        this.tool?.retry ();
+
         const enabled = vscode.workspace.getConfiguration ("yui.lint").get<boolean> ("enabled");
 
         if (enabled === false || ! this.hasTool ()) {
@@ -189,6 +210,11 @@ class YuiSession {
         // without having been given them, as what a shader is compiled into: with those there are, it checks again
         const result = await runUntilFilesAreGiven (async () => {
             const collected = await collectDocumentFiles (document, this.modelsPath (document));
+
+            // A check that is not the last one asked for does not run: it would take the place of that one
+            if (this.sequences.get (key) !== sequence)
+                return undefined;
+
             const args = ["lint", "--json"];
 
             if (collected.models.length > 0)
@@ -196,7 +222,7 @@ class YuiSession {
 
             args.push (collected.main);
 
-            const ran = await this.run (args, collected.files);
+            const ran = await this.run (args, collected.files, { supersedes: `lint ${key}` });
 
             return ran === undefined ? undefined : { ...ran, document: document.uri.fsPath, sought: collected.sought, problems: collected.problems };
         });
@@ -241,15 +267,7 @@ class YuiSession {
     }
 
     clear (document: vscode.TextDocument): void {
-        const key = document.uri.toString ();
-        const owned = this.lintedUris.get (key);
-
-        if (owned !== undefined) {
-            for (const uri of owned)
-                this.diagnostics.delete (vscode.Uri.parse (uri));
-        }
-
-        this.lintedUris.delete (key);
+        this.publish (this.problems.clear (document.uri.toString ()));
     }
 
     forget (document: vscode.TextDocument): void {
@@ -274,10 +292,12 @@ class YuiSession {
             const message = asString (record["message"]) ?? "Unknown problem";
             const file = realPathOf (asString (record["file"]) ?? "");
             const uri = file === undefined ? document.uri : vscode.Uri.file (file);
-            const line = Math.max (0, numberOf (record["line"]) - 1);
-            const column = Math.max (0, numberOf (record["column"]) - 1);
+            const edited = file === undefined ? document : vscode.workspace.textDocuments.find (open => open.uri.scheme === "file" && open.uri.fsPath === file);
+            const line = Math.max (1, numberOf (record["line"]));
+            const column = Math.max (1, numberOf (record["column"]));
 
-            const diagnostic = new vscode.Diagnostic (new vscode.Range (line, column, line, column + 1),
+            // The problem is told at one character, which an editor may write with two units
+            const diagnostic = new vscode.Diagnostic (new vscode.Range (line - 1, characterIn (edited, line, column), line - 1, characterIn (edited, line, column + 1)),
                                                       message,
                                                       record["severity"] === "warning" ? vscode.DiagnosticSeverity.Warning : vscode.DiagnosticSeverity.Error);
             diagnostic.source = "yui";
@@ -295,25 +315,24 @@ class YuiSession {
     }
 
     private apply (document: vscode.TextDocument, grouped: Map<string, vscode.Diagnostic[]>): void {
-        const key = document.uri.toString ();
-        const owned = this.lintedUris.get (key);
+        this.publish (this.problems.set (document.uri.toString (), grouped));
+    }
 
-        if (owned !== undefined) {
-            for (const uri of owned) {
-                if (! grouped.has (uri))
-                    this.diagnostics.delete (vscode.Uri.parse (uri));
-            }
+    // Shows the problems of files again, as the checks of all the documents telling some now have them
+    private publish (uris: string[]): void {
+        for (const uri of uris) {
+            const items = this.problems.of (uri);
+
+            if (items.length > 0)
+                this.diagnostics.set (vscode.Uri.parse (uri), items);
+            else
+                this.diagnostics.delete (vscode.Uri.parse (uri));
         }
-
-        for (const [uri, items] of grouped)
-            this.diagnostics.set (vscode.Uri.parse (uri), items);
-
-        this.lintedUris.set (key, Array.from (grouped.keys ()));
     }
 
     // The models file a document asks for, whether it exists or not
     private wantedModelsPath (document: vscode.TextDocument): { file: string; configured: boolean } {
-        const configured = vscode.workspace.getConfiguration ("yui.lint").get<string> ("models")?.trim () ?? "";
+        const configured = vscode.workspace.getConfiguration ("yui.lint", document.uri).get<string> ("models")?.trim () ?? "";
 
         // Without a setting, a document uses the models next to it, named after it
         if (configured.length === 0)
@@ -353,8 +372,18 @@ function isYuiDocument (document: vscode.TextDocument): boolean {
     return document.languageId === "yui" && document.uri.scheme === "file";
 }
 
+// Where a drawing is offered to be saved: next to the document being edited, else in the workspace, else next to its image
+function importFolder (image: vscode.Uri): vscode.Uri {
+    const edited = vscode.window.activeTextEditor?.document.uri;
+
+    if (edited !== undefined && edited.scheme === "file")
+        return vscode.Uri.joinPath (edited, "..");
+
+    return vscode.workspace.workspaceFolders?.[0]?.uri ?? vscode.Uri.joinPath (image, "..");
+}
+
 async function importSvg (session: YuiSession): Promise<void> {
-    if (! session.hasTool ()) {
+    if (session.toolScript () === undefined) {
         void vscode.window.showInformationMessage ("Importing an SVG needs the yup_yui_tool module, which this installation of the extension does not have.");
         return;
     }
@@ -380,6 +409,16 @@ async function importSvg (session: YuiSession): Promise<void> {
     if (name === undefined)
         return;
 
+    // The drawing is saved before it is opened: a document that is no file is not checked, completed or shown
+    const saved = await vscode.window.showSaveDialog ({
+        defaultUri: vscode.Uri.joinPath (importFolder (file), path.basename (file.fsPath, path.extname (file.fsPath)) + ".yui"),
+        saveLabel: "Import",
+        filters: { "YUI documents": ["yui"] }
+    });
+
+    if (saved === undefined)
+        return;
+
     const image = toolPathOf (file.fsPath);
     const result = await session.run (["import-svg", image, "--name", name], [{ path: image, data: await fs.promises.readFile (file.fsPath) }]);
 
@@ -396,8 +435,15 @@ async function importSvg (session: YuiSession): Promise<void> {
         return;
     }
 
-    const document = await vscode.workspace.openTextDocument ({ language: "yui", content: result.stdout });
-    await vscode.window.showTextDocument (document);
+    try {
+        await vscode.workspace.fs.writeFile (saved, Buffer.from (result.stdout.endsWith ("\n") ? result.stdout : result.stdout + "\n", "utf8"));
+    }
+    catch (error) {
+        void vscode.window.showErrorMessage (`${saved.fsPath} could not be written: ${errorMessage (error)}`);
+        return;
+    }
+
+    await vscode.window.showTextDocument (await vscode.workspace.openTextDocument (saved));
 }
 
 export function activate (context: vscode.ExtensionContext): void {
@@ -405,12 +451,15 @@ export function activate (context: vscode.ExtensionContext): void {
     const diagnostics = vscode.languages.createDiagnosticCollection ("yui");
     const session = new YuiSession (context, output, diagnostics);
     const preview = new YuiPreview (session, session.toolScript (), vscode.Uri.joinPath (context.extensionUri, "images", "yui-icon.png"));
-    const agentTools = new YuiAgentTools (new YuiAgentBackend (session, preview), String (context.extension.packageJSON.version), message => session.log (message));
+    const agentTools = new YuiAgentTools (new YuiAgentBackend (session, preview), String (context.extension.packageJSON.version), message => session.log (message), context.secrets);
 
     context.subscriptions.push (output, diagnostics, session, preview, agentTools);
 
     // A file a document names counts as it is in its editor while that holds changes of it that are not saved
     setUnsavedTexts (file => vscode.workspace.textDocuments.find (document => document.uri.scheme === "file" && document.uri.fsPath === file && document.isDirty)?.getText ());
+
+    // A document reads the files it names in the workspace and in its own folder, and no other
+    setReadableFolders (() => (vscode.workspace.workspaceFolders ?? []).map (folder => folder.uri.fsPath));
 
     // The models of a document and the files it names change outside the editor too: a model exported again, a shader built
     const filesWatcher = vscode.workspace.createFileSystemWatcher ("**/*");
@@ -441,6 +490,11 @@ export function activate (context: vscode.ExtensionContext): void {
 
             if (event.affectsConfiguration ("yui.mcp"))
                 void agentTools.apply ();
+        }),
+        vscode.workspace.onDidGrantWorkspaceTrust (() => {
+            // The settings a workspace may not set until it is trusted count from now on
+            session.lintOpenDocuments ();
+            void agentTools.apply ();
         }),
         ...registerLanguageFeatures (session),
         vscode.commands.registerCommand ("yui.preview", () => preview.open ()),

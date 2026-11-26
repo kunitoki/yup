@@ -24,6 +24,10 @@
 namespace yup::detail
 {
 
+// Each level of elements is a call inside the one around it, for the parser and for what reads its trees: this keeps
+// the stack of any platform
+inline constexpr int maxYuiNestingDepth = 128;
+
 inline String normalizeYuiPath (const String& rawPath)
 {
     const auto normalizedSeparators = rawPath.trim().replaceCharacter ('\\', '/');

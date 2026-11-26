@@ -68,8 +68,10 @@ const ComponentTypeInfo& ComboBox::getClassTypeInfo()
                                  .property (ComboBoxIds::selectedIndex, &ComboBox::getSelectedItemIndex, [] (ComboBox& c, int v) { c.setSelectedItemIndex (v); })
                                  .readOnly (ComboBoxIds::text, &ComboBox::getText)
                                  .state (ComboBoxIds::open, &ComboBox::isPopupShown)
+                                 .readOnly ("textBounds", &ComboBox::getTextBounds, {}, "The area the text of the selected item is laid out in.")
+                                 .readOnly ("arrowBounds", &ComboBox::getArrowBounds, {}, "The area of the arrow at the end of the box.")
                                  .signal ("onSelectedItemChanged", &ComboBox::onSelectedItemChanged, "Emitted when another item is selected")
-                                 .part (ComboBoxIds::textPart, "The text of the selected item, filled with the fill color in the area it is given.")
+                                 .part (ComboBoxIds::textPart, &ComboBox::getTextBounds, "The text of the selected item, filled with the fill color in the area it is given: the one of textBounds when it is given none.")
                                  .build();
 
     return info;
@@ -379,6 +381,24 @@ void ComboBox::resized()
     updateDisplayText();
 }
 
+Rectangle<float> ComboBox::getTextBounds() const
+{
+    auto textBounds = getLocalBounds().reduced (8.0f, 4.0f);
+    textBounds.removeFromRight (arrowWidth);
+
+    return textBounds;
+}
+
+Rectangle<float> ComboBox::getArrowBounds() const
+{
+    const auto bounds = getLocalBounds();
+
+    auto arrowBounds = bounds.reduced (4.0f);
+    arrowBounds.removeFromLeft (bounds.getWidth() - arrowWidth);
+
+    return arrowBounds;
+}
+
 //==============================================================================
 
 void ComboBox::mouseDown (const MouseEvent& event)
@@ -496,9 +516,7 @@ bool ComboBox::isPopupShown() const
 
 void ComboBox::updateDisplayText()
 {
-    auto bounds = getLocalBounds();
-    auto textBounds = bounds.reduced (8.0f, 4.0f);
-    textBounds.removeFromRight (20.0f); // Arrow width
+    const auto textBounds = getTextBounds();
 
     bool foundSelectedItem = false;
     for (const auto& item : items)

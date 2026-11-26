@@ -78,13 +78,21 @@ const ComponentTypeInfo& TabComponent::getClassTypeInfo()
                                      .name = Identifier ("onTabChanged"),
                                      .connect = [] (Component& component, ComponentSignal::Handler handler)
                                      {
-                                         if (auto* tabs = dynamic_cast<TabComponent*> (&component))
+                                         auto* tabs = dynamic_cast<TabComponent*> (&component);
+
+                                         if (tabs == nullptr)
+                                             return;
+
+                                         if (handler == nullptr)
                                          {
-                                             tabs->getTabBar().onSelectionChanged = [handler = std::move (handler)] (const Identifier& tabId)
-                                             {
-                                                 handler ({ var (tabId.toString()) });
-                                             };
+                                             tabs->getTabBar().onSelectionChanged = nullptr;
+                                             return;
                                          }
+
+                                         tabs->getTabBar().onSelectionChanged = [handler = std::move (handler)] (const Identifier& tabId)
+                                         {
+                                             handler ({ var (tabId.toString()) });
+                                         };
                                      },
                                      .description = "Emitted with its id when another tab is selected",
                                      .arguments = { { Identifier ("tab"), ComponentProperty::Type::string } } })

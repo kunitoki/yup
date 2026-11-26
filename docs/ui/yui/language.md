@@ -46,11 +46,14 @@ A file is a sequence of blocks, in any order:
 | `style { ... }` | Rules and `@keyframes` | [Stylesheets](styles.md) |
 | `tokens { ... }` | Typed values shared by the document | [Tokens](documents.md#tokens) |
 | `component Name : Base { ... }` | A new component type | [Composite components](documents.md#composite-components) |
-| `Type { ... }` | The root component instance, at most one per document | [Complete UIs](documents.md) |
+| `Type { ... }` | The root component instance, at most one per document, imports included | [Complete UIs](documents.md) |
 
 Line comments (`// ...`) and block comments (`/* ... */`) can go anywhere
 whitespace can. Names are case sensitive: component types start with an
 uppercase letter (`Slider`, `LabeledKnob`), everything else is `camelCase`.
+A name is declared once: a second `drawing`, `shader` or `component` of the
+same name is reported as a problem, and so is a `property` declared again with
+another type.
 
 ## Elements and properties
 
@@ -80,7 +83,9 @@ objects of a [3D scene](scenes.md) are such components too (`Scene3D`,
 
 Two properties are special in the instance tree: `id` names an element so
 expressions and C++ (`findById`) can reach it, and `class` gives it style
-classes, separated by spaces or commas (`class: "knob large";`).
+classes, separated by spaces or commas (`class: "knob large";`). Both are
+names, written bare or in a string, not expressions: any other value is
+reported as a problem and gives the element no id or no class.
 
 Most components simply parent their children, but a few take them in their own
 way: `Viewport` makes its child the scrolled content, and `TabComponent` turns
@@ -254,6 +259,15 @@ be imported from several places and cycles are harmless. `YuiLoader` resolves
 the normalized path from the folder of the main file, or by name among embedded
 resources (see [Hot reloading](hot-reload.md)), while
 `YuiDocument::loadFromString` passes it to its import callback.
+
+- A path starting with `/` is relative to the folder of the main file, whatever
+  file imports it: `import "/parts/style.yui";`.
+- The document has one root component with all it imports. A file with a root
+  can be imported by one that has none, and a second root is an error, reported
+  where it is written.
+- A file importing the main file back imports nothing when the main file is
+  loaded by a `YuiLoader`. A text given to `YuiDocument::loadFromString` has no
+  path, so it is imported again, which is an error when it has a root.
 
 ## Errors
 

@@ -461,6 +461,39 @@ TEST_F (SceneMaterialComponentTests, TheMaterialOfTheSceneOverridesEveryMesh)
     EXPECT_EQ (root.getChild (0), triangle->getEntity());
 }
 
+TEST_F (SceneMaterialComponentTests, AMaterialGivenASizeLeavesThePointerToTheNodes)
+{
+    // The materials come after the mesh among the components, so over it for the pointer
+    YuiDocument document;
+    load (document, sceneOf ("Mesh3D { id: plate; " + quadGeometry() + " Material3D { id: inner; } } Material3D { id: outer; }"));
+
+    auto* view = showSceneOf (document);
+    auto* plate = document.findById<SceneMeshComponent> ("plate");
+    auto* inner = document.findById<SceneMaterialComponent> ("inner");
+    auto* outer = document.findById<SceneMaterialComponent> ("outer");
+
+    ASSERT_NE (view, nullptr);
+    ASSERT_NE (plate, nullptr);
+    ASSERT_NE (inner, nullptr);
+    ASSERT_NE (outer, nullptr);
+
+    // A material shows nothing, whatever the bounds it has as a component
+    inner->setBounds (0.0f, 0.0f, 200.0f, 200.0f);
+    outer->setBounds (0.0f, 0.0f, 200.0f, 200.0f);
+    ASSERT_TRUE (inner->isVisible());
+    ASSERT_TRUE (outer->isVisible());
+
+    view->refreshDisplay (0.0);
+
+    EXPECT_EQ (view->findNodeAt ({ 100.0f, 100.0f }), plate);
+    EXPECT_TRUE (plate->hitTest (100.0f, 100.0f));
+
+    PointerSimulator pointer (*view);
+
+    EXPECT_EQ (pointer.moveTo ({ 100.0f, 100.0f }), plate);
+    EXPECT_EQ (pointer.moveTo ({ 20.0f, 20.0f }), view);
+}
+
 TEST_F (SceneMaterialComponentTests, AParentTakesItsFirstMaterialAndReportsTheOthers)
 {
     YuiDocument document;
@@ -534,10 +567,14 @@ TEST_F (SceneMaterialComponentTests, TheMaterialFollowsItsComponent)
     left.removeChildComponent (spare);
     EXPECT_EQ (left.getEntity().get<MaterialNode>(), nullptr);
 
-    // The node that leaves the scene takes its entity away, and gets its material again when it comes back
+    // The node that leaves the scene keeps its entity, with its material, for the frame that follows to let go of
     view.removeChildComponent (right);
+    EXPECT_EQ (overrideOf (right.getEntity()), paint.getMaterial());
+
+    view.refreshDisplay (0.0);
     EXPECT_FALSE (right.getEntity().isValid());
 
+    // And gets its material again when it comes back
     view.addAndMakeVisible (right);
     EXPECT_EQ (overrideOf (right.getEntity()), paint.getMaterial());
 }
@@ -1460,6 +1497,35 @@ TEST_F (SceneMaterialComponentTests, TheTimeOfAShaderHasTheSceneDrawnAgainOnEver
 
     expectFloats (floatsAt (shownStill.shaderNode(), 20), { 5.0f });
     EXPECT_FALSE (Internals::takeRepaintRequest (*shownStill.view));
+}
+
+TEST_F (SceneMaterialComponentTests, AMaterialNamingAShaderHasItsSceneTakeEveryFrameOfItsWindow)
+{
+    serveMaterial ("fx/glow.glsl", glowMembers());
+
+    Component window;
+    auto& native = makeWindow (window);
+
+    YuiDocument document;
+    serve (document);
+    load (document, glowWith (glowInputs(), "Material3D { id: paint; shader: Glow; }"));
+
+    const Shown shown (document);
+    ASSERT_TRUE (shown.isValid());
+
+    window.addChildComponent (*shown.view);
+
+    // The values its shader reads are those of properties nothing tells the changes of: they are read on every frame
+    sendFrames (native, 3);
+
+    ASSERT_NE (shown.shaderNode(), nullptr);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    // Without a shader the scene stands still, and leaves the window free to skip its frames
+    shown.paint->setShaderName ({});
+    sendFrames (native, 3);
+
+    EXPECT_FALSE (native.hasFrameListeners());
 }
 
 #if __has_include(<YuiTestResources.h>)

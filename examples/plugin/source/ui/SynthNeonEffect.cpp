@@ -150,6 +150,15 @@ bool SynthNeonEffect::ensureTargets (yup::GpuDevice::Ptr device, int width, int 
     return smallA != nullptr && smallB != nullptr && output != nullptr;
 }
 
+void SynthNeonEffect::releaseResources()
+{
+    // The pipelines and the targets are the ones of the device of the window the component leaves
+    pipelineDevice = nullptr;
+    prefilter = blur = composite = nullptr;
+    smallA = smallB = output = nullptr;
+    compileAttempted = false;
+}
+
 void SynthNeonEffect::apply (yup::Graphics& g, yup::GpuTexture::Ptr input, yup::Rectangle<float> bounds)
 {
     if (input == nullptr || ! input->isValid())
