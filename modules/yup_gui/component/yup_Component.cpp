@@ -1871,8 +1871,20 @@ ComponentStyle::Ptr Component::getStyle() const
 
 void Component::styleChanged() {}
 
+// A state-backed property setProperty() gave to its setter, and whether its change was told since. The writes
+// under way are chained: a setter may call setProperty() again
+struct Component::PropertyWrite
+{
+    const Identifier& name;
+    PropertyWrite* const outer;
+    bool wasNotified = false;
+};
+
 void Component::notifyPropertyChanged (const Identifier& name)
 {
+    for (auto* pendingWrite = propertyWrite; pendingWrite != nullptr; pendingWrite = pendingWrite->outer)
+        pendingWrite->wasNotified = pendingWrite->wasNotified || pendingWrite->name == name;
+
     const BailOutChecker bailOutChecker (this);
 
     componentListeners.callChecked (bailOutChecker, &ComponentListener::componentPropertyChanged, *this, name);
@@ -2288,17 +2300,45 @@ void Component::setProperty (const Identifier& name, const var& value)
 {
     const auto resolved = resolveProperty (name);
 
-    if (resolved.descriptor != nullptr && resolved.descriptor->isStateBacked())
+    if (resolved.descriptor == nullptr || ! resolved.descriptor->isStateBacked())
     {
-        if (resolved.descriptor->setter != nullptr)
-            resolved.descriptor->setter (*this, value);
-        else
-            jassertfalse; // Trying to write a read-only property.
-
+        applyStoredPropertyChange (resolved, &value);
         return;
     }
 
-    applyStoredPropertyChange (resolved, &value);
+    if (resolved.descriptor->setter == nullptr)
+    {
+        jassertfalse; // Trying to write a read-only property.
+        return;
+    }
+
+    // An array may be long: it is not read to be compared, and telling that it changed stays with its setter
+    if (resolved.descriptor->type == ComponentProperty::Type::array)
+    {
+        resolved.descriptor->setter (*this, value);
+        return;
+    }
+
+    const auto valueBefore = resolved.descriptor->getter (*this);
+
+    PropertyWrite currentWrite { resolved.name, propertyWrite };
+    propertyWrite = &currentWrite;
+
+    const BailOutChecker bailOutChecker (this);
+
+    const ScopeGuard endWrite { [&]
+    {
+        if (! bailOutChecker.shouldBailOut())
+            propertyWrite = currentWrite.outer;
+    } };
+
+    resolved.descriptor->setter (*this, value);
+
+    if (bailOutChecker.shouldBailOut() || currentWrite.wasNotified)
+        return;
+
+    if (resolved.descriptor->getter (*this) != valueBefore)
+        notifyPropertyChanged (resolved.name);
 }
 
 void Component::removeProperty (const Identifier& name)

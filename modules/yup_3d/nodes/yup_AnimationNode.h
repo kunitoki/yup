@@ -34,6 +34,12 @@ namespace yup
     poses nothing: what was written to a target since the clip posed it stays until the clip
     moves on.
 
+    The node keeps the rest pose of its targets: the translation, the rotation, the scale and the
+    weights of the morph targets each one has when the node is created, which for a model are
+    the ones of its file. What a clip animated goes back to it when another clip is selected, so
+    nothing of a clip is left once the next one poses the targets, and resetPose() puts every
+    target back.
+
     GltfModel attaches one to the root entity of every instance of a model that has animations,
     with the first clip selected and paused, so the instance stays as it was built until asked:
 
@@ -70,7 +76,9 @@ public:
                                that can't be played: it is never selected.
         @param targetEntities  The entities the clips animate: a track whose target is N animates
                                the entity at index N. A track whose target is out of range or
-                               not valid is skipped.
+                               not valid is skipped. The pose they are in is their rest pose,
+                               see resetPose(): give them their TransformNode and their
+                               DeformNode first.
     */
     AnimationNode (std::vector<AnimationClip::Ptr> clipsToPlay, std::vector<Entity> targetEntities);
 
@@ -84,8 +92,30 @@ public:
     /** Returns the index of the first clip with a name, or -1 if there is none. */
     int findClip (StringRef clipName) const noexcept;
 
+    /** Returns the entities the clips animate, as the node was given them: a track whose target
+        is N animates the one at index N. An entity that was destroyed since is still listed, and
+        is not valid.
+
+        An entity holds one AnimationNode, which plays one clip at a time: to play another clip
+        beside it, give the same entities to a second node, on another entity. Each node puts
+        back what its own clips animated.
+
+        @code
+        const auto targets = animation->getTargets();
+
+        auto& fan = instance.createChild ("fan").attach<yup::AnimationNode> (
+            std::vector<yup::AnimationClip::Ptr> { animation->getClip (animation->findClip ("Fan")) },
+            std::vector<yup::Entity> (targets.begin(), targets.end()));
+        @endcode
+    */
+    Span<const Entity> getTargets() const noexcept { return targets; }
+
     //==============================================================================
     /** Selects the clip to play, from its start, and poses the targets there at once.
+
+        The values animated by the clip that posed the targets before go back to their rest pose
+        first, see resetPose(), so only the selected clip shows. What no clip of the node posed
+        stays as it is: the pose of the file, or what code wrote.
 
         A node that is playing carries on with the new clip.
 
@@ -168,12 +198,36 @@ public:
     Signal<>& onClipEnded() noexcept { return clipEndedSignal; }
 
     //==============================================================================
+    /** Puts every target back in its rest pose: the translation, the rotation, the scale and the
+        weights of the morph targets it had when the node was created, whatever a clip or code
+        wrote since.
+
+        A target that had no TransformNode then, and got one since, gets the identity: it is
+        where it was without one. Weights only go back to a target that had its DeformNode then,
+        and targets that were destroyed are skipped.
+
+        The clip stays selected, at the time it is at: one that is playing poses what it animates
+        again at the next update in which time goes by. Pause it or select no clip to keep the
+        model at rest:
+
+        @code
+        animation->setCurrentClip (-1); // nothing plays, and the pose stays
+        animation->resetPose();         // every target as the model was loaded
+        scene->update (0.0);            // the meshes that deform follow
+        @endcode
+
+        @see setCurrentClip
+    */
+    void resetPose();
+
     /** Returns the weights of the morph targets of a target, as the last weights track posing it
-        left them, or nothing if no weights track ever posed it.
+        left them. There are none before a weights track poses the target, and none once it is
+        put back in its rest pose.
 
         @param target The index of the target, as in AnimationClip::Track::target.
 
-        @return The weights, which stay there until the targets are posed again.
+        @return The weights, which stay there until the targets are posed again or put back in
+                their rest pose.
     */
     Span<const float> getWeights (int target) const noexcept;
 
@@ -186,13 +240,24 @@ public:
     void update (double deltaSeconds) override;
 
 private:
+    struct RestPose
+    {
+        Vector3<float> position;
+        Quaternion rotation;
+        Vector3<float> scale { 1.0f, 1.0f, 1.0f };
+        std::vector<float> weights;
+    };
+
     void applyPose();
+    void resetPath (int index, AnimationClip::Path path);
 
     std::vector<AnimationClip::Ptr> clips;
     std::vector<Entity> targets;
+    std::vector<RestPose> restPoses;
     std::unordered_map<int, std::vector<float>> weights;
     Signal<> clipEndedSignal;
     int currentClip = -1;
+    int posedClip = -1; // The clip that last posed the targets
     double time = 0.0;
     float speed = 1.0f;
     bool looping = false;

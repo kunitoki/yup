@@ -60,7 +60,10 @@ protected:
             return std::nullopt;
         }
 
-        File getAssetFile (const String&) const override { return {}; }
+        File getAssetFile (const String& path) const override
+        {
+            return baseDirectory != File() ? baseDirectory.getChildFile (path) : File();
+        }
 
         std::shared_ptr<const DataTreeSourceMap> getSourceMap() const override { return nullptr; }
 
@@ -227,4 +230,65 @@ TEST_F (ComponentDocumentTests, TellsItsListenersUntilTheyAreRemoved)
 
     EXPECT_EQ (recorder.loaded.size(), 1u);
     EXPECT_EQ (recorder.changed.joinIntoString (", "), "fx/crt.frag");
+}
+
+TEST_F (ComponentDocumentTests, FindsTheFileOfAnAssetThroughTheDocumentOfAComponentAndByItselfWithoutOne)
+{
+    Component root ("root");
+    Component child ("child");
+    Component alone ("alone");
+    root.addChildComponent (child);
+
+    const auto folder = File::getSpecialLocation (File::tempDirectory);
+    const auto absolute = folder.getChildFile ("fx/crt.frag").getFullPathName();
+
+    FakeDocument document (root);
+
+    // The document decides: its assets may be no files at all
+    EXPECT_EQ (ComponentDocument::getAssetFileFor (&child, "fx/crt.frag"), File());
+
+    document.baseDirectory = folder;
+    EXPECT_EQ (ComponentDocument::getAssetFileFor (&child, "fx/crt.frag"), folder.getChildFile ("fx/crt.frag"));
+
+    // A component of no document reads files: an absolute path as it is, a relative one from the working directory
+    EXPECT_EQ (ComponentDocument::getAssetFileFor (&alone, "fx/crt.frag"), File::getCurrentWorkingDirectory().getChildFile ("fx/crt.frag"));
+    EXPECT_EQ (ComponentDocument::getAssetFileFor (&alone, absolute), File (absolute));
+    EXPECT_EQ (ComponentDocument::getAssetFileFor (nullptr, absolute), File (absolute));
+    EXPECT_EQ (ComponentDocument::getAssetFileFor (nullptr, String()), File());
+}
+
+TEST_F (ComponentDocumentTests, AListenerFollowsOneDocumentAndLeavesItByItself)
+{
+    Component first ("first");
+    Component second ("second");
+
+    FakeDocument kept (first);
+    auto gone = std::make_unique<FakeDocument> (second);
+
+    {
+        Recorder recorder;
+
+        EXPECT_TRUE (recorder.follow (&kept));
+        EXPECT_FALSE (recorder.follow (&kept));
+        kept.notifyDocumentAssetChanged ("one");
+
+        // Another document is followed in place of the one before
+        EXPECT_TRUE (recorder.follow (gone.get()));
+        kept.notifyDocumentAssetChanged ("two");
+        gone->notifyDocumentAssetChanged ("three");
+
+        EXPECT_EQ (recorder.changed.joinIntoString (", "), "one, three");
+
+        // A document that went first is not looked for, and leaves the listener free for another one
+        gone.reset();
+        EXPECT_FALSE (recorder.follow (nullptr));
+        EXPECT_TRUE (recorder.follow (&kept));
+
+        kept.notifyDocumentAssetChanged ("four");
+        EXPECT_EQ (recorder.changed.joinIntoString (", "), "one, three, four");
+    }
+
+    // The listener went while following: the document tells no one
+    kept.notifyDocumentAssetChanged ("five");
+    kept.notifyDocumentLoaded();
 }

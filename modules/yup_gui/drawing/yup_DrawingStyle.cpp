@@ -22,102 +22,114 @@
 namespace yup
 {
 
+namespace detail
+{
+
+/* Decodes the image a source is: a `data:image/...;base64,...` URI, or else the file it names, read through the document
+   of a component. */
+inline ResultValue<Image> loadSourceImage (const Component* component, const String& source)
+{
+    if (! source.startsWithIgnoreCase ("data:image/"))
+    {
+        const auto bytes = ComponentDocument::readAssetFor (component, source);
+        if (! bytes.has_value())
+            return makeResultValueFail ("the file '" + source + "' can't be read");
+
+        return Image::loadFromData (bytes->asBytes());
+    }
+
+    MemoryOutputStream decoded;
+    const auto marker = source.indexOfIgnoreCase ("base64,");
+
+    if (marker < 0 || ! Base64::convertFromBase64 (decoded, source.substring (marker + 7).trim()))
+        return makeResultValueFail ("the data URI is not base64");
+
+    return Image::loadFromData ({ static_cast<const uint8*> (decoded.getData()), decoded.getDataSize() });
+}
+
+/* Parses the SVG a source is: its text, or else the file it names, read through the document of a component. The images
+   such a file names are looked for in its folder, when it has one. */
+inline ResultValue<std::shared_ptr<Drawable>> loadSourceSvg (const Component* component, const String& source, bool isText)
+{
+    auto text = source;
+    Drawable::ParseOptions options;
+
+    if (! isText)
+    {
+        const auto bytes = ComponentDocument::readAssetFor (component, source);
+        if (! bytes.has_value())
+            return makeResultValueFail ("the file '" + source + "' can't be read");
+
+        text = String::createStringFromData (bytes->getData(), static_cast<int> (bytes->getSize()));
+        options.baseDirectory = ComponentDocument::getAssetFileFor (component, source).getParentDirectory();
+    }
+
+    auto drawable = std::make_shared<Drawable>();
+    if (! drawable->parseSVG (text, options))
+        return makeResultValueFail ("the SVG can't be parsed");
+
+    return makeResultValueOk (std::move (drawable));
+}
+
+/* Draws an image fitted in an area and clipped to it, or tiled over it from its corner: one fill, however many tiles
+   the area holds. The paint and the clip of the Graphics are left as the image needed them. */
+inline void drawFittedImage (Graphics& g, const Image& image, const Rectangle<float>& area, Fitting fitting, Justification justification)
+{
+    if (fitting == Fitting::tile)
+    {
+        g.setFillImage (image, AffineTransform::translation (area.getX(), area.getY()), { ImageWrap::Repeat, ImageWrap::Repeat, ImageFilter::Linear });
+        g.setFeather (0.0f);
+        g.fillRect (area);
+        return;
+    }
+
+    const Rectangle<float> sourceBounds { 0.0f, 0.0f, static_cast<float> (image.getWidth()), static_cast<float> (image.getHeight()) };
+    const auto destBounds = sourceBounds.transformed (sourceBounds.getTransformToFit (area, fitting, justification));
+    if (destBounds.isEmpty())
+        return;
+
+    if (! area.contains (destBounds))
+        g.setClipPath (area);
+
+    g.drawImage (image, destBounds);
+}
+
+} // namespace detail
+
 namespace
 {
 
-File resolveDrawingSourceFile (const String& path, const File& baseDirectory)
+const Image& resolveDrawingImage (std::map<String, Image>& cache, const String& source, const Component* component, const DrawingStyle::ImageResolver& resolver)
 {
-    if (path.isEmpty())
-        return {};
-
-    if (File::isAbsolutePath (path))
-        return File (path);
-
-    if (baseDirectory != File())
-    {
-        if (const auto candidate = baseDirectory.getChildFile (path); candidate.existsAsFile())
-            return candidate;
-    }
-
-    return File::getCurrentWorkingDirectory().getChildFile (path);
-}
-
-const Image& resolveDrawingImage (std::map<String, Image>& cache, const String& source, const File& baseDirectory, const DrawingStyle::ImageResolver& resolver)
-{
-    const auto cacheKey = baseDirectory != File() ? (baseDirectory.getFullPathName() + "\n" + source) : source;
-
-    if (const auto found = cache.find (cacheKey); found != cache.end())
+    if (const auto found = cache.find (source); found != cache.end())
         return found->second;
 
     Image image;
     const auto trimmed = source.trim();
 
     if (auto resolved = resolver != nullptr ? resolver (trimmed) : std::nullopt; resolved.has_value() && resolved->isValid())
-    {
         image = std::move (*resolved);
-    }
-    else if (trimmed.startsWithIgnoreCase ("data:image/"))
-    {
-        if (const auto marker = trimmed.indexOfIgnoreCase ("base64,"); marker >= 0)
-        {
-            MemoryOutputStream decoded;
-            if (Base64::convertFromBase64 (decoded, trimmed.substring (marker + 7).trim()) && decoded.getDataSize() > 0)
-            {
-                auto loaded = Image::loadFromData ({ static_cast<const uint8*> (decoded.getData()), decoded.getDataSize() });
-                if (loaded.wasOk())
-                    image = std::move (loaded.getReference());
-            }
-        }
-    }
-    else
-    {
-        const auto file = resolveDrawingSourceFile (trimmed, baseDirectory);
-        if (file.existsAsFile())
-        {
-            MemoryBlock block;
-            if (file.loadFileAsData (block) && block.getSize() > 0)
-            {
-                auto loaded = Image::loadFromData ({ static_cast<const uint8*> (block.getData()), block.getSize() });
-                if (loaded.wasOk())
-                    image = std::move (loaded.getReference());
-            }
-        }
-    }
+    else if (auto loaded = detail::loadSourceImage (component, trimmed); loaded.wasOk())
+        image = std::move (loaded.getReference());
 
-    return cache.emplace (cacheKey, std::move (image)).first->second;
+    return cache.emplace (source, std::move (image)).first->second;
 }
 
 std::shared_ptr<Drawable> resolveDrawingSvg (std::map<String, std::shared_ptr<Drawable>>& cache,
                                              const String& source,
                                              bool inlineOnly,
-                                             const File& baseDirectory)
+                                             const Component* component)
 {
-    const auto cacheKey = baseDirectory != File() ? (baseDirectory.getFullPathName() + "\n" + source) : source;
-
-    if (const auto found = cache.find (cacheKey); found != cache.end())
+    if (const auto found = cache.find (source); found != cache.end())
         return found->second;
 
     std::shared_ptr<Drawable> drawable;
     const auto trimmed = source.trim();
 
     if (trimmed.isNotEmpty())
-    {
-        auto parsed = std::make_shared<Drawable>();
+        drawable = detail::loadSourceSvg (component, trimmed, inlineOnly || trimmed.startsWithChar ('<')).valueOr (nullptr);
 
-        if (inlineOnly || trimmed.startsWithChar ('<'))
-        {
-            if (parsed->parseSVG (trimmed))
-                drawable = std::move (parsed);
-        }
-        else
-        {
-            const auto file = resolveDrawingSourceFile (trimmed, baseDirectory);
-            if (file.existsAsFile() && parsed->parseSVG (file))
-                drawable = std::move (parsed);
-        }
-    }
-
-    cache.emplace (cacheKey, drawable);
+    cache.emplace (source, drawable);
     return drawable;
 }
 
@@ -471,6 +483,22 @@ struct DrawingStyle::FilterSource final : PaintSource
 
     // The filter of the last paint, whose primitives are written again in place
     FilterGraph graph;
+};
+
+/* Tells a style that a file read through the document of its component changed. */
+struct DrawingStyle::DocumentLink final : ComponentDocument::Listener
+{
+    explicit DocumentLink (DrawingStyle& ownerToUse)
+        : owner (ownerToUse)
+    {
+    }
+
+    void documentAssetChanged (ComponentDocument&, const String& path) override
+    {
+        owner.forgetPictures (path);
+    }
+
+    DrawingStyle& owner;
 };
 
 //==============================================================================
@@ -3474,6 +3502,11 @@ void DrawingStyle::setImageResolver (ImageResolver newResolver)
     for (size_t i = 0; i < compiled->evaluated.size(); ++i)
         slots[i].imageCache.clear();
 
+    redrawPictures();
+}
+
+void DrawingStyle::redrawPictures()
+{
     for (auto& source : patternSources)
         source->markDirty();
 
@@ -3482,6 +3515,40 @@ void DrawingStyle::setImageResolver (ImageResolver newResolver)
 
     if (auto* target = targetComponent.get())
         target->repaint();
+}
+
+/* Follows the document the files of the images and of the SVG are read through, which tells when one of them changes.
+   Another document has other files: what was read through the one before is read again by the paint going on. */
+void DrawingStyle::followDocument (ComponentDocument* document)
+{
+    if (documentLink == nullptr && document != nullptr)
+        documentLink = std::make_unique<DocumentLink> (*this);
+
+    if (documentLink == nullptr || ! documentLink->follow (document))
+        return;
+
+    for (size_t i = 0; i < compiled->evaluated.size(); ++i)
+    {
+        slots[i].imageCache.clear();
+        slots[i].svgCache.clear();
+    }
+}
+
+/* Forgets the images and the SVG read from a file that changed, and has what was drawn with them drawn again. */
+void DrawingStyle::forgetPictures (const String& path)
+{
+    const auto isRead = [&path] (const auto& kept)
+    {
+        return kept.first.trim() == path;
+    };
+
+    size_t numForgotten = 0;
+
+    for (size_t i = 0; i < compiled->evaluated.size(); ++i)
+        numForgotten += std::erase_if (slots[i].imageCache, isRead) + std::erase_if (slots[i].svgCache, isRead);
+
+    if (numForgotten > 0)
+        redrawPictures();
 }
 
 /* Reads what the programs take from the component for a paint, and returns the bounds it is painted in. An array is
@@ -4133,9 +4200,8 @@ void DrawingStyle::drawNode (Graphics& g, const Node& node, const PaintContext& 
 
     if (node.kind == Node::Kind::image || node.kind == Node::Kind::svg)
     {
-        File baseDirectory;
-        if (const auto* document = ComponentDocument::findFor (targetComponent.get()))
-            baseDirectory = document->getBaseDirectory();
+        const auto* target = targetComponent.get();
+        followDocument (ComponentDocument::findFor (target));
 
         for (int startRow = 0; startRow < numRows;)
         {
@@ -4194,35 +4260,12 @@ void DrawingStyle::drawNode (Graphics& g, const Node& node, const PaintContext& 
 
                 if (node.kind == Node::Kind::svg)
                 {
-                    if (const auto drawable = resolveDrawingSvg (slot->svgCache, src, node.svgInlineOnly, baseDirectory))
+                    if (const auto drawable = resolveDrawingSvg (slot->svgCache, src, node.svgInlineOnly, target))
                         drawable->paint (g, targetArea, fitting, justification);
                 }
-                else
+                else if (const auto& image = resolveDrawingImage (slot->imageCache, src, target, imageResolver); image.isValid())
                 {
-                    const auto& image = resolveDrawingImage (slot->imageCache, src, baseDirectory, imageResolver);
-                    if (! image.isValid())
-                        continue;
-
-                    const Rectangle<float> sourceBounds { 0.0f, 0.0f, static_cast<float> (image.getWidth()), static_cast<float> (image.getHeight()) };
-
-                    if (fitting == Fitting::tile)
-                    {
-                        // One fill, however many tiles the area holds
-                        g.setFillImage (image, AffineTransform::translation (targetArea.getX(), targetArea.getY()), { ImageWrap::Repeat, ImageWrap::Repeat, ImageFilter::Linear });
-                        g.setFeather (0.0f);
-                        g.fillRect (targetArea);
-                    }
-                    else
-                    {
-                        const auto destBounds = sourceBounds.transformed (sourceBounds.getTransformToFit (targetArea, fitting, justification));
-                        if (destBounds.isEmpty())
-                            continue;
-
-                        if (! targetArea.contains (destBounds))
-                            g.setClipPath (targetArea);
-
-                        g.drawImage (image, destBounds);
-                    }
+                    detail::drawFittedImage (g, image, targetArea, fitting, justification);
                 }
             }
 

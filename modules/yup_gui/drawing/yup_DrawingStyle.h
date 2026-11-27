@@ -117,6 +117,12 @@ class DependencyObserver;
     read an array, and when they read the component next to an `image`, an `svg` read from a file
     or a shape with markers.
 
+    An `image` and an `svg` read the file their `source` names when they are first painted, through
+    the document of the component the style was created for (see ComponentDocument::readAssetFor):
+    from a folder, embedded resources or the unsaved text of an editor, and from the file system
+    for a component of no document. What they read is kept, and read again once the document tells
+    that the file changed.
+
     A style keeps the shaders it was created with. One created before a shader is loaded is
     compiled against the block of the shader alone: that `use` paints nothing, and a filter
     running it leaves its layer as it is. createWithShaders() makes the style to install in its
@@ -369,6 +375,7 @@ private:
     struct PaintContext;
     struct PatternSource;
     struct FilterSource;
+    struct DocumentLink;
     class Compiler;
     class CompiledCache;
 
@@ -404,6 +411,9 @@ private:
     const Component* getPaintedComponent() const;
     bool drawFilteredLayer (Graphics& g, const Node& node, const PaintContext& context, int numRows);
     void drawFilteredContent (Graphics& g, FilterSource& source);
+    void followDocument (ComponentDocument* document);
+    void forgetPictures (const String& path);
+    void redrawPictures();
 
     WeakReference<Component> targetComponent;
     DrawingScope::ComponentResolver componentResolver;
@@ -418,6 +428,7 @@ private:
     int numLoopTurns = 1;
     std::vector<std::unique_ptr<PatternSource>> patternSources;
     ImageResolver imageResolver;
+    std::unique_ptr<DocumentLink> documentLink;
     std::vector<std::unique_ptr<FilterSource>> filterSources;
     const Font* paintFont = nullptr;
     const Component* paintedComponent = nullptr;

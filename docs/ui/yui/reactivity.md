@@ -48,6 +48,17 @@ Slider { id: knob; }
 Label  { text: "tweaking"; opacity: knob.pressed ? 1 : 0.3; }
 ```
 
+A binding is evaluated again when a component tells that a property it reads
+changed. Every property set by a document, by another binding or with
+`setProperty()` is told. So are the value of a `Slider` or of a wheel, the text
+of a `TextEditor`, the selection of a `ListBox`, a `ComboBox` or a `TabBar`,
+the state of a toggle and the levels of a `KMeter`, when the user or the widget
+changes them. What a widget computes for its painting is not told: its
+geometry, such as `trackBounds`, a scroll offset, the phase of an animation,
+and its [series](drawing.md#data-series). The drawing of the widget reads them
+each time it paints. From C++, change a property a binding reads with
+`setProperty()`: some widgets have setters that change it without telling.
+
 The whole element tree is created before any value is applied, so an expression
 can reference an element declared further down the document.
 

@@ -151,8 +151,7 @@ public:
         The asset reader is asked first, when there is one (see @ref setAssetReader). With no reader,
         and for a path the reader returns nothing for, the file is read: an absolute path as it is, a
         relative one from the base directory (see @ref setBaseDirectory), or from the working directory
-        when the base directory doesn't have the file or isn't set, which is how Image and the drawings
-        find their files.
+        when the base directory doesn't have the file or isn't set.
 
         @param path  The path of the file, as written in the document. An empty path gives nothing.
 

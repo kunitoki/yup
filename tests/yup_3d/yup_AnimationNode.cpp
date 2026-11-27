@@ -69,6 +69,39 @@ protected:
         return makeClip ("lift", { makeTrack (0, Path::translation, { 0.0f, 4.0f }, { 0.0f, 3.0f, 0.0f, 0.0f, 5.0f, 0.0f }) });
     }
 
+    /** Turns a target a quarter turn about y in 1 second. */
+    static AnimationClip::Track makeTurnTrack (int targetIndex)
+    {
+        const auto quarterTurn = Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, MathConstants<float>::halfPi);
+        return makeTrack (targetIndex, Path::rotation, { 0.0f, 1.0f }, { 0.0f, 0.0f, 0.0f, 1.0f, quarterTurn.getX(), quarterTurn.getY(), quarterTurn.getZ(), quarterTurn.getW() });
+    }
+
+    /** Takes the two weights of a target from 0 and 1 to 1 and 0 in 1 second. */
+    static AnimationClip::Track makeMorphTrack (int targetIndex)
+    {
+        return makeTrack (targetIndex, Path::weights, { 0.0f, 1.0f }, { 0.0f, 1.0f, 1.0f, 0.0f });
+    }
+
+    /** A triangle with two morph targets, whose weights start at 0.5 and 0.25 wherever it is drawn deformed. */
+    static Mesh::Ptr makeMorphedTriangle()
+    {
+        std::vector<Mesh::Vertex> vertices (3);
+        vertices[1].position = { 1.0f, 0.0f, 0.0f };
+        vertices[2].position = { 0.0f, 1.0f, 0.0f };
+
+        for (auto& vertex : vertices)
+            vertex.normal = { 0.0f, 0.0f, 1.0f };
+
+        std::vector<Mesh::MorphTarget> targets (2);
+        targets[0].positions = { {}, {}, { 0.0f, 1.0f, 0.0f } };
+        targets[1].positions = { {}, { 2.0f, 0.0f, 0.0f }, {} };
+
+        auto mesh = Mesh::Ptr (new Mesh ("triangle"));
+        EXPECT_TRUE (mesh->addPrimitive (std::move (vertices), { 0, 1, 2 }, Material::Ptr (new Material()), {}, std::move (targets)).wasOk());
+        mesh->setMorphWeights ({ 0.5f, 0.25f });
+        return mesh;
+    }
+
     static void expectNear (const Vector3<float>& actual, const Vector3<float>& expected, float tolerance = 1.0e-5f)
     {
         EXPECT_NEAR (actual.getX(), expected.getX(), tolerance);
@@ -667,4 +700,193 @@ TEST_F (AnimationNodeTests, WeightsAreKeptForTheirTarget)
     EXPECT_TRUE (player.getWeights (0).empty());
     EXPECT_TRUE (player.getWeights (5).empty());
     EXPECT_FALSE (morphed.has<TransformNode>());
+}
+
+//==============================================================================
+
+TEST_F (AnimationNodeTests, SelectingAClipPutsBackWhatTheClipBeforeItAnimated)
+{
+    // The rest pose is the one the target has when the node is given it
+    const auto rest = Quaternion::fromAxisAngle ({ 0.0f, 0.0f, 1.0f }, 0.5f);
+    transform->setPosition ({ 1.0f, 2.0f, 3.0f });
+    transform->setRotation (rest);
+    transform->setScale ({ 2.0f, 3.0f, 4.0f });
+
+    const auto turn = makeClip ("turn", { makeTurnTrack (0), makeTrack (0, Path::scale, { 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 3.0f, 3.0f, 3.0f }) });
+    auto& player = attachPlayer ({ turn, makeSlide() }, { target });
+
+    player.setPlaying (true);
+    scene.update (0.5);
+
+    EXPECT_TRUE (transform->getRotation().approximatelyEqualTo (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, MathConstants<float>::halfPi * 0.5f)));
+    expectNear (transform->getScale(), { 2.0f, 2.0f, 2.0f });
+    expectNear (transform->getPosition(), { 1.0f, 2.0f, 3.0f });
+
+    // The slide only moves the target: its rotation and its scale are the ones it had before any clip
+    player.setCurrentClip (1);
+
+    expectNear (transform->getPosition(), { 0.0f, 0.0f, 0.0f });
+    expectNear (transform->getScale(), { 2.0f, 3.0f, 4.0f });
+    EXPECT_EQ (transform->getRotation(), rest);
+
+    // And the turn doesn't move it: its position is the one it had before any clip
+    scene.update (1.0);
+    expectNear (transform->getPosition(), { 5.0f, 0.0f, 0.0f });
+
+    player.setCurrentClip (0);
+
+    expectNear (transform->getPosition(), { 1.0f, 2.0f, 3.0f });
+    expectNear (transform->getScale(), { 1.0f, 1.0f, 1.0f });
+    EXPECT_TRUE (transform->getRotation().approximatelyEqualTo (Quaternion()));
+}
+
+TEST_F (AnimationNodeTests, SelectingAClipPutsBackTheWeightsTheClipBeforeItAnimated)
+{
+    auto morphed = scene.createEntity ("morphed");
+    const auto& deform = morphed.attach<DeformNode> (makeMorphedTriangle());
+
+    auto& player = attachPlayer ({ makeClip ("morph", { makeMorphTrack (1) }), makeSlide() }, { target, morphed });
+    player.setTime (0.25);
+
+    ASSERT_EQ (deform.getWeights().size(), 2u);
+    EXPECT_NEAR (deform.getWeights()[0], 0.25f, 1.0e-6f);
+    EXPECT_NEAR (deform.getWeights()[1], 0.75f, 1.0e-6f);
+
+    // The slide animates no weight: the mesh has the ones it had before any clip, and the node keeps none for it
+    player.setCurrentClip (1);
+
+    EXPECT_FLOAT_EQ (deform.getWeights()[0], 0.5f);
+    EXPECT_FLOAT_EQ (deform.getWeights()[1], 0.25f);
+    EXPECT_TRUE (player.getWeights (1).empty());
+}
+
+TEST_F (AnimationNodeTests, AClipSelectedAfterNoClipPutsBackWhatTheLastOneAnimated)
+{
+    const auto rest = Quaternion::fromAxisAngle ({ 0.0f, 0.0f, 1.0f }, 0.5f);
+    transform->setRotation (rest);
+
+    // The turn also has a track for a target the node doesn't have, which has nothing to put back
+    auto& player = attachPlayer ({ makeClip ("turn", { makeTurnTrack (0), makeSlideTrack (7) }), makeSlide() }, { target });
+    player.setTime (1.0);
+
+    const auto turned = transform->getRotation();
+    ASSERT_FALSE (turned.approximatelyEqualTo (rest));
+
+    // Without a clip the pose stays as the turn left it
+    player.setCurrentClip (-1);
+    EXPECT_EQ (transform->getRotation(), turned);
+
+    player.setCurrentClip (1);
+    EXPECT_EQ (transform->getRotation(), rest);
+}
+
+TEST_F (AnimationNodeTests, SelectingAClipLeavesWhatNoClipPosedAlone)
+{
+    auto& player = attachPlayer ({ makeSlide(), makeClip ("turn", { makeTurnTrack (0) }) }, { target });
+
+    // The slide is selected and posed nothing yet: where code put the target is not what a clip left
+    transform->setPosition ({ 1.0f, 2.0f, 3.0f });
+    transform->setScale ({ 2.0f, 3.0f, 4.0f });
+
+    player.setCurrentClip (1);
+    expectNear (transform->getPosition(), { 1.0f, 2.0f, 3.0f });
+
+    // Neither is its scale, which no clip animates
+    player.setCurrentClip (0);
+    player.setCurrentClip (1);
+
+    expectNear (transform->getScale(), { 2.0f, 3.0f, 4.0f });
+}
+
+TEST_F (AnimationNodeTests, ResetPosePutsEveryTargetBackAsTheNodeWasGivenIt)
+{
+    transform->setPosition ({ 1.0f, 2.0f, 3.0f });
+
+    auto bare = scene.createEntity ("bare");
+    auto morphed = scene.createEntity ("morphed");
+    auto doomed = scene.createEntity ("doomed");
+    const auto& deform = morphed.attach<DeformNode> (makeMorphedTriangle());
+
+    const auto clip = makeClip ("all", { makeSlideTrack (0), makeSlideTrack (1), makeMorphTrack (2), makeSlideTrack (3) });
+    auto& player = attachPlayer ({ clip }, { target, bare, morphed, doomed, Entity() });
+    const auto numEntities = scene.getNumEntities();
+
+    player.setTime (1.0);
+
+    const auto* bareTransform = bare.get<TransformNode>();
+    ASSERT_NE (bareTransform, nullptr);
+    expectNear (bareTransform->getPosition(), { 5.0f, 0.0f, 0.0f });
+    EXPECT_FLOAT_EQ (deform.getWeights()[0], 1.0f);
+
+    // What code wrote since goes too, where no clip animates
+    transform->setScale ({ 2.0f, 3.0f, 4.0f });
+    doomed.destroy();
+
+    player.resetPose();
+
+    expectNear (transform->getPosition(), { 1.0f, 2.0f, 3.0f });
+    expectNear (transform->getScale(), { 1.0f, 1.0f, 1.0f });
+
+    // A target that had no transform is where it was without one
+    expectNear (bareTransform->getPosition(), { 0.0f, 0.0f, 0.0f });
+
+    EXPECT_FLOAT_EQ (deform.getWeights()[0], 0.5f);
+    EXPECT_FLOAT_EQ (deform.getWeights()[1], 0.25f);
+    EXPECT_TRUE (player.getWeights (2).empty());
+
+    // Targets that are gone are skipped
+    EXPECT_FALSE (doomed.isValid());
+    EXPECT_EQ (scene.getNumEntities(), numEntities - 1);
+}
+
+TEST_F (AnimationNodeTests, ResetPoseLeavesTheClipWhereItIsToPoseAgain)
+{
+    transform->setPosition ({ 1.0f, 2.0f, 3.0f });
+
+    auto& player = attachPlayer ({ makeSlide() }, { target });
+    player.setPlaying (true);
+    scene.update (0.5);
+
+    player.resetPose();
+
+    expectNear (transform->getPosition(), { 1.0f, 2.0f, 3.0f });
+    EXPECT_TRUE (player.isPlaying());
+    EXPECT_EQ (player.getCurrentClip(), 0);
+    EXPECT_DOUBLE_EQ (player.getTime(), 0.5);
+
+    // The clip poses what it animates again once it moves on
+    scene.update (0.5);
+    expectNear (transform->getPosition(), { 5.0f, 0.0f, 0.0f });
+}
+
+TEST_F (AnimationNodeTests, ASecondNodeGivenTheTargetsPlaysAnotherClipBesideTheFirst)
+{
+    auto other = scene.createEntity ("other");
+    const auto turn = makeClip ("turn", { makeTurnTrack (1) });
+    const auto grow = makeClip ("grow", { makeTrack (1, Path::scale, { 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 3.0f, 3.0f, 3.0f }) });
+
+    auto& player = attachPlayer ({ makeSlide(), turn }, { target, other });
+
+    const auto targets = player.getTargets();
+    ASSERT_EQ (targets.size(), 2u);
+    EXPECT_EQ (targets[0], target);
+    EXPECT_EQ (targets[1], other);
+
+    // An entity holds one AnimationNode, which plays one clip: the second one is on another entity
+    auto& second = attachPlayer ({ turn, grow }, std::vector<Entity> (targets.begin(), targets.end()));
+
+    player.setPlaying (true);
+    second.setPlaying (true);
+    scene.update (0.5);
+
+    const auto* turned = other.get<TransformNode>();
+    ASSERT_NE (turned, nullptr);
+    expectNear (transform->getPosition(), { 2.5f, 0.0f, 0.0f });
+    EXPECT_TRUE (turned->getRotation().approximatelyEqualTo (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, MathConstants<float>::halfPi * 0.5f)));
+
+    // Each node puts back what its own clips animated: the slide of the first one stays where it is
+    second.setCurrentClip (1);
+
+    EXPECT_EQ (turned->getRotation(), Quaternion());
+    expectNear (transform->getPosition(), { 2.5f, 0.0f, 0.0f });
 }

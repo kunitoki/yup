@@ -1482,6 +1482,12 @@ public:
         value is stored as a custom property keyed by @p name. On an actual change, listeners are
         notified, the style is refreshed and the component repainted.
 
+        The listeners are also notified of a state-backed property whose setter changed the
+        value its getter returns without calling notifyPropertyChanged() for it, so that what
+        reads the property, as a binding does, follows any property set here. The value is read
+        before and after the setter for that, except the one of an array property, which may be
+        long: its setter is the one to notify.
+
         @param name  The property name (descriptor name or a custom name).
         @param value The value to set.
     */
@@ -1598,6 +1604,10 @@ public:
         Widgets call this from their own setters (Slider drag, toggle, text edit) so that the
         single change path feeds bindings, pseudo-state selectors and attribute selectors. It
         notifies ComponentListener::componentPropertyChanged() without touching the property store.
+
+        setProperty() calls it for a setter that doesn't. A change made by calling that setter
+        directly, or by the widget itself, as a level it reads or a geometry it computes, is
+        only told from here.
 
         @param name The name of the property that changed.
     */
@@ -2278,6 +2288,7 @@ protected:
 
 private:
     struct ResolvedProperty;
+    struct PropertyWrite;
     ResolvedProperty resolveProperty (const Identifier& name) const;
     ResolvedProperty resolveColorProperty (const Identifier& colorId) const;
     const var* findStoredValue (const Identifier& storageKey, bool isInherited) const;
@@ -2451,6 +2462,7 @@ private:
     Array<Identifier> styleClasses;
     const ComponentTypeInfo* instanceTypeInfo = nullptr;
     NamedValueSet properties;
+    PropertyWrite* propertyWrite = nullptr;
     MouseCursor mouseCursor;
     GestureType wantedGestures = GestureType::none;
     ComponentEffect::Ptr componentEffect;

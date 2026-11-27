@@ -1511,6 +1511,54 @@ TEST_F (YuiDocumentTests, ListsTheProblemsItsComponentsReportWhereTheyAreWritten
     EXPECT_EQ (document.getDiagnostics()[1].toString(), "warning: Looks odd");
 }
 
+TEST_F (YuiDocumentTests, AnImageShowsWhatTheDocumentReadsForItAndListsTheSourceItCantRead)
+{
+    // A 1 x 1 opaque red PNG, that no file holds
+    MemoryOutputStream pixel;
+    ASSERT_TRUE (Base64::convertFromBase64 (pixel, "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="));
+
+    std::map<String, MemoryBlock> served;
+    served["img/dot.png"] = pixel.getMemoryBlock();
+
+    YuiDocument document;
+    document.setAssetReader ([&served] (const String& path) -> std::optional<MemoryBlock>
+    {
+        if (const auto found = served.find (path); found != served.end())
+            return found->second;
+
+        return std::nullopt;
+    });
+
+    const String text = "Row {\n"
+                        "    Image { id: dot; source: \"img/dot.png\"; }\n"
+                        "    Image { id: late; source: \"img/late.png\"; }\n"
+                        "}";
+
+    ASSERT_TRUE (document.loadFromString (text).wasOk());
+
+    auto* dot = document.findById<ImageComponent> ("dot");
+    auto* late = document.findById<ImageComponent> ("late");
+    ASSERT_NE (dot, nullptr);
+    ASSERT_NE (late, nullptr);
+
+    EXPECT_TRUE (dot->getImage().isValid());
+    EXPECT_FALSE (late->getImage().isValid());
+
+    // What can't be read is listed once the load is over, where it is written
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics()[0].toString(), "3:23: Image.source: the file 'img/late.png' can't be read");
+
+    // The image reads its file again when told that it changed, and the next load has nothing left to list
+    served["img/late.png"] = pixel.getMemoryBlock();
+    document.notifyAssetChanged ("img/late.png");
+    EXPECT_TRUE (late->getImage().isValid());
+
+    ASSERT_TRUE (document.loadFromString (text).wasOk());
+    EXPECT_EQ (document.findById<ImageComponent> ("late"), late);
+    EXPECT_TRUE (late->getImage().isValid());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+}
+
 TEST_F (YuiDocumentTests, TellsTheListenersOfItsComponentsAfterItsOwn)
 {
     struct Own final : YuiDocument::Listener

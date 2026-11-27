@@ -269,6 +269,98 @@ TEST (KMeterComponentTests, TellsItStoppedClippingWhenItsStateIsRemoved)
     meter.removeComponentListener (&listener);
 }
 
+TEST (KMeterComponentTests, TellsTheLevelsThatMovedWhenItReadsThem)
+{
+    struct Listener : ComponentListener
+    {
+        void componentPropertyChanged (Component&, const Identifier& name) override
+        {
+            changed.add (name.toString());
+        }
+
+        StringArray changed;
+    };
+
+    KMeterState state (48000.0, 2);
+    KMeterComponent meter (state, 0);
+
+    Listener listener;
+    meter.addComponentListener (&listener);
+
+    std::vector<float> samples (512, 0.25f);
+    const float* channels[2] = { samples.data(), samples.data() };
+    state.pushSamples (channels, 2, 512);
+    state.processPendingAudio();
+
+    meter.refreshDisplay (1.0);
+    EXPECT_TRUE (listener.changed.contains ("peakDb"));
+    EXPECT_TRUE (listener.changed.contains ("averageDb"));
+    EXPECT_TRUE (listener.changed.contains ("peakHoldDb"));
+    EXPECT_FALSE (listener.changed.contains ("rangeMinDb"));
+    EXPECT_FLOAT_EQ (state.getPeakLevel (0), static_cast<float> (meter.getProperty ("peakDb")));
+
+    // Levels that kept still are not told again
+    listener.changed.clear();
+    meter.refreshDisplay (1.0);
+    EXPECT_TRUE (listener.changed.isEmpty());
+
+    // The same signal again raises the average: a level is told when it is one that moved
+    const auto peak = meter.getPeakLevel();
+    const auto average = meter.getAverageLevel();
+    const auto peakHold = meter.getPeakHoldLevel();
+
+    state.pushSamples (channels, 2, 512);
+    state.processPendingAudio();
+    meter.refreshDisplay (1.0);
+
+    ASSERT_NE (average, meter.getAverageLevel());
+    EXPECT_TRUE (listener.changed.contains ("averageDb"));
+    EXPECT_EQ (peak != meter.getPeakLevel(), listener.changed.contains ("peakDb"));
+    EXPECT_EQ (peakHold != meter.getPeakHoldLevel(), listener.changed.contains ("peakHoldDb"));
+
+    // The levels of another channel are told when the meter is given it
+    const std::vector<float> louder (512, 0.5f);
+    const float* unequalChannels[2] = { samples.data(), louder.data() };
+    state.pushSamples (unequalChannels, 2, 512);
+    state.processPendingAudio();
+    meter.refreshDisplay (1.0);
+
+    listener.changed.clear();
+    meter.setChannel (1);
+    EXPECT_TRUE (listener.changed.contains ("peakDb"));
+    EXPECT_FLOAT_EQ (state.getPeakLevel (1), meter.getPeakLevel());
+
+    meter.removeComponentListener (&listener);
+}
+
+TEST (KMeterComponentTests, TellsTheRangeOfItsScaleWhenItsStateIsGivenAnotherScale)
+{
+    struct Listener : ComponentListener
+    {
+        void componentPropertyChanged (Component&, const Identifier& name) override
+        {
+            changed.add (name.toString());
+        }
+
+        StringArray changed;
+    };
+
+    KMeterState state (48000.0, 2);
+    KMeterComponent meter (state, 0);
+
+    Listener listener;
+    meter.addComponentListener (&listener);
+
+    state.setScale (KMeterState::Scale::k14);
+    meter.refreshDisplay (1.0);
+
+    EXPECT_TRUE (listener.changed.contains ("rangeMinDb"));
+    EXPECT_TRUE (listener.changed.contains ("rangeMaxDb"));
+    EXPECT_FLOAT_EQ (26.0f, static_cast<float> (meter.getProperty ("rangeMaxDb")));
+
+    meter.removeComponentListener (&listener);
+}
+
 TEST (KMeterComponentTests, TheTypeInfoCreatesAMeterAndSetsItsChannel)
 {
     const auto& type = KMeterComponent::getClassTypeInfo();

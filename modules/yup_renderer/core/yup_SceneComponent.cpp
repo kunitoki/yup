@@ -175,25 +175,6 @@ struct SceneComponent::DocumentLink final : ComponentDocument::Listener
     {
     }
 
-    ~DocumentLink() override
-    {
-        follow (nullptr);
-    }
-
-    void follow (ComponentDocument* newDocument)
-    {
-        if (document.get() == newDocument)
-            return;
-
-        if (auto* previous = document.get())
-            previous->removeListener (this);
-
-        document = newDocument;
-
-        if (newDocument != nullptr)
-            newDocument->addListener (this);
-    }
-
     void documentLoaded (ComponentDocument&) override
     {
         // The values of the load are in: the meshes they describe are built, the nodes find the one that shows the components
@@ -223,7 +204,6 @@ struct SceneComponent::DocumentLink final : ComponentDocument::Listener
     }
 
     SceneComponent& owner;
-    WeakReference<ComponentDocument> document;
 };
 
 //==============================================================================
@@ -533,13 +513,11 @@ ResultValue<GltfModel> SceneComponent::loadModel (const String& path)
         return found->second;
 
     // Followed before reading, to be told when the file changes
-    const auto* document = findDocument();
+    findDocument();
     const auto bytes = ComponentDocument::readAssetFor (this, path);
 
     // What a .gltf keeps in other files is read next to it, when the document has files
-    const auto file = document != nullptr              ? document->getAssetFile (path)
-                    : File::isAbsolutePath (path)      ? File (path)
-                                                       : File::getCurrentWorkingDirectory().getChildFile (path);
+    const auto file = ComponentDocument::getAssetFileFor (this, path);
 
     auto model = bytes.has_value() ? GltfModel::loadFromData (bytes->asBytes(), file != File() ? file.getParentDirectory() : File())
                                    : ResultValue<GltfModel>::fail ("the file '" + path + "' can't be read");

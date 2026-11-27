@@ -1281,12 +1281,6 @@ void YuiBuilder::placeChild (Component& parent, Component& child, bool isReused)
 
 void YuiBuilder::applyIdentity (Component& component, const DataTree& element, Scope& scope, bool isUseSite)
 {
-    if (! isUseSite)
-    {
-        if (auto* imageComponent = dynamic_cast<ImageComponent*> (&component))
-            imageComponent->setBaseDirectory (baseDirectory);
-    }
-
     String id;
 
     if (element.hasProperty (idProperty()))

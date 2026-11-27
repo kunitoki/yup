@@ -6,7 +6,7 @@ Since every load updates the interface in place (see
 [Reloading](documents.md#reloading)), editing a `.yui` file while the
 application runs shows the change immediately, keeping the components, their
 state and the application's pointers to them. The same goes for the files a
-document reads: its shaders, its models and its textures.
+document reads: its shaders, its images, its models and its textures.
 
 ## Loading files
 
@@ -59,7 +59,8 @@ platforms, and for sources that aren't files, it has no effect.
 
 A document reads other files than `.yui` texts, by paths relative to the folder
 of its main file: the GLSL or the compiled bundle of a
-[`shader` block](shaders.md), the glTF model of a `Model3D` and the textures
+[`shader` block](shaders.md), the file of an `Image` and of the `image` and
+`svg` elements of a drawing, the glTF model of a `Model3D` and the textures
 of a `Material3D` (see [3D scenes](scenes.md#assets-and-hot-reload)). The
 loader serves them from where the document comes from, and remembers each one
 it was asked for:
@@ -74,10 +75,10 @@ ui/
 ```
 
 - Watching covers them. When one is saved, what read it reads it again, a
-  shader is compiled again, a model is shown again, and the document is then
-  loaded again: the interface is kept, `onLoad` is called, and the diagnostics
-  are those of that load. So a shader saved with an error is listed, and no
-  longer is once it is saved fixed.
+  shader is compiled again, an image or a model is shown again, and the
+  document is then loaded again: the interface is kept, `onLoad` is called, and
+  the diagnostics are those of that load. So a shader saved with an error is
+  listed, and no longer is once it is saved fixed.
 - `reload()` picks up the files that changed since they were read, also where
   nothing is watched: on mobile, on the web, or with watching off.
 - A file that did not exist when it was asked for is remembered too: creating
@@ -85,8 +86,11 @@ ui/
 - Loading another source, the files of an interface first loaded from embedded
   resources for example, has what is kept of the interface read its files
   again from the new one.
-- `Image`, the `image` and `svg` of a drawing and `font ()` read their files by
-  themselves: they are neither watched nor served from embedded resources.
+- An `Image` whose `source` can't be loaded is listed in the diagnostics, where
+  it is written. The `image` and `svg` elements of a drawing read their file
+  when they are first painted, and paint nothing when it can't be loaded.
+- `font ()` reads its file by itself: it is neither watched nor served from
+  embedded resources.
 
 From C++, `YuiDocument::readAsset (path)` reads such a file, and
 `YuiDocument::Listener::documentAssetChanged` tells that one changed. See
@@ -111,7 +115,7 @@ save made in another editor, and `getLoadedText (path)` returns the text each
 file had in the last load, to show the files again after a reload.
 
 The files a document reads are overridden the same way, when they are text: a
-shader, or a `.gltf` model.
+shader, an SVG image, or a `.gltf` model.
 
 ```cpp
 loader.setOverride ("fx/crt.frag", shaderEditor.getText());
@@ -157,7 +161,7 @@ loader.loadResource ("ui.yui", yup::MyAppUi_find);
 | Argument | Embeds | Found as |
 | --- | --- | --- |
 | `FILES` | The `.yui` files, the imported ones included. | `ui.yui`, `parts/style.yui` |
-| `ASSETS` | Files as they are: models, textures. | `models/knob.glb` |
+| `ASSETS` | Files as they are: models, textures, images. | `models/knob.glb` |
 | `SHADERS` | The fragment of a `shader` block, compiled when the application is built. | `fx/crt.frag.ysl` |
 | `MATERIAL_SHADERS` | The material of a `shader` block, compiled for both tiers of the renderer. | `fx/hologram.glsl.raster.ysl`, `fx/hologram.glsl.full.ysl` |
 

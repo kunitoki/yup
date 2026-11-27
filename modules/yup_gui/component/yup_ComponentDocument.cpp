@@ -74,6 +74,37 @@ std::optional<MemoryBlock> ComponentDocument::readAssetFor (const Component* com
     return readAssetFile (resolveAssetFile (path, {}));
 }
 
+File ComponentDocument::getAssetFileFor (const Component* component, const String& path)
+{
+    if (const auto* document = findFor (component))
+        return document->getAssetFile (path);
+
+    return resolveAssetFile (path, {});
+}
+
+//==============================================================================
+
+ComponentDocument::Listener::~Listener()
+{
+    follow (nullptr);
+}
+
+bool ComponentDocument::Listener::follow (ComponentDocument* document)
+{
+    if (followed.get() == document)
+        return false;
+
+    if (auto* previous = followed.get())
+        previous->removeListener (this);
+
+    followed = document;
+
+    if (document != nullptr)
+        document->addListener (this);
+
+    return true;
+}
+
 //==============================================================================
 
 void ComponentDocument::notifyDocumentLoaded()
@@ -94,7 +125,6 @@ void ComponentDocument::notifyDocumentAssetChanged (const String& path)
 
 //==============================================================================
 
-// The file of an asset is found as Image and the drawings find theirs
 File ComponentDocument::resolveAssetFile (const String& path, const File& baseDirectory)
 {
     if (path.isEmpty())

@@ -422,7 +422,8 @@ Column {
   model then shows the pose of its file until the clip plays or `time` is set.
   A string of digits that is not the name of a clip is its place among the
   clips, from 0: `clip: "1"` is the second one. Naming a clip puts it at its
-  start, and shows the model there at once.
+  start, and shows the model there at once: what the clip before it moved is
+  back as the file has it.
 - **`time`** poses the model at once, playing or not, so a paused clip is a
   pose: `clip: "Open"; time: 1.2;` shows the lid open. While the clip plays,
   `time` tells where it is at every frame. Link a slider to it with `<=>`: a

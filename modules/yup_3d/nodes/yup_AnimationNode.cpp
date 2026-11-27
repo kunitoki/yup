@@ -27,6 +27,7 @@ namespace yup
 AnimationNode::AnimationNode (std::vector<AnimationClip::Ptr> clipsToPlay, std::vector<Entity> targetEntities)
     : clips (std::move (clipsToPlay))
     , targets (std::move (targetEntities))
+    , restPoses (targets.size())
 {
     const auto first = std::find_if (clips.begin(), clips.end(), [] (const AnimationClip::Ptr& clip)
     {
@@ -35,6 +36,17 @@ AnimationNode::AnimationNode (std::vector<AnimationClip::Ptr> clipsToPlay, std::
 
     if (first != clips.end())
         currentClip = static_cast<int> (first - clips.begin());
+
+    for (size_t index = 0; index < targets.size(); ++index)
+    {
+        auto& rest = restPoses[index];
+
+        if (const auto* transform = targets[index].get<TransformNode>())
+            rest = { transform->getPosition(), transform->getRotation(), transform->getScale(), {} };
+
+        if (const auto* deform = targets[index].get<DeformNode>())
+            rest.weights.assign (deform->getWeights().begin(), deform->getWeights().end());
+    }
 }
 
 //==============================================================================
@@ -110,6 +122,17 @@ void AnimationNode::setPlaying (bool shouldPlay)
     playing = shouldPlay;
 }
 
+void AnimationNode::resetPose()
+{
+    for (int index = 0; index < static_cast<int> (targets.size()); ++index)
+    {
+        for (const auto path : { AnimationClip::Path::translation, AnimationClip::Path::rotation, AnimationClip::Path::scale, AnimationClip::Path::weights })
+            resetPath (index, path);
+    }
+
+    posedClip = -1;
+}
+
 Span<const float> AnimationNode::getWeights (int target) const noexcept
 {
     const auto it = weights.find (target);
@@ -164,6 +187,18 @@ void AnimationNode::applyPose()
     if (clip == nullptr)
         return;
 
+    if (posedClip != currentClip)
+    {
+        // Nothing of the clip that posed the targets before is left
+        if (const auto previous = getClip (posedClip); previous != nullptr)
+        {
+            for (const auto& track : previous->getTracks())
+                resetPath (track.target, track.path);
+        }
+
+        posedClip = currentClip;
+    }
+
     const auto sampleTime = static_cast<float> (time);
 
     for (const auto& track : clip->getTracks())
@@ -200,6 +235,36 @@ void AnimationNode::applyPose()
         else
             transform.setScale ({ value[0], value[1], value[2] });
     }
+}
+
+void AnimationNode::resetPath (int index, AnimationClip::Path path)
+{
+    if (! isPositiveAndBelow (index, static_cast<int> (targets.size())))
+        return;
+
+    const auto& target = targets[static_cast<size_t> (index)];
+    const auto& rest = restPoses[static_cast<size_t> (index)];
+
+    if (path == AnimationClip::Path::weights)
+    {
+        weights.erase (index);
+
+        if (auto* deform = target.get<DeformNode>())
+            deform->setWeights (rest.weights);
+
+        return;
+    }
+
+    auto* transform = target.get<TransformNode>();
+    if (transform == nullptr)
+        return;
+
+    if (path == AnimationClip::Path::translation)
+        transform->setPosition (rest.position);
+    else if (path == AnimationClip::Path::rotation)
+        transform->setRotation (rest.rotation);
+    else
+        transform->setScale (rest.scale);
 }
 
 } // namespace yup

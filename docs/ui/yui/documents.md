@@ -152,7 +152,7 @@ the binary, use a `YuiLoader`, see [Hot reloading](hot-reload.md).
 ## Reading files through the document
 
 A document also reads the files its elements name: the shaders of `shader`
-blocks, the models and the textures of a [3D scene](scenes.md). They are read
+blocks, the images, the models and the textures of a [3D scene](scenes.md). They are read
 through the document, so they come from where its text comes from, and code
 reads its own files the same way:
 

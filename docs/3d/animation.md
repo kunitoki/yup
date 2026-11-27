@@ -76,14 +76,16 @@ view.repaint();
 | `AnimationNode` | What it does |
 | --- | --- |
 | `getNumClips()`, `getClip (index)`, `findClip (name)` | The clips of the model, and the index of the first one with a name, or -1. |
-| `setCurrentClip (index)` | Selects a clip at its start and poses the entities there. Out of range, or an index without a clip, selects none and stops playing. |
+| `setCurrentClip (index)` | Selects a clip at its start and poses the entities there, once what the clip before it animated is back in its rest pose. Out of range, or an index without a clip, selects none and stops playing: the pose stays. |
 | `getDuration()` | The length of the selected clip, in seconds. |
 | `setTime (seconds)`, `getTime()` | Moves to a time, limited to the clip, and poses the entities there. |
 | `setSpeed (speed)` | 1 by default, 2 twice as fast, negative to play backwards. |
 | `setLooping (bool)` | Carries on from the other end instead of stopping. Off by default. |
 | `setPlaying (bool)`, `isPlaying()` | Plays or pauses. Off by default, and while no clip is selected. |
 | `onClipEnded()` | A `Signal<>` emitted once when a clip that does not loop stops. |
-| `getWeights (target)` | The morph weights the last clip left for a target entity. |
+| `resetPose()` | Puts every entity back in its [rest pose](#the-rest-pose). |
+| `getTargets()` | The entities the clips animate: the target of a track is an index among them. |
+| `getWeights (target)` | The morph weights a clip left for a target entity, none once they are back at rest. |
 
 - A clip that does not loop stops at the end it plays towards, its end or its
   start for a negative speed: the entities are posed there, `isPlaying()` turns
@@ -96,17 +98,83 @@ view.repaint();
   speed first.
 - A clip writes what its tracks animate into the `TransformNode` of each
   entity. What it does not animate keeps the value it has: the one of the
-  file, one set by code, or the one another clip left there.
+  file, or one set by code. What the clip selected before it animated does not
+  stay: it goes back to [the rest pose](#the-rest-pose) first.
 - A clip that starts playing poses its entities at once, then each time an
   update moves it on. An update in which no time goes by, with a delta or a
   speed of 0, poses nothing: what code, or a `Node3D` of a document bound to
   a joint, wrote into an entity since then stays until the clip moves on.
-- One clip plays at a time on an instance, and clips are not blended. The
-  instances of a model play apart.
+- A node plays one clip at a time, and clips are not blended. The instances of
+  a model play apart, and a second node plays
+  [two clips at once](#two-clips-at-once) on one of them.
 - The signal calls back from `Scene::update()`, on the message thread, as its
   last step: the callback may select another clip, play again or destroy the
   entity. Keep the `SignalConnection` that `connect()` returns.
 - A hidden instance is not updated, like every node: its clip stands still.
+
+## The rest pose
+
+An `AnimationNode` remembers how its entities were when it was created: their
+translation, rotation, scale and morph weights, which for a model are the ones
+of its file. That is their rest pose, and what a clip moved goes back to it:
+
+```cpp
+if (auto* animation = instance.get<yup::AnimationNode>())
+{
+    animation->setCurrentClip (-1);     // nothing plays, and the pose stays
+    animation->resetPose();             // every entity as the file has it
+}
+
+scene->update (0.0);                    // the meshes that deform follow
+view.repaint();
+```
+
+- **Selecting a clip** first puts back what the clip before it animated, so
+  nothing of a clip is left once another one is selected: a clip that only
+  opens a door starts from a fan standing as the file has it, however the clip
+  before turned it.
+- What no clip posed is left alone: a part placed by code, or by a `Node3D` of
+  a document, stays where it is when a clip is selected.
+- **Selecting no clip**, `setCurrentClip (-1)`, stops playing and leaves the
+  pose as it is.
+- **`resetPose()`** puts every entity back, also where code moved it. The clip
+  stays selected where it is, and one that is playing poses what it animates
+  again at its next update: pause it, or select no clip, to keep the model at
+  rest.
+- The rest pose is read once, when the node is created. Before making a node
+  from code, place its entities and attach their `DeformNode`: an entity
+  without a `TransformNode` rests where its parent has it, and one without a
+  `DeformNode` has no weights to go back to.
+- Entities that were destroyed are skipped.
+
+## Two clips at once
+
+An entity holds one `AnimationNode`, and a node plays one clip. A second node,
+on another entity, plays another clip of the model beside it once it is given
+the same entities, which `getTargets()` returns:
+
+```cpp
+if (auto* animation = instance.get<yup::AnimationNode>())
+{
+    const auto targets = animation->getTargets();
+
+    // Made before a clip poses the model: the rest pose of a node is the one its entities have then
+    auto& fan = instance.createChild ("fan").attach<yup::AnimationNode> (
+        std::vector<yup::AnimationClip::Ptr> { animation->getClip (animation->findClip ("Fan")) },
+        std::vector<yup::Entity> (targets.begin(), targets.end()));
+
+    fan.setLooping (true);
+    fan.setPlaying (true);                                          // the fan turns
+
+    animation->setCurrentClip (animation->findClip ("Open"));
+    animation->setPlaying (true);                                   // while the door opens
+}
+```
+
+- Each node puts back what its own clips animated: selecting a clip on one
+  leaves what the other plays.
+- The two clips are not blended: where both animate the same value of the
+  same entity, one of them shows.
 
 ## Clips
 
@@ -226,7 +294,8 @@ view.repaint();
   mesh. Weights are not limited to 0 and 1: 2 goes twice as far.
 - They start as the file has them, on the mesh or on the node.
 - A `weights` track of a clip sets them each time the clip poses its targets,
-  so while such a clip plays its weights replace the ones set by code.
+  so while such a clip plays its weights replace the ones set by code. They go
+  back to their [rest pose](#the-rest-pose) once another clip is selected.
 - A mesh from code takes its targets in `addPrimitive()`, as
   `Mesh::MorphTarget` values holding one delta per vertex, and gets a
   `DeformNode` without a skin: `entity.attach<yup::DeformNode> (mesh)`.
@@ -347,7 +416,7 @@ from a [prefab link](entities-and-nodes.md#prefabs).
 ## Limits
 
 - Four joints for each vertex.
-- One clip at a time for each instance, no blending between clips.
+- One clip at a time for each `AnimationNode`, no blending between clips.
 - A `SceneComponent` that is not showing takes no display frame, so its scene
   is not updated: the clips of a hidden view stand still, `onClipEnded()` waits
   with them, and they carry on from where they were once the view shows again.

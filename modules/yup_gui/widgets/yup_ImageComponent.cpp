@@ -34,32 +34,6 @@ struct ImageComponentIds
     static inline const Identifier imagePart { "image" };
 };
 
-File resolveImageComponentSourceFile (const String& path, const File& baseDirectory, const Component* owner)
-{
-    if (path.isEmpty())
-        return {};
-
-    if (File::isAbsolutePath (path))
-        return File (path);
-
-    if (baseDirectory != File())
-    {
-        if (const auto candidate = baseDirectory.getChildFile (path); candidate.existsAsFile())
-            return candidate;
-    }
-
-    if (owner != nullptr)
-    {
-        if (const auto* document = ComponentDocument::findFor (owner); document != nullptr && document->getBaseDirectory() != File())
-        {
-            if (const auto candidate = document->getBaseDirectory().getChildFile (path); candidate.existsAsFile())
-                return candidate;
-        }
-    }
-
-    return File::getCurrentWorkingDirectory().getChildFile (path);
-}
-
 } // namespace
 
 //==============================================================================
@@ -148,76 +122,61 @@ void ImageComponent::setSource (const String& newSource)
 
     notifyPropertyChanged (ImageComponentIds::source);
     repaint();
-}
-
-void ImageComponent::setBaseDirectory (const File& directory)
-{
-    if (baseDirectory == directory)
-        return;
-
-    baseDirectory = directory;
-
-    if (source.isNotEmpty() && ! File::isAbsolutePath (source))
-    {
-        reloadSource();
-        repaint();
-    }
+    reportSourceProblem();
 }
 
 void ImageComponent::reloadSource()
 {
     image = {};
     drawable.reset();
+    sourceProblem.clear();
 
     const auto trimmed = source.trim();
     if (trimmed.isEmpty())
         return;
 
-    if (trimmed.startsWithIgnoreCase ("data:image/"))
+    // Followed before reading through it: it tells when the file changes, and when to tell again what is wrong with it
+    follow (ComponentDocument::findFor (this));
+
+    const auto take = [this] (auto loaded, auto& shown)
     {
-        if (const auto marker = trimmed.indexOfIgnoreCase ("base64,"); marker >= 0)
-        {
-            MemoryOutputStream decoded;
-            if (Base64::convertFromBase64 (decoded, trimmed.substring (marker + 7).trim()) && decoded.getDataSize() > 0)
-            {
-                auto loaded = Image::loadFromData ({ static_cast<const uint8*> (decoded.getData()), decoded.getDataSize() });
-                if (loaded.wasOk())
-                    image = std::move (loaded.getReference());
-            }
-        }
+        if (loaded.wasOk())
+            shown = std::move (loaded.getReference());
+        else
+            sourceProblem = loaded.getErrorMessage();
+    };
 
-        return;
-    }
+    const bool isText = trimmed.startsWithChar ('<');
 
-    if (trimmed.startsWithChar ('<'))
-    {
-        auto parsed = std::make_shared<Drawable>();
-        if (parsed->parseSVG (trimmed))
-            drawable = std::move (parsed);
-
-        return;
-    }
-
-    const auto file = resolveImageComponentSourceFile (trimmed, baseDirectory, this);
-    if (! file.existsAsFile())
-        return;
-
-    if (file.hasFileExtension (".svg"))
-    {
-        auto parsed = std::make_shared<Drawable>();
-        if (parsed->parseSVG (file))
-            drawable = std::move (parsed);
-    }
+    if (isText || (trimmed.endsWithIgnoreCase (".svg") && ! trimmed.startsWithIgnoreCase ("data:image/")))
+        take (detail::loadSourceSvg (this, trimmed, isText), drawable);
     else
-    {
-        MemoryBlock block;
-        if (file.loadFileAsData (block) && block.getSize() > 0)
-        {
-            auto loaded = Image::loadFromData ({ static_cast<const uint8*> (block.getData()), block.getSize() });
-            if (loaded.wasOk())
-                image = std::move (loaded.getReference());
-        }
-    }
+        take (detail::loadSourceImage (this, trimmed), image);
+}
+
+void ImageComponent::reportSourceProblem()
+{
+    if (sourceProblem.isEmpty())
+        return;
+
+    if (auto* document = ComponentDocument::findFor (this))
+        document->reportDiagnostic ({ .message = getTypeInfo().getTypeName().toString() + ".source: " + sourceProblem, .property = ImageComponentIds::source }, this);
+}
+
+void ImageComponent::documentLoaded (ComponentDocument&)
+{
+    // A load forgets the problems it was told before, and drops the ones it is told while it runs
+    reportSourceProblem();
+}
+
+void ImageComponent::documentAssetChanged (ComponentDocument&, const String& path)
+{
+    if (path != source.trim())
+        return;
+
+    reloadSource();
+    repaint();
+    reportSourceProblem();
 }
 
 void ImageComponent::setFitting (Fitting newFitting)

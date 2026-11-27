@@ -44,6 +44,11 @@ namespace yup
     looks at them ten times a second, which lets its window idle, and follows them again as
     soon as one moves.
 
+    The levels it reads are its properties `peakDb`, `averageDb`, `peakHoldDb` and `clipping`,
+    and the scale of its state gives `rangeMinDb` and `rangeMaxDb`. It tells each of them when
+    it reads another value of it, so that what reads one, as a binding of a `.yui` document,
+    follows it (see Component::notifyPropertyChanged).
+
     Example usage:
     @code
     KMeterState meterState (48000.0, 2);
@@ -369,10 +374,8 @@ private:
     void pollLevels();
     void showingChanged();
     void checkForCallbacks();
-    void notifyClippingChange();
+    void notifyLevelChanges();
     const ScaleLayout& getScaleLayout() const;
-
-    static const Identifier clippingPropertyId;
 
     //==============================================================================
     KMeterState* meterState = nullptr;
@@ -394,7 +397,7 @@ private:
     float lastCallbackPeak = -100.0f;
     float lastCallbackAverage = -100.0f;
     bool lastCallbackClipping = false;
-    bool lastNotifiedClipping = false;
+    Levels lastNotifiedLevels;
 
     // The levels are followed at every frame while they move, and looked at by the timer once they keep still
     FrameAttachment frameAttachment { *this, bindFront (&KMeterComponent::refreshDisplay, this), false };

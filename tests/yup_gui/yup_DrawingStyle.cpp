@@ -1670,6 +1670,100 @@ TEST_F (DrawingStyleGpuTest, ImagesComeFromTheResolverBeforeTheFiles)
     EXPECT_EQ (centerColor (component).getAlpha(), 0);
 }
 
+TEST_F (DrawingStyleGpuTest, ImagesAndSvgFilesAreReadThroughTheDocumentOfTheComponentAndAgainWhenTheyChange)
+{
+    /** A document of one root, serving the bytes it is given and no file. */
+    struct Document final : ComponentDocument
+    {
+        explicit Document (Component& rootToUse)
+            : root (rootToUse)
+        {
+            attachToRoot();
+        }
+
+        ~Document() override
+        {
+            detachFromRoot();
+        }
+
+        Component* getRoot() const override { return &root; }
+
+        const File& getBaseDirectory() const override { return baseDirectory; }
+
+        std::optional<MemoryBlock> readAsset (const String& path) const override
+        {
+            read.add (path);
+
+            if (const auto found = assets.find (path); found != assets.end())
+                return found->second;
+
+            return std::nullopt;
+        }
+
+        File getAssetFile (const String&) const override { return {}; }
+
+        std::shared_ptr<const DataTreeSourceMap> getSourceMap() const override { return nullptr; }
+
+        DrawingScope::ComponentResolver getComponentResolver() const override { return nullptr; }
+
+        void reportDiagnostic (DataTreeDiagnostic, const Component* = nullptr) override {}
+
+        using ComponentDocument::notifyDocumentAssetChanged;
+
+        Component& root;
+        File baseDirectory;
+        std::map<String, MemoryBlock> assets;
+        mutable StringArray read;
+    };
+
+    const auto square = [] (const char* color)
+    {
+        const auto text = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='" + String (color) + "'/></svg>";
+        return MemoryBlock (text.toRawUTF8(), text.getNumBytesAsUTF8());
+    };
+
+    // A 1 x 1 opaque red PNG
+    MemoryOutputStream redPixel;
+    ASSERT_TRUE (Base64::convertFromBase64 (redPixel, "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP4z8DwHwAFAAH/VscvDQAAAABJRU5ErkJggg=="));
+
+    DrawnComponent component (parseYui (R"yui(
+        drawing {
+            image { bounds: rect (0, 0, 8, 16); source: "memory/pixel.png"; fitting: fill; }
+            svg { bounds: rect (8, 0, 8, 16); source: "memory/square.svg"; fitting: fill; }
+        })yui"));
+
+    // No file has these names, and the component is in no document
+    auto painted = component.snapshotToImage (*gpuContext);
+    EXPECT_EQ (painted.getPixelColor (4, 8).getAlpha(), 0);
+    EXPECT_EQ (painted.getPixelColor (12, 8).getAlpha(), 0);
+
+    Document document (component);
+    document.assets["memory/pixel.png"] = redPixel.getMemoryBlock();
+    document.assets["memory/square.svg"] = square ("#00ff00");
+
+    // What was looked for in no document is looked for again in the one the component is now in
+    painted = component.snapshotToImage (*gpuContext);
+    EXPECT_GT (painted.getPixelColor (4, 8).getRed(), 200);
+    EXPECT_LT (painted.getPixelColor (4, 8).getBlue(), 50);
+    EXPECT_GT (painted.getPixelColor (4, 8).getAlpha(), 200);
+    EXPECT_EQ (painted.getPixelColor (12, 8), Color (0xff00ff00));
+    EXPECT_EQ (document.read, StringArray ({ "memory/pixel.png", "memory/square.svg" }));
+
+    // What was read is kept, until the document tells that it changed: another file changing reads nothing again
+    document.assets["memory/square.svg"] = square ("#0000ff");
+    document.notifyDocumentAssetChanged ("memory/other.svg");
+
+    EXPECT_EQ (component.snapshotToImage (*gpuContext).getPixelColor (12, 8), Color (0xff00ff00));
+    EXPECT_EQ (document.read.size(), 2);
+
+    document.notifyDocumentAssetChanged ("memory/square.svg");
+
+    painted = component.snapshotToImage (*gpuContext);
+    EXPECT_GT (painted.getPixelColor (4, 8).getRed(), 200);
+    EXPECT_EQ (painted.getPixelColor (12, 8), Color (0xff0000ff));
+    EXPECT_EQ (document.read, StringArray ({ "memory/pixel.png", "memory/square.svg", "memory/square.svg" }));
+}
+
 TEST_F (DrawingStyleGpuTest, CornerSizeRoundsRectanglesElliptically)
 {
     const auto image = render (R"yui(

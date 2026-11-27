@@ -106,7 +106,7 @@ public:
     void clear();
 
     //==============================================================================
-    /** Sets the base directory used to resolve relative asset paths (such as `Image.source`). */
+    /** Sets the base directory used to resolve relative asset paths (the files of `font ("...")` values). */
     void setBaseDirectory (const File& directory)
     {
         baseDirectory = directory;

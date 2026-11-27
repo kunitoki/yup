@@ -108,7 +108,8 @@ public:
     class YUP_API Listener
     {
     public:
-        virtual ~Listener() = default;
+        /** Destructor. A listener following a document is removed from it. */
+        virtual ~Listener();
 
         /** Called after each load of the document, successful or not, and each time its interface is
             built again without a load: after a change of its tree or of the range of a repeat.
@@ -120,9 +121,27 @@ public:
             @param path  The path of the file, as it was given to ComponentDocument::readAsset.
         */
         virtual void documentAssetChanged (ComponentDocument& document, const String& path) {}
+
+        /** Adds the listener to a document, after removing it from the one it followed before.
+
+            A listener that follows is removed by itself when it is destroyed, and may outlive the
+            document: neither has to know which of the two goes first. What reads a file through
+            the document of a component follows what ComponentDocument::findFor() returns before
+            reading, to read the file again when it changes.
+
+            @param document  The document to follow, or nullptr to follow none.
+
+            @returns True when this is another document than the one followed so far.
+        */
+        bool follow (ComponentDocument* document);
+
+    private:
+        WeakReference<ComponentDocument> followed;
     };
 
-    /** Adds a listener, which must be removed before it is destroyed. */
+    /** Adds a listener, which must be removed before it is destroyed. One that follows the
+        document is added and removed by itself (see Listener::follow).
+    */
     void addListener (Listener* listener) { documentListeners.add (listener); }
 
     /** Removes a listener. */
@@ -148,6 +167,19 @@ public:
         @param path       The path of the file. An empty path gives nothing.
     */
     static std::optional<MemoryBlock> readAssetFor (const Component* component, const String& path);
+
+    /** Returns the file on disk a path stands for, where @ref readAssetFor reads it.
+
+        This is for what has to follow the references a file makes to the ones next to it, such as
+        an SVG naming its images.
+
+        @param component  The component the path was written for, which can be null.
+        @param path       The path of the file.
+
+        @returns The file, which may not exist, or a default File when the assets of the document
+                 of the component are not the files of a folder.
+    */
+    static File getAssetFileFor (const Component* component, const String& path);
 
 protected:
     //==============================================================================

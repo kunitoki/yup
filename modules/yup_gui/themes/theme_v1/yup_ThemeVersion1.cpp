@@ -904,52 +904,20 @@ void paintLabel (Graphics& g, const ApplicationTheme& theme, const Label& l)
 void paintImageComponentImage (Graphics& g, const ApplicationTheme&, const ImageComponent& c, const Rectangle<float>& area)
 {
     const auto imageOpacity = c.getImageOpacity();
-    if (imageOpacity <= 0.0f || area.isEmpty())
-        return;
-
-    if (const auto& drawable = c.getDrawable())
-    {
-        const auto savedState = g.saveState();
-        if (imageOpacity < 1.0f)
-            g.setOpacity (g.getOpacity() * imageOpacity);
-
-        drawable->paint (g, area, c.getFitting(), c.getJustification());
-        return;
-    }
-
+    const auto& drawable = c.getDrawable();
     const auto& image = c.getImage();
-    if (! image.isValid())
+
+    if (imageOpacity <= 0.0f || area.isEmpty() || (drawable == nullptr && ! image.isValid()))
         return;
 
     const auto savedState = g.saveState();
     if (imageOpacity < 1.0f)
         g.setOpacity (g.getOpacity() * imageOpacity);
 
-    const Rectangle<float> sourceBounds { 0.0f, 0.0f, static_cast<float> (image.getWidth()), static_cast<float> (image.getHeight()) };
-
-    if (c.getFitting() == Fitting::tile)
-    {
-        g.setClipPath (area);
-
-        for (float y = area.getY(); y < area.getBottom(); y += sourceBounds.getHeight())
-        {
-            for (float x = area.getX(); x < area.getRight(); x += sourceBounds.getWidth())
-                g.drawImage (image, { x, y, sourceBounds.getWidth(), sourceBounds.getHeight() });
-        }
-
-        return;
-    }
-
-    // The image starts at the origin, so the transform fitting it tells where it goes and how much it is scaled
-    const auto fit = sourceBounds.getTransformToFit (area, c.getFitting(), c.getJustification());
-    const Rectangle<float> destBounds { fit.getTranslateX(), fit.getTranslateY(), sourceBounds.getWidth() * fit.getScaleX(), sourceBounds.getHeight() * fit.getScaleY() };
-    if (destBounds.isEmpty())
-        return;
-
-    if (! area.contains (destBounds))
-        g.setClipPath (area);
-
-    g.drawImage (image, destBounds);
+    if (drawable != nullptr)
+        drawable->paint (g, area, c.getFitting(), c.getJustification());
+    else
+        detail::drawFittedImage (g, image, area, c.getFitting(), c.getJustification());
 }
 
 void paintImageComponent (Graphics& g, const ApplicationTheme& theme, const ImageComponent& c)

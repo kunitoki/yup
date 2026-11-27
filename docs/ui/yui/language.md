@@ -193,9 +193,10 @@ Title { titleFont: font ("fonts/Inter.ttf").withAxisValue ("wght", 700).withHeig
 Font files load in component property values (instances, `component`
 defaults, `tokens`, bindings), not in the property defaults at the top of a
 `drawing`. A document loaded from embedded resources has no folder, so the
-relative paths of its fonts and images resolve against the working directory.
+relative paths of its fonts resolve against the working directory.
 The files a document reads through itself are found among the embedded
-resources instead: the shaders of `shader` blocks, and the models and textures
+resources instead: the shaders of `shader` blocks, the files of `Image` and of
+the `image` and `svg` elements of a drawing, and the models and textures
 of a [3D scene](scenes.md#assets-and-hot-reload).
 
 | Where | Declares |

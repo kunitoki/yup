@@ -47,6 +47,16 @@ constexpr float kMeterLinearAreaDb = -30.0f;
 constexpr double kMeterRestSeconds = 1.0;
 constexpr int kMeterRestPollMilliseconds = 100;
 
+struct KMeterComponentIds
+{
+    static inline const Identifier peakDb { "peakDb" };
+    static inline const Identifier averageDb { "averageDb" };
+    static inline const Identifier peakHoldDb { "peakHoldDb" };
+    static inline const Identifier clipping { "clipping" };
+    static inline const Identifier rangeMinDb { "rangeMinDb" };
+    static inline const Identifier rangeMaxDb { "rangeMaxDb" };
+};
+
 float findLevelPosition (const std::vector<KMeterComponent::ScaleSegment>& segments, float db, float emptyPosition)
 {
     if (segments.empty())
@@ -79,8 +89,6 @@ const Identifier KMeterComponent::Style::peakLevelColorId { "kMeterPeakLevel" };
 const Identifier KMeterComponent::Style::peakLevelClipColorId { "kMeterPeakLevelClip" };
 const Identifier KMeterComponent::Style::peakHoldColorId { "kMeterPeakHold" };
 
-const Identifier KMeterComponent::clippingPropertyId { "clipping" };
-
 //==============================================================================
 const ComponentTypeInfo& KMeterComponent::getClassTypeInfo()
 {
@@ -106,12 +114,12 @@ const ComponentTypeInfo& KMeterComponent::getClassTypeInfo()
                                      &M::setScaleMapping,
                                      "How the levels are placed along the meter: with the segments of the K-System, or linearly in dB.")
                                  .property ("refreshRate", &M::getRefreshRate, &M::setRefreshRate, 30, "The updates a second, from 10 to 60.")
-                                 .readOnly ("peakDb", [] (const M& m) { return m.getPeakLevel(); }, -100.0, "The peak level shown, in dB.")
-                                 .readOnly ("averageDb", [] (const M& m) { return m.getAverageLevel(); }, -100.0, "The average level shown, in dB.")
-                                 .readOnly ("peakHoldDb", [] (const M& m) { return m.getPeakHoldLevel(); }, -100.0, "The peak level held, in dB.")
-                                 .state (clippingPropertyId, [] (const M& m) { return m.isClipping(); }, false, "Whether the signal is clipping.")
-                                 .readOnly ("rangeMinDb", [] (const M& m) { return KMeterState::rangeMinForScale (m.getScale()); }, {}, "The lowest level of the scale of the meter, in dB.")
-                                 .readOnly ("rangeMaxDb", [] (const M& m) { return KMeterState::rangeMaxForScale (m.getScale()); }, {}, "The highest level of the scale of the meter, in dB.")
+                                 .readOnly (KMeterComponentIds::peakDb, [] (const M& m) { return m.getPeakLevel(); }, -100.0, "The peak level shown, in dB.")
+                                 .readOnly (KMeterComponentIds::averageDb, [] (const M& m) { return m.getAverageLevel(); }, -100.0, "The average level shown, in dB.")
+                                 .readOnly (KMeterComponentIds::peakHoldDb, [] (const M& m) { return m.getPeakHoldLevel(); }, -100.0, "The peak level held, in dB.")
+                                 .state (KMeterComponentIds::clipping, [] (const M& m) { return m.isClipping(); }, false, "Whether the signal is clipping.")
+                                 .readOnly (KMeterComponentIds::rangeMinDb, [] (const M& m) { return KMeterState::rangeMinForScale (m.getScale()); }, {}, "The lowest level of the scale of the meter, in dB.")
+                                 .readOnly (KMeterComponentIds::rangeMaxDb, [] (const M& m) { return KMeterState::rangeMaxForScale (m.getScale()); }, {}, "The highest level of the scale of the meter, in dB.")
                                  .signal ("onLevelChanged", &M::onLevelChanged, "Emitted with the peak and the average level, in dB, when either moved by half a dB.", { { Identifier ("peakDb"), ComponentProperty::Type::number }, { Identifier ("averageDb"), ComponentProperty::Type::number } })
                                  .signal ("onClippingChanged", &M::onClippingChanged, "Emitted when the signal starts or stops clipping.", { { Identifier ("clipping"), ComponentProperty::Type::boolean } })
                                  .build();
@@ -149,7 +157,7 @@ void KMeterComponent::setState (KMeterState* newState)
     updateLevels();
     repaint();
     followLevels();
-    notifyClippingChange();
+    notifyLevelChanges();
 }
 
 void KMeterComponent::setChannel (int channel)
@@ -161,6 +169,7 @@ void KMeterComponent::setChannel (int channel)
 
     updateLevels();
     repaint();
+    notifyLevelChanges();
 }
 
 //==============================================================================
@@ -515,18 +524,36 @@ void KMeterComponent::checkForCallbacks()
             return;
     }
 
-    notifyClippingChange();
+    notifyLevelChanges();
 }
 
-void KMeterComponent::notifyClippingChange()
+void KMeterComponent::notifyLevelChanges()
 {
-    // What follows the state, as a rule of a stylesheet selecting it, is told when it changes
-    const bool clipping = levels.clipping;
+    // What follows the levels, as a binding reading one or a rule of a stylesheet selecting the clipping, is told
+    // when they change
+    if (lastNotifiedLevels == levels)
+        return;
 
-    if (clipping != lastNotifiedClipping)
+    const auto told = std::exchange (lastNotifiedLevels, levels);
+
+    const std::pair<const Identifier*, bool> properties[] = {
+        { &KMeterComponentIds::peakDb, levels.peakDb != told.peakDb },
+        { &KMeterComponentIds::averageDb, levels.averageDb != told.averageDb },
+        { &KMeterComponentIds::peakHoldDb, levels.peakHoldDb != told.peakHoldDb },
+        { &KMeterComponentIds::clipping, levels.clipping != told.clipping },
+        { &KMeterComponentIds::rangeMinDb, levels.scale != told.scale },
+        { &KMeterComponentIds::rangeMaxDb, levels.scale != told.scale }
+    };
+
+    const BailOutChecker bailOutChecker (this);
+
+    for (const auto& [property, hasChanged] : properties)
     {
-        lastNotifiedClipping = clipping;
-        notifyPropertyChanged (clippingPropertyId);
+        if (hasChanged)
+            notifyPropertyChanged (*property);
+
+        if (bailOutChecker.shouldBailOut())
+            return;
     }
 }
 
