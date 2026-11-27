@@ -49,8 +49,8 @@ namespace yup
     keyframes, which restyle the meshes: `baseColor`, `baseColorTexture`, `metallic`,
     `roughness`, `metallicRoughnessTexture`, `normalTexture`, `normalScale`, `occlusionTexture`,
     `occlusionStrength`, `emissive`, `emissiveTexture`, `emissiveStrength`, `alphaMode`,
-    `alphaCutoff`, `doubleSided`, `clearcoat`, `clearcoatRoughness`, `sheenColor` and
-    `sheenRoughness`.
+    `alphaCutoff`, `doubleSided`, `ior`, `specular`, `specularColor`, `clearcoat`,
+    `clearcoatRoughness`, `sheenColor` and `sheenRoughness`.
 
     The colors are colors of the interface, sRGB encoded: the material gets them as the linear
     factors it shades with (the alpha of `baseColor` as it is), and they read back as they were
@@ -220,6 +220,7 @@ private:
     Material::Ptr material { new Material() };
     Color baseColor { 0xffffffff };
     Color emissive { 0xff000000 };
+    Color specularColor { 0xffffffff };
     Color sheenColor { 0xff000000 };
     std::array<String, 5> texturePaths;
     WeakReference<Component> host;

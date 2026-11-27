@@ -76,8 +76,12 @@ class SceneNodeComponent;
     }
     @endcode
 
-    The environment, the fog and the RenderSettings of the renderer have no property: set them
-    from code, on the scene and on getRenderer().
+    Three more properties are settings of the renderer, which stay when the component is given
+    another scene: `tier` is its RenderSettings::tier (`automatic`, `raster` or `full`), `samples`
+    its sample count (SceneRenderer::setSampleCount) and `bloom` its RenderSettings::bloom. They
+    read what the renderer holds, so they follow what code sets on getRenderer(), which tells no
+    change: repaint the component after it. The environment, the fog and the other RenderSettings
+    have no property: set them from code, on the scene and on getRenderer().
 
     The nodes take the pointer where they are shown, see findNodeAt(): a mouse event goes to the
     node under it, and to the component only where no node is. A component that moves its camera
@@ -412,6 +416,8 @@ private:
     void watchScene();
     SceneSettings getSettings() const;
     void featureChanged (const Identifier& property);
+    template <class Value>
+    void setRenderSetting (Value RenderSettings::* setting, Value newValue, const Identifier& property);
     ComponentDocument* findDocument();
     void sendProblem (const Problem& problem);
     void sendProblems();

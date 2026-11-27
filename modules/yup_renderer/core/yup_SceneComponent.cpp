@@ -34,6 +34,9 @@ struct SceneComponentIds
     static inline const Identifier toneMapping { "toneMapping" };
     static inline const Identifier defaultLight { "defaultLight" };
     static inline const Identifier continuous { "continuous" };
+    static inline const Identifier tier { "tier" };
+    static inline const Identifier samples { "samples" };
+    static inline const Identifier bloom { "bloom" };
 };
 
 /* The first active camera below a component, depth first, whose entity is in a scene and is not the one going. */
@@ -393,6 +396,18 @@ void SceneComponent::featureChanged (const Identifier& property)
     // Told last: who hears about the change may destroy the component
     repaint();
     notifyPropertyChanged (property);
+}
+
+template <class Value>
+void SceneComponent::setRenderSetting (Value RenderSettings::* setting, Value newValue, const Identifier& property)
+{
+    auto settings = renderer.getRenderSettings();
+    if (settings.*setting == newValue)
+        return;
+
+    settings.*setting = newValue;
+    renderer.setRenderSettings (settings);
+    featureChanged (property);
 }
 
 void SceneComponent::setBackgroundColor (Color newColor)
@@ -1023,6 +1038,28 @@ const ComponentTypeInfo& SceneComponent::getClassTypeInfo()
                                      "The operator mapping the lit colors into the displayable range.")
                                  .styleableProperty (SceneComponentIds::defaultLight, &SceneComponent::isDefaultLightEnabled, &SceneComponent::setDefaultLightEnabled, SceneSettings().useDefaultLight, "Whether a default directional light shines while the scene has no light.")
                                  .property (SceneComponentIds::continuous, &SceneComponent::isUpdatingContinuously, &SceneComponent::setContinuousUpdates, false, "Updates and repaints the scene on every display frame, instead of when something in it changes.")
+                                 .enumeration<RenderSettings::TierPreference> (
+                                     SceneComponentIds::tier,
+                                     { { "automatic", RenderSettings::TierPreference::automatic },
+                                       { "raster", RenderSettings::TierPreference::raster },
+                                       { "full", RenderSettings::TierPreference::full } },
+                                     [] (const SceneComponent& view) { return view.renderer.getRenderSettings().tier; },
+                                     [] (SceneComponent& view, RenderSettings::TierPreference tier) { view.setRenderSetting (&RenderSettings::tier, tier, SceneComponentIds::tier); },
+                                     "The tier of the renderer drawing the scene: the full one on the desktop GPUs that can run it and the raster one elsewhere (automatic), the raster one everywhere (raster), or the full one wherever the device can run it (full).")
+                                 .property (
+                                     SceneComponentIds::samples,
+                                     [] (const SceneComponent& view) { return view.renderer.getSampleCount(); },
+                                     [] (SceneComponent& view, int samples)
+                                     {
+                                         const auto previous = view.renderer.getSampleCount();
+                                         view.renderer.setSampleCount (samples);
+
+                                         if (view.renderer.getSampleCount() != previous)
+                                             view.featureChanged (SceneComponentIds::samples);
+                                     },
+                                     SceneRenderer().getSampleCount(),
+                                     "The MSAA samples per pixel of the raster tier, rounded down to a power of two the device supports. 1 turns multisampling off.")
+                                 .property (SceneComponentIds::bloom, [] (const SceneComponent& view) { return view.renderer.getRenderSettings().bloom; }, [] (SceneComponent& view, bool bloom) { view.setRenderSetting (&RenderSettings::bloom, bloom, SceneComponentIds::bloom); }, RenderSettings().bloom, "Whether the bright highlights glow, where the device can draw it.")
                                  .build();
 
     return info;

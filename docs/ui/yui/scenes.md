@@ -106,6 +106,9 @@ Every element also has the properties of a component: `id`, `class`,
 | `toneMapping` | `reinhard`, `aces`, `agx` | `reinhard` | How the lit colors are brought into the range of the display. |
 | `defaultLight` | boolean | `true` | Whether a default directional light shines while the scene has no light. |
 | `continuous` | boolean | `false` | Updates and repaints the scene on every frame, instead of when something in it changes. |
+| `tier` | `automatic`, `raster`, `full` | `automatic` | The tier of the renderer drawing the scene, see below. |
+| `samples` | integer | `4` | The samples per pixel that smooth the edges on the raster tier, rounded down to a power of two the device supports. `1` turns it off. |
+| `bloom` | boolean | `false` | A glow around the bright highlights, where the device can draw it. |
 
 - A `Scene3D` is sized as every component is: by the layout it is in
   (`flexGrow: 1`), or by its `width` and `height`.
@@ -115,8 +118,29 @@ Every element also has the properties of a component: `id`, `class`,
   which can read `parent.width` and `parent.height`.
 - Clips, transitions, keyframes and shaders given the time repaint the scene by
   themselves. `continuous` is for scenes that code animates.
-- The environment, the fog and the settings of the renderer have no property:
-  see [What is left to C++](#what-is-left-to-c).
+- The environment, the fog and the other settings of the renderer have no
+  property: see [What is left to C++](#what-is-left-to-c).
+
+`tier` is `automatic` by default: the full tier of the renderer on the desktop
+GPUs that can run it, and the raster tier elsewhere, as on phones, tablets and
+OpenGL. The full tier adds ambient occlusion, soft shadows and reflections,
+and refines the picture over 16 frames after each change. The raster tier
+draws each change once, its edges smoothed by `samples`. `tier: raster` asks
+for it on every device, which keeps a scene that is one part of an interface
+cheap:
+
+```yui
+Scene3D {
+    tier: raster;
+
+    Camera3D { position: [0, 0.5, 4]; lookAt: [0, 0, 0]; }
+    Model3D  { source: "models/computer.glb"; }
+}
+```
+
+`full` asks for the full tier where `automatic` does not pick it, on a phone
+for instance, and still gives the raster one where the device can't run it.
+[Platform tiers](../../3d/platform-tiers.md) tells what each device runs.
 
 ### `Node3D`
 
@@ -245,6 +269,8 @@ whole model, and directly inside the `Scene3D` the one of the whole scene.
 | `alphaMode` | `opaque`, `mask`, `blend` | `opaque` | Whether the alpha is ignored, cuts the surface out below `alphaCutoff`, or blends it over what is behind. |
 | `alphaCutoff` | number | `0.5` | The alpha below which a masked surface is cut out. |
 | `doubleSided` | boolean | `false` | Whether the back faces are drawn too. |
+| `ior` | number | `1.5` | The index of refraction of a non-metal, which tells how much it reflects seen from the front: 4% at `1.5`, everything at `0`. |
+| `specular`, `specularColor` | number, color | `1`, `#ffffff` | The strength of the reflections of a non-metal, from 0 to 1, and the color tinting them. |
 | `clearcoat`, `clearcoatRoughness` | number | `0` | A clear varnish over the surface, and how rough it is. |
 | `sheenColor`, `sheenRoughness` | color, number | `#000000`, `0` | A velvet-like sheen at grazing angles, and how wide it spreads. |
 | `shader` | name | none | A `shader` block coloring the meshes, see [Custom materials](#custom-materials). |
@@ -343,8 +369,9 @@ style {
   to three numbers is not blended, and neither are lists of different lengths.
 - A [transition needs a value on both sides](styles.md#transitions-and-animations):
   give the resting rule one.
-- `toneMapping`, `continuous`, `projection`, `type`, `surface`, `node`,
-  `source` and `scene` are not styleable: set them on the element.
+- `toneMapping`, `continuous`, `tier`, `samples`, `bloom`, `projection`,
+  `type`, `surface`, `node`, `source` and `scene` are not styleable: set them
+  on the element.
 - `@keyframes` hold the values themselves. To move several objects the same
   way around where each stands, put each in a `Node3D` that places it, and
   animate the object inside.
@@ -819,9 +846,9 @@ auto* view = document.findById<yup::SceneComponent> ("view");     // Scene3D { i
 // The environment and the fog are nodes of the root of the scene
 view->getOrCreateScene().getRoot().attach<yup::EnvironmentNode> (environment);
 
-// The tier, bloom, depth of field and the other settings of the renderer
+// The settings of the renderer that have no property, such as the depth of field
 auto settings = view->getRenderer().getRenderSettings();
-settings.bloom = true;
+settings.depthOfField = true;
 view->getRenderer().setRenderSettings (settings);
 
 // What a camera or a light has beyond its properties
@@ -830,6 +857,9 @@ if (auto* camera = document.findById<yup::SceneCameraComponent> ("camera"))
         lens->fStop = 1.4f;
 ```
 
+- The `tier` and the `bloom` of the [`Scene3D`](#scene3d) are two of the
+  settings of the renderer: change the ones it has, as above, and not new
+  ones, which would bring back the `automatic` tier.
 - `SceneNodeComponent::getEntity()` is the entity of an element, and
   `SceneModelComponent::getInstance()` the root of the model it shows, for
   code that attaches nodes of its own. They stay the same when the element
@@ -886,16 +916,15 @@ all of these before the application runs.
 ## Limits and costs
 
 - **A still scene costs nothing.** It is drawn when something in it changes.
-  On desktop GPUs the renderer then refines the picture over a few frames, and
-  stops. See [Platform tiers](../../3d/platform-tiers.md).
+  The full tier, which a desktop GPU draws with unless the scene asks for
+  `tier: raster`, then refines the picture over a few frames, and stops. See
+  [Platform tiers](../../3d/platform-tiers.md).
 - **A repaint around a still scene shows the picture it has.** A label over
   the scene, a tooltip or a neighbor that repaints does not have the scene
   drawn again: only the first of those repaints after a change can still draw
   it once. Some scenes are drawn again by every such repaint: one with a
-  material that has a `shader` block, one that the depth of field blurs on a
-  desktop GPU, and, where the picture is not refined over several frames
-  (phones, tablets and OpenGL, see [Platform tiers](../../3d/platform-tiers.md)),
-  one showing components on a mesh.
+  material that has a `shader` block, one that the depth of field blurs on the
+  full tier, and, on the raster tier, one showing components on a mesh.
 - **What runs at every frame**: a playing clip, an `animation:`, a running
   transition, a material or an effect given the `time`, and `continuous`.
 - **Skinned and morphed meshes are deformed on the CPU**, each time their

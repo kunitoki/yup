@@ -578,6 +578,46 @@ TEST_F (SceneMaterialComponentTests, AMaterialThatSetsNothingIsTheDefaultOne)
     EXPECT_EQ (quad->getEntity().getNumChildren(), 0);
 }
 
+TEST_F (SceneMaterialComponentTests, TheReflectionsOfANonMetalAreFactorsOfTheMaterial)
+{
+    // Declared with what a default material has
+    const Material defaults {};
+    const auto& type = SceneMaterialComponent::getClassTypeInfo();
+
+    const auto* ior = type.findProperty (Identifier ("ior"));
+    const auto* specular = type.findProperty (Identifier ("specular"));
+    const auto* specularColor = type.findProperty (Identifier ("specularColor"));
+
+    ASSERT_NE (ior, nullptr);
+    ASSERT_NE (specular, nullptr);
+    ASSERT_NE (specularColor, nullptr);
+
+    EXPECT_FLOAT_EQ (static_cast<float> (ior->defaultValue), defaults.ior);
+    EXPECT_FLOAT_EQ (static_cast<float> (specular->defaultValue), defaults.specularFactor);
+    EXPECT_EQ (VariantConverter<Color>::fromVar (specularColor->defaultValue), Colors::white);
+
+    YuiDocument document;
+    load (document, quadWith ("Material3D { id: paint; ior: 1.33; specular: 0.5; specularColor: #ff8080; }"));
+
+    auto* paint = document.findById<SceneMaterialComponent> ("paint");
+    ASSERT_NE (paint, nullptr);
+
+    const auto material = paint->getMaterial();
+
+    EXPECT_FLOAT_EQ (material->ior, 1.33f);
+    EXPECT_FLOAT_EQ (material->specularFactor, 0.5f);
+
+    // The color of the interface is sRGB encoded: the material gets it linear, as its other colors
+    EXPECT_NEAR (material->specularColorFactor[0], 1.0f, 1.0e-5f);
+    EXPECT_NEAR (material->specularColorFactor[1], toLinear (128.0f / 255.0f), 1.0e-5f);
+    EXPECT_NEAR (material->specularColorFactor[2], toLinear (128.0f / 255.0f), 1.0e-5f);
+
+    // They read back as they were set
+    EXPECT_FLOAT_EQ (static_cast<float> (paint->getProperty (Identifier ("ior"))), 1.33f);
+    EXPECT_FLOAT_EQ (static_cast<float> (paint->getProperty (Identifier ("specular"))), 0.5f);
+    EXPECT_EQ (VariantConverter<Color>::fromVar (paint->getProperty (Identifier ("specularColor"))), Color (0xffff8080));
+}
+
 TEST_F (SceneMaterialComponentTests, TexturesAreReadThroughTheDocumentAndShared)
 {
     YuiDocument document;

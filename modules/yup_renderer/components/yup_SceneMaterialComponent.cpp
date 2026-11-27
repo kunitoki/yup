@@ -143,6 +143,7 @@ void SceneMaterialComponent::setColorValue (Color& color, Color newColor, const 
 
     material->baseColorFactor = { base[0], base[1], base[2], baseColor.getAlphaFloat() };
     material->emissiveFactor = linear (emissive);
+    material->specularColorFactor = linear (specularColor);
     material->sheenColorFactor = linear (sheenColor);
 
     repaintScene();
@@ -765,6 +766,9 @@ const ComponentTypeInfo& SceneMaterialComponent::getClassTypeInfo()
         addAlphaMode();
         addFactor ("alphaCutoff", &Material::alphaCutoff, "The alpha below which a masked surface is cut out.");
         addFactor ("doubleSided", &Material::doubleSided, "Whether the back faces are drawn too.");
+        addFactor ("ior", &Material::ior, "The index of refraction of a non-metal, which tells how much it reflects seen from the front: 4% at 1.5, everything at 0.");
+        addFactor ("specular", &Material::specularFactor, "The strength of the reflections of a non-metal, from 0 for none to 1.");
+        addColor ("specularColor", &Self::specularColor, Colors::white, "The color tinting the reflections of a non-metal.");
         addFactor ("clearcoat", &Material::clearcoatFactor, "The strength of a clear varnish over the surface, 0 for none.");
         addFactor ("clearcoatRoughness", &Material::clearcoatRoughnessFactor, "How rough the varnish is.");
         addColor ("sheenColor", &Self::sheenColor, Colors::black, "The color of a velvet-like sheen at grazing angles, black for none.");

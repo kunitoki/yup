@@ -218,6 +218,50 @@ TEST_F (Scene3DTests, PropertiesSetTheFeatureNodesOfTheRoot)
     EXPECT_FALSE (view->isUpdatingContinuously());
 }
 
+TEST_F (Scene3DTests, PropertiesSetTheSettingsOfTheRenderer)
+{
+    // Declared with what a renderer starts from: the tier is left to the device
+    const auto& type = SceneComponent::getClassTypeInfo();
+
+    const auto* tier = type.findProperty (Identifier ("tier"));
+    const auto* samples = type.findProperty (Identifier ("samples"));
+    const auto* bloom = type.findProperty (Identifier ("bloom"));
+
+    ASSERT_NE (tier, nullptr);
+    ASSERT_NE (samples, nullptr);
+    ASSERT_NE (bloom, nullptr);
+
+    EXPECT_EQ (tier->enumValues, StringArray ({ "automatic", "raster", "full" }));
+    EXPECT_EQ (tier->defaultValue.toString(), "automatic");
+    EXPECT_EQ (static_cast<int> (samples->defaultValue), SceneRenderer().getSampleCount());
+    EXPECT_FALSE (static_cast<bool> (bloom->defaultValue));
+
+    YuiDocument document;
+    load (document, "Scene3D { id: view; tier: raster; samples: 2; bloom: true; }");
+
+    auto* view = document.findById<SceneComponent> ("view");
+    ASSERT_NE (view, nullptr);
+
+    const auto& renderer = view->getRenderer();
+
+    EXPECT_EQ (renderer.getRenderSettings().tier, RenderSettings::TierPreference::raster);
+    EXPECT_EQ (renderer.getSampleCount(), 2);
+    EXPECT_TRUE (renderer.getRenderSettings().bloom);
+
+    // They read back what the renderer is asked for
+    EXPECT_EQ (view->getProperty (Identifier ("tier")).toString(), "raster");
+    EXPECT_EQ (static_cast<int> (view->getProperty (Identifier ("samples"))), 2);
+    EXPECT_TRUE (static_cast<bool> (view->getProperty (Identifier ("bloom"))));
+
+    // A value taken out of the document goes back to the one a new renderer has
+    load (document, "Scene3D { id: view; }");
+    ASSERT_EQ (document.findById<SceneComponent> ("view"), view);
+
+    EXPECT_EQ (renderer.getRenderSettings().tier, RenderSettings::TierPreference::automatic);
+    EXPECT_EQ (renderer.getSampleCount(), SceneRenderer().getSampleCount());
+    EXPECT_FALSE (renderer.getRenderSettings().bloom);
+}
+
 TEST_F (Scene3DTests, ATranslucentBackgroundMakesTheComponentNotOpaque)
 {
     YuiDocument document;
@@ -455,6 +499,55 @@ TEST_F (Scene3DTests, AFeatureIsPaintedBeforeItsChangeIsTold)
     EXPECT_TRUE (owner.wasRepaintRequested);
 }
 
+TEST_F (Scene3DTests, ASettingOfTheRendererThatChangesIsPaintedAndTold)
+{
+    struct Recorder final : ComponentListener
+    {
+        void componentPropertyChanged (Component&, const Identifier& name) override
+        {
+            changed.add (name.toString());
+        }
+
+        StringArray changed;
+    };
+
+    SceneComponent view;
+    showScene (view);
+
+    Recorder recorder;
+    view.addComponentListener (&recorder);
+    Internals::takeRepaintRequest (view);
+
+    // The renderer finds the settings it is given at the next frame it draws: the scene is painted again for each
+    view.setProperty (Identifier ("tier"), "raster");
+    EXPECT_EQ (view.getRenderer().getRenderSettings().tier, RenderSettings::TierPreference::raster);
+    EXPECT_TRUE (Internals::takeRepaintRequest (view));
+
+    view.setProperty (Identifier ("samples"), 8);
+    EXPECT_EQ (view.getRenderer().getSampleCount(), 8);
+    EXPECT_TRUE (Internals::takeRepaintRequest (view));
+
+    view.setProperty (Identifier ("bloom"), true);
+    EXPECT_TRUE (view.getRenderer().getRenderSettings().bloom);
+    EXPECT_TRUE (Internals::takeRepaintRequest (view));
+
+    EXPECT_EQ (recorder.changed, StringArray ({ "tier", "samples", "bloom" }));
+
+    // The value a setting already has changes nothing, and neither does a name that is no tier
+    recorder.changed.clear();
+
+    view.setProperty (Identifier ("tier"), "raster");
+    view.setProperty (Identifier ("tier"), "fastest");
+    view.setProperty (Identifier ("samples"), 8);
+    view.setProperty (Identifier ("bloom"), true);
+
+    EXPECT_EQ (view.getRenderer().getRenderSettings().tier, RenderSettings::TierPreference::raster);
+    EXPECT_FALSE (Internals::takeRepaintRequest (view));
+    EXPECT_TRUE (recorder.changed.isEmpty());
+
+    view.removeComponentListener (&recorder);
+}
+
 TEST_F (Scene3DTests, AFileThatChangesIsToldToAllThatUseItWhateverTheFirstOnesDo)
 {
     files["wood.png"] = redPng();
@@ -544,4 +637,25 @@ TEST_F (Scene3DTests, AnExposureThatExposesNothingIsReportedAndNotKept)
 
     EXPECT_FLOAT_EQ (view->getExposure(), 2.0f);
     EXPECT_EQ (Internals::getNumProblems (*view), 0u);
+}
+
+TEST_F (Scene3DTests, ATierTheRendererDoesNotHaveIsReportedAndNotKept)
+{
+    YuiDocument document;
+    const auto result = document.loadFromString ("Scene3D {\n"
+                                                 "    id: view;\n"
+                                                 "    tier: fastest;\n"
+                                                 "}");
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    expectDiagnostic (document, "Scene3D.tier: expected one of automatic, raster, full");
+
+    // Where the value is written
+    const auto* diagnostic = findDiagnostic (document, "Scene3D.tier");
+    ASSERT_NE (diagnostic, nullptr);
+    EXPECT_EQ (diagnostic->line, 3);
+
+    auto* view = document.findById<SceneComponent> ("view");
+    ASSERT_NE (view, nullptr);
+    EXPECT_EQ (view->getRenderer().getRenderSettings().tier, RenderSettings::TierPreference::automatic);
 }
