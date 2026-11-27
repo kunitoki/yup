@@ -15,10 +15,6 @@ The file runs through the gui_app fixture, as the C++ tests of the styling insta
 Not covered: StyleSheet.findPalette is not bound, because ThemePalette is not.
 """
 
-# The parser of yup_gui_markup is what makes a sheet from text
-if not hasattr(yup, "YuiParser"):
-    pytest.skip(allow_module_level=True)
-
 pytestmark = pytest.mark.usefixtures("gui_app")
 
 SHEET = """
