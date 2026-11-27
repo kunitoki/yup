@@ -99,7 +99,8 @@ void main()
 }
 ```
 
-- Each property named is read with `Component::findProperty()` at every paint,
+- Each property named is a `ShaderProperty`, a name and a type. It is read with
+  `Component::findProperty()` at every paint,
   so what sets it drives the shader and repaints the component: a stylesheet
   rule, a transition, a binding or `setProperty()`. The shader only runs again
   when a value it reads, a series or what the component painted changed: a

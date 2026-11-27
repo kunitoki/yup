@@ -164,6 +164,7 @@
 #include "effects/yup_ColorMatrixEffect.cpp"
 #include "effects/yup_FilterEffect.cpp"
 #include "effects/yup_ComponentEffectRegistry.cpp"
+#include "effects/yup_ShaderProperty.cpp"
 #include "effects/yup_ShaderEffect.cpp"
 #include "drawing/yup_DrawingScope.cpp"
 #include "drawing/yup_PropertyExpression.cpp"

@@ -83,6 +83,7 @@ protected:
         static const ComponentTypeInfo& getMeterTypeInfo()
         {
             static const ComponentTypeInfo info = ComponentTypeBuilder<MeterWidget> ("MeterWidget")
+                .description ("A meter of levels.")
                 .series ("levels", &MeterWidget::getLevels, &MeterWidget::getRevision, "The level of each band.")
                 .series ("names", &MeterWidget::getNames)
                 .part ("icon", &MeterWidget::getIconBounds, "The icon.")
@@ -247,6 +248,14 @@ TEST_F (ComponentTypeInfoTests, IsASubtypeOfTheTypesItDerivesFromAndNotOfTheirNa
     // By name they are told as the same
     EXPECT_TRUE (derived.isSubtypeOf (base.getTypeName()));
     EXPECT_TRUE (namesake.isSubtypeOf (base.getTypeName()));
+}
+
+TEST_F (ComponentTypeInfoTests, ATypeIsDescribedByItsBuilderAndNotByItsBase)
+{
+    EXPECT_EQ (MeterWidget::getMeterTypeInfo().getDescription(), "A meter of levels.");
+
+    LabeledMeterWidget labeled;
+    EXPECT_TRUE (labeled.getTypeInfo().getDescription().isEmpty());
 }
 
 TEST_F (ComponentTypeInfoTests, SeriesAreReadWhereTheComponentKeepsThem)

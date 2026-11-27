@@ -10,7 +10,7 @@
       "",
       "    Label {",
       "        id: ${10:caption};",
-      "        text: $3;",
+      "        text: root.$3;",
       "    }",
       "}",
       ""

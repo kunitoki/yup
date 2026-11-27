@@ -75,10 +75,16 @@ runs the tests that need no editor, with Node: the server of the tools for
 agents and its token, what those tools read and write, the file holding the
 token being kept out of the commits, the files a document is given to the
 tool with, the problems of a file several documents import, the columns of
-the tool as an editor counts them, the grammar and the snippets. They are
-listed in the `test` script of `package.json` and in `esbuild.js`, which
-bundles them. What needs the tool is tested with it, by
-`just yui_tool_wasm_test`.
+the tool as an editor counts them, the script of the page of the preview being
+one a page can compile, the grammar and the snippets. Every
+`test/*.test.ts` is one of them: `esbuild.js` bundles those it finds into
+`out-test`, where the `test` script of `package.json` has Node run those it
+finds. What needs the tool is tested with it, by
+`just yui_tool_wasm_test` (`cmake/tools/yui_tool/tests/test_web.js`): that the
+shapes and the functions the grammar lists are those the tool knows, and that
+the tool finds no problem in what each snippet writes. A snippet that is no
+document by itself is given the place it is written in there, in
+`snippetPlaces`.
 
 The `YUI Tooling` workflow (`.github/workflows/yui_tooling.yml`) runs them, and
 the tests of the tool, on every push that changes the tooling or the modules
@@ -117,6 +123,10 @@ vscode-yui/
 ├── src/toolWorker.ts             # the worker: loads the module and runs a command
 ├── src/preview.ts                # the preview panel: what to show
 ├── src/previewPage.ts            # the page of the panel: toolbar and canvas
+├── src/pageScript.d.ts           # tells the extension a script of a page is bundled as its text
+├── page/preview.page.js          # the script of that page, which esbuild.js bundles as text and the page is written with
+├── page/globals.d.ts             # what the script finds beside the page: its settings, the API of VS Code and the tool
+├── page/tsconfig.json            # checks the script as one a page runs, with `npm run check`
 ├── syntaxes/yui.tmLanguage.json  # TextMate grammar (source.yui)
 ├── snippets/yui.code-snippets    # code snippets
 ├── tools/package-tool.sh         # copies the tool built for the web into tool/
@@ -126,6 +136,7 @@ vscode-yui/
 ├── test/documentFiles.test.ts    # tests of the files a document is given to the tool with
 ├── test/diagnostics.test.ts      # tests of the problems several documents tell of a file
 ├── test/positions.test.ts        # tests of the columns of the tool and of an editor
+├── test/previewPage.test.ts      # tests of the script of the page being one a page compiles, and of what it is given
 ├── test/syntax.test.ts           # tests of the grammar and of the snippets
 └── test/sample.yui               # a document to try the grammar on
 ```

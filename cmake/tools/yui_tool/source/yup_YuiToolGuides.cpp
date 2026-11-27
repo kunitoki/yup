@@ -21,7 +21,7 @@
 
 
 #include "yup_YuiToolGuides.h"
-#include "yup_YuiToolSupport.h"
+#include "yup_YuiToolView.h"
 
 #include <algorithm>
 #include <cmath>

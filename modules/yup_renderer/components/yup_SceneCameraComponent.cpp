@@ -190,6 +190,7 @@ const ComponentTypeInfo& SceneCameraComponent::getClassTypeInfo()
         const CameraNode defaults {};
 
         return ComponentTypeBuilder<SceneCameraComponent> (Identifier ("Camera3D"), SceneNodeComponent::getClassTypeInfo())
+            .description ("A Node3D seeing down its -z axis, y up. The scene is seen from the first one that is active.")
             .styleableProperty (SceneCameraComponentIds::fov, &SceneCameraComponent::getFieldOfView, &SceneCameraComponent::setFieldOfView, defaults.yFov, "The vertical field of view of a perspective camera, in radians.")
             .styleableProperty (SceneCameraComponentIds::nearPlane, &SceneCameraComponent::getNearPlane, &SceneCameraComponent::setNearPlane, defaults.zNear, "The distance of the near clipping plane.")
             .styleableProperty (SceneCameraComponentIds::farPlane, &SceneCameraComponent::getFarPlane, &SceneCameraComponent::setFarPlane, defaults.zFar, "The distance of the far clipping plane, 0 for a perspective camera to see infinitely far.")

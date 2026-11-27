@@ -2829,7 +2829,7 @@ TEST_F (StyleContextTests, AShaderSamplingASeriesReadsOnePictureAsAnEffect)
 
     const auto* shader = document.getRoot()->getStyleContext()->findShader ("Mix");
     ASSERT_NE (shader, nullptr);
-    EXPECT_EQ (ShaderEffect::getNumPictures (*shader->shader, shader->properties), 1);
+    EXPECT_EQ (ShaderProperty::getNumPictures (*shader->shader, shader->properties), 1);
 }
 
 TEST_F (StyleContextTests, TheDefaultsOfAShaderAreStyledValuesOfTheComponentItIsTheEffectOf)
@@ -3269,7 +3269,7 @@ TEST_F (StyleContextTests, ADrawingPaintsAShaderOfTheSheetWithTheValuesItsUseSet
     // It is given what the use sets, read from the properties of the drawing a rule styles, and the default of its block
     auto expected = shader->shader->createUniforms();
     EXPECT_TRUE (expected.set ("intensity", 0.5f));
-    EXPECT_TRUE (ShaderEffect::setUniform (expected, { "tint", ComponentProperty::Type::color }, VariantConverter<Color>::toVar (Color (0xffff8800))));
+    EXPECT_TRUE (ShaderProperty::setUniform (expected, { "tint", ComponentProperty::Type::color }, VariantConverter<Color>::toVar (Color (0xffff8800))));
     EXPECT_TRUE (getShaderUniforms (first) == expected);
 
     EXPECT_TRUE (expected.set ("intensity", 1.5f));
@@ -3397,7 +3397,7 @@ TEST_F (StyleContextTests, AFilterOfADrawingRunsAShaderOfTheSheet)
 
     auto expected = shader->shader->createUniforms();
     EXPECT_TRUE (expected.set ("intensity", 0.8f));
-    EXPECT_TRUE (ShaderEffect::setUniform (expected, { "tint", ComponentProperty::Type::color }, VariantConverter<Color>::toVar (Color (0xffff8800))));
+    EXPECT_TRUE (ShaderProperty::setUniform (expected, { "tint", ComponentProperty::Type::color }, VariantConverter<Color>::toVar (Color (0xffff8800))));
     EXPECT_TRUE (getShaderUniforms (screen) == expected);
 }
 
@@ -3479,7 +3479,7 @@ TEST_F (StyleContextTests, ADrawingSelectedOnAnElementRunsTheShadersOfTheSheet)
         // And gives it what its use sets, read where the element is: from the instance of the composite it is in
         auto expected = plasma->shader->createUniforms();
         EXPECT_TRUE (expected.set ("intensity", 0.5f));
-        EXPECT_TRUE (ShaderEffect::setUniform (expected, { "tint", ComponentProperty::Type::color }, VariantConverter<Color>::toVar (Color (0xffff8800))));
+        EXPECT_TRUE (ShaderProperty::setUniform (expected, { "tint", ComponentProperty::Type::color }, VariantConverter<Color>::toVar (Color (0xffff8800))));
         EXPECT_TRUE (getShaderUniforms (low) == expected);
 
         EXPECT_TRUE (expected.set ("intensity", 1.5f));

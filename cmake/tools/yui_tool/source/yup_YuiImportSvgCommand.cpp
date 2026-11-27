@@ -38,25 +38,19 @@ int runYuiImportSvgCommand (int argc, char** argv)
     {
         const String argument (argv[i]);
 
-        if (argument == "--output" && i + 1 < argc)
+        if (const auto* path = readYuiToolOption (argc, argv, i, "--output"))
         {
-            output = workingDirectory.getChildFile (argv[++i]);
-            continue;
+            output = workingDirectory.getChildFile (path);
         }
-
-        if (argument == "--name" && i + 1 < argc)
+        else if (const auto* name = readYuiToolOption (argc, argv, i, "--name"))
         {
-            options.name = argv[++i];
-            continue;
+            options.name = name;
         }
-
-        if (argument == "--color-properties")
+        else if (argument == "--color-properties")
         {
             options.colorProperties = true;
-            continue;
         }
-
-        if (input == File() && ! argument.startsWithChar ('-'))
+        else if (input == File() && ! argument.startsWithChar ('-'))
         {
             input = workingDirectory.getChildFile (argument);
         }

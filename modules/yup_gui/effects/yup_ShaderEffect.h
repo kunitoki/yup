@@ -30,7 +30,7 @@ namespace yup
 
     The effect runs a GpuImageShader over what the component and its children painted, and
     draws the result in their place. At every paint it fills the uniform block of the shader
-    from the component: each Property names a property of the component, read with
+    from the component: each ShaderProperty names a property of the component, read with
     Component::findProperty() and written to the member of the block that has its name. What
     sets the property then drives the shader, and repaints the component as any property
     change does: a stylesheet rule, a transition, a binding or Component::setProperty().
@@ -121,8 +121,8 @@ namespace yup
     array as a series with a revision (see ComponentTypeBuilder::series) tells so with it, and
     any other array is compared.
 
-    The effect fills three more members itself, when the block has them and no Property has
-    their name:
+    The effect fills three more members itself, when the block has them and no ShaderProperty
+    has their name:
 
     - `resolution`: the size of the picture in pixels, a `vec2`, or a `vec4` holding one over
       the width and one over the height in `z` and `w`;
@@ -131,7 +131,7 @@ namespace yup
       zero every hour, which keeps it precise to a fraction of a millisecond as a `float`.
 
     A member of one of these names is filled this way whatever the shader means by it. Give a
-    value of your own another name, or a Property of its name: checkProperties() and a stylesheet
+    value of your own another name, or a ShaderProperty of its name: checkProperties() and a stylesheet
     loading the shader refuse one that is declared as something else and that no property fills.
 
     A shader whose block has a `time` member is animated: it is drawn again at every frame of
@@ -145,7 +145,7 @@ namespace yup
     Component::setPaintMargin). A shader declaring no texture makes its picture alone: it fills
     that area, and what the component painted is not shown. A shader reading two pictures can't
     be drawn, as an effect has one to give: the textures filled from arrays don't count (see
-    getNumPictures).
+    ShaderProperty::getNumPictures).
 
     When the shader can't run, the component is drawn as it is, with no texture in between: without
     a shader, with a shader reading two pictures, without a GPU, or once the shader failed to
@@ -166,27 +166,13 @@ namespace yup
     while the window is painted, which never happens while the message thread runs, so the
     properties of the component are read as they are, with no lock.
 
-    @see ComponentEffect, GpuImageShader, ShaderUniforms, StyleContext::findShader, Component::setComponentEffect
+    @see ComponentEffect, ShaderProperty, GpuImageShader, ShaderUniforms, StyleContext::findShader, Component::setComponentEffect
 
     @tags{UI}
 */
 class YUP_API ShaderEffect : public ComponentEffect
 {
 public:
-    //==============================================================================
-    /** An input of the shader: a property of the component, written to the member of the
-        uniform block that has its name. */
-    struct Property
-    {
-        /** The name of the property, and of the member of the uniform block it fills. */
-        Identifier name;
-
-        /** The type of the property, which tells how its value fills the member:
-            ComponentProperty::Type::number, integer, boolean, color, point or rectangle, or
-            ComponentProperty::Type::array for an array of numbers. */
-        ComponentProperty::Type type = ComponentProperty::Type::number;
-    };
-
     //==============================================================================
     /** Creates an effect drawing a component through a shader.
 
@@ -197,7 +183,7 @@ public:
                            member of the uniform block of the shader that has its name. One
                            naming no member of the block is ignored.
     */
-    ShaderEffect (Component& component, GpuImageShader::Ptr shader, std::vector<Property> properties = {});
+    ShaderEffect (Component& component, GpuImageShader::Ptr shader, std::vector<ShaderProperty> properties = {});
 
     /** Destructor. */
     ~ShaderEffect() override;
@@ -219,72 +205,6 @@ public:
     GpuImageShader::Ptr getShader() const noexcept { return shader; }
 
     //==============================================================================
-    /** Returns how many scalars the member of a uniform block has to hold at least to take a
-        property of a type.
-
-        @param type  The type of the property.
-
-        @returns 1 for a number, an integer, a boolean and an array, 2 for a point, 3 for a
-                 color, which a `vec3` takes without its alpha, 4 for a rectangle, and 0 for the
-                 types a uniform can't take.
-    */
-    static int getNumUniformComponents (ComponentProperty::Type type) noexcept;
-
-    /** Writes the value of a property to the member of a uniform block that has its name,
-        converted by the type of the property.
-
-        This is the conversion the effect makes at every paint, for what else fills the uniforms
-        of a shader from typed values:
-
-        - a number, an integer and a boolean set the first scalar of the member;
-        - a color sets four: red, green, blue and alpha from 0 to 1, as the color is written,
-          sRGB encoded and not premultiplied by its alpha;
-        - a point sets two, and a rectangle four: x, y, width and height;
-        - an array of numbers sets as many scalars as it holds.
-
-        The scalars past the end of the member are ignored, and the ones a value does not set are
-        left as they are (see ShaderUniforms::set).
-
-        @param uniforms  The uniforms to write into.
-        @param property  The name of the member and the type of the value.
-        @param value     The value, as a property of that type holds it (see VariantConverter).
-
-        @returns False when nothing was written: the block has no member of that name, the type is
-                 not one a uniform takes, or the value of a point, a rectangle or an array is not
-                 made of numbers.
-    */
-    static bool setUniform (ShaderUniforms& uniforms, const Property& property, const var& value);
-
-    /** Writes the value of a property to a member of a uniform block found once, converted by
-        the type of the property as the overload taking the name of the member does.
-
-        Setting by name looks for the member each time. What fills the same uniforms again and
-        again finds each member once, with ShaderUniforms::findMember() on the uniforms of the
-        shader (see GpuImageShader::getUniformLayout), and gives its handle here.
-
-        @param uniforms  The uniforms to write into.
-        @param member    The handle of the member to write.
-        @param type      The type of the value.
-        @param value     The value, as a property of that type holds it (see VariantConverter).
-
-        @returns False when nothing was written: the handle is not valid, the type is not one a
-                 uniform takes, or the value of a point, a rectangle or an array is not made of
-                 numbers.
-    */
-    static bool setUniform (ShaderUniforms& uniforms, ShaderUniforms::MemberHandle member, ComponentProperty::Type type, const var& value);
-
-    /** Returns how many pictures a shader reads, given the properties it is filled from.
-
-        A texture of the shader that an array Property has the name of is no picture: it is
-        filled with the numbers of that property, one per pixel (see the class description). The
-        other textures are the pictures the shader reads: what the component painted, for an
-        effect.
-
-        @param shader      The shader.
-        @param properties  The properties the shader is filled from.
-    */
-    static int getNumPictures (const GpuImageShader& shader, const std::vector<Property>& properties);
-
     /** Tells whether a shader can be filled from properties, which the constructor does not check:
         a property it can't write is ignored, and its member stays at zero.
 
@@ -292,13 +212,13 @@ public:
         @param properties  The properties to fill it from.
 
         @returns Result::ok(), or the first thing that is wrong: a property of a type a uniform
-                 can't take (see getNumUniformComponents), one naming no member of the uniform
+                 can't take (see ShaderProperty::getNumUniformComponents), one naming no member of the uniform
                  block of the shader, nor a texture of it for an array, one whose member holds
                  fewer scalars than its type needs, or a member named `resolution`, `scale` or
                  `time` that no property fills and that is not what the effect fills it with: a
                  `vec2` or a `vec4` for the first, a `float` for the others.
     */
-    static Result checkProperties (const GpuImageShader& shader, const std::vector<Property>& properties);
+    static Result checkProperties (const GpuImageShader& shader, const std::vector<ShaderProperty>& properties);
 
     //==============================================================================
     /** Returns false while the effect has nothing to draw the component with, which is then
@@ -340,7 +260,7 @@ private:
 
     WeakReference<Component> component;
     GpuImageShader::Ptr shader;
-    std::vector<Property> properties;
+    std::vector<ShaderProperty> properties;
     GpuDevice::Ptr targetDevice;
     GpuTarget::Ptr target;
     GpuTexture::Ptr drawnInput;

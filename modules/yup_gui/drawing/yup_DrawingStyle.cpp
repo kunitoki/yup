@@ -224,7 +224,7 @@ struct DrawingStyle::Node
     {
         String name;
         int index = -1;
-        std::vector<ShaderEffect::Property> properties;
+        std::vector<ShaderProperty> properties;
         std::vector<int> outputs;
 
         // The uniform block has the time and no property takes its name: the shader is drawn again at every frame
@@ -2127,19 +2127,15 @@ private:
         if (found.shader == nullptr)
             return series;
 
+        std::vector<ShaderProperty> properties;
+
+        for (const auto& property : ShaderProperty::readBlock (found.block, {}))
+            if (property.problem.isEmpty())
+                properties.push_back ({ property.name, property.type });
+
         for (const auto& textureName : found.shader->getInputTextureNames())
-        {
-            for (const auto& property : found.block)
-            {
-                if (property.getType().toString() == "property"
-                    && property.getProperty ("name").toString().trim() == textureName
-                    && property.getProperty ("type").toString().trim() == "number[]")
-                {
-                    series.add (textureName);
-                    break;
-                }
-            }
-        }
+            if (detail::findShaderSeriesProperty (properties, textureName) >= 0)
+                series.add (textureName);
 
         return series;
     }
@@ -2158,9 +2154,10 @@ private:
                           Statements& assignments,
                           Uses& uses)
     {
-        for (const auto& property : found.block)
-            if (property.getType().toString() == "property")
-                allowed.add (property.getProperty ("name").toString().trim());
+        const auto declared = ShaderProperty::readBlock (found.block, name);
+
+        for (const auto& property : declared)
+            allowed.add (property.name.toString());
 
         checkElement (element, path, allowed, false);
 
@@ -2170,22 +2167,15 @@ private:
 
         int index = 0;
 
-        for (const auto& property : found.block)
+        for (const auto& input : declared)
         {
-            const auto propertyName = property.getProperty ("name").toString().trim();
-
-            if (property.getType().toString() != "property" || propertyName.isEmpty())
-                continue;
-
+            const auto& property = input.element;
+            const auto& propId = input.name;
+            const auto& propertyName = propId.toString();
+            const auto type = input.type;
             const auto propertyPath = path + "/" + name + "/property[" + String (index++) + "]";
             const auto typeName = property.getProperty ("type").toString().trim();
-            const auto type = ComponentProperty::getTypeFromName (typeName);
-            const auto elementType = ComponentProperty::getElementTypeFromName (typeName);
-            const Identifier propId (propertyName);
-
-            // Of the arrays, the one of numbers fills a uniform
-            const bool isFilling = type != ComponentProperty::Type::array || elementType == ComponentProperty::Type::number;
-            const auto* expressionType = isFilling && ShaderEffect::getNumUniformComponents (type) > 0 ? drawingScope.getExpressionType (type, elementType) : nullptr;
+            const auto* expressionType = input.problem.isEmpty() ? drawingScope.getExpressionType (type, ComponentProperty::getElementTypeFromName (typeName)) : nullptr;
 
             if (expressionType == nullptr)
             {
@@ -4577,7 +4567,7 @@ ShaderUniforms DrawingStyle::readUniforms (const Node& node, const Slot* slot) c
         if (property.type == ComponentProperty::Type::array)
             uniforms.set (property.name.toString(), getOutputNumbers (*slot->state, use.outputs[i]));
         else
-            ShaderEffect::setUniform (uniforms, property, getOutputValue (*slot->state, use.outputs[i], property.type));
+            ShaderProperty::setUniform (uniforms, property, getOutputValue (*slot->state, use.outputs[i], property.type));
     }
 
     return uniforms;

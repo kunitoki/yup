@@ -1404,6 +1404,7 @@ void SceneComponent::requestFrame()
 const ComponentTypeInfo& SceneComponent::getClassTypeInfo()
 {
     static const auto info = ComponentTypeBuilder<SceneComponent> (Identifier ("Scene3D"))
+                                 .description ("The component showing a scene, laid out as any other. It holds the 3D types, and paints what else it holds over the scene.")
                                  .styleableProperty (SceneComponentIds::background, &SceneComponent::getBackgroundColor, &SceneComponent::setBackgroundColor, SceneSettings().backgroundColor, "The color the scene is cleared to. With an alpha below 1 what lies behind the scene shows through where no surface is drawn.")
                                  .styleableProperty (SceneComponentIds::ambient, &SceneComponent::getAmbientColor, &SceneComponent::setAmbientColor, SceneSettings().ambientColor, "The flat ambient light added to every surface.")
                                  .styleableProperty (SceneComponentIds::exposure, &SceneComponent::getExposure, &SceneComponent::setExposure, SceneSettings().exposure, "The multiplier applied to the lit scene before tone mapping.")

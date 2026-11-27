@@ -32,9 +32,9 @@ inline double advanceShaderTime (double time, double elapsedSeconds) noexcept
     return std::fmod (time + elapsedSeconds, 3600.0);
 }
 
-inline bool hasShaderProperty (const std::vector<ShaderEffect::Property>& properties, StringRef name)
+inline bool hasShaderProperty (const std::vector<ShaderProperty>& properties, StringRef name)
 {
-    return std::any_of (properties.begin(), properties.end(), [&name] (const ShaderEffect::Property& property)
+    return std::any_of (properties.begin(), properties.end(), [&name] (const ShaderProperty& property)
     {
         return property.name == name;
     });
@@ -42,7 +42,7 @@ inline bool hasShaderProperty (const std::vector<ShaderEffect::Property>& proper
 
 /* A shader is given the time when its uniform block has it and no property takes its name: what
    draws it then needs every frame. */
-inline bool isShaderGivenTime (const GpuImageShader& shader, const std::vector<ShaderEffect::Property>& properties)
+inline bool isShaderGivenTime (const GpuImageShader& shader, const std::vector<ShaderProperty>& properties)
 {
     return ! hasShaderProperty (properties, "time") && shader.getUniformLayout().hasMember ("time");
 }
@@ -59,7 +59,7 @@ struct ShaderStandardMembers
 
 /* Finds once the members a shader is given beside its properties: each when the uniform block has it and no property
    takes its name. Uniforms of that layout are then given them with no search. */
-inline ShaderStandardMembers findShaderStandardMembers (const ShaderUniforms& uniforms, const std::vector<ShaderEffect::Property>& properties)
+inline ShaderStandardMembers findShaderStandardMembers (const ShaderUniforms& uniforms, const std::vector<ShaderProperty>& properties)
 {
     const auto find = [&uniforms, &properties] (const char* name)
     {
@@ -93,7 +93,7 @@ inline void setShaderStandardUniforms (ShaderUniforms& uniforms,
 /* Fills the members a shader is given beside its properties, each when the uniform block has it and
    no property takes its name, looking for them by name: what fills uniforms once. */
 inline void setShaderStandardUniforms (ShaderUniforms& uniforms,
-                                       const std::vector<ShaderEffect::Property>& properties,
+                                       const std::vector<ShaderProperty>& properties,
                                        int width,
                                        int height,
                                        float scale,
@@ -126,19 +126,6 @@ inline bool isShaderStandardUniformMismatched (const ShaderUniforms& uniforms, c
     const bool hasRoom = given.isSize ? (numComponents == 2 || numComponents == 4) : numComponents == 1;
 
     return ! hasRoom || uniforms.getMemberType (given.name) != ShaderReflection::BaseType::float32;
-}
-
-/* Returns the property a texture of a shader is filled from: the array of numbers that has its name. Returns -1
-   for a texture no property names, which is a picture the shader reads. */
-inline int findShaderSeriesProperty (const std::vector<ShaderEffect::Property>& properties, const String& textureName)
-{
-    for (size_t i = 0; i < properties.size(); ++i)
-    {
-        if (properties[i].type == ComponentProperty::Type::array && properties[i].name.toString() == textureName)
-            return static_cast<int> (i);
-    }
-
-    return -1;
 }
 
 /* Returns a number as the 16 bit float a texture keeps it as, rounded to the nearest one. What is too large for
@@ -247,9 +234,9 @@ inline GpuTexture::Ptr updateShaderSeriesTexture (ShaderSeriesTexture& kept,
 }
 
 /* Returns whether an effect has what a shader reads: at most one picture, which is its component. */
-inline bool isShaderDrawnByAnEffect (const GpuImageShader* shader, const std::vector<ShaderEffect::Property>& properties)
+inline bool isShaderDrawnByAnEffect (const GpuImageShader* shader, const std::vector<ShaderProperty>& properties)
 {
-    return shader != nullptr && ShaderEffect::getNumPictures (*shader, properties) <= 1;
+    return shader != nullptr && ShaderProperty::getNumPictures (*shader, properties) <= 1;
 }
 
 /* Returns the device of the window a component is in, or nullptr when it is in none. */
@@ -370,7 +357,7 @@ struct ShaderEffect::SeriesTextures
 
 //==============================================================================
 
-ShaderEffect::ShaderEffect (Component& componentToUse, GpuImageShader::Ptr shaderToUse, std::vector<Property> propertiesToUse)
+ShaderEffect::ShaderEffect (Component& componentToUse, GpuImageShader::Ptr shaderToUse, std::vector<ShaderProperty> propertiesToUse)
     : component (&componentToUse)
     , shader (std::move (shaderToUse))
     , properties (std::move (propertiesToUse))
@@ -444,94 +431,14 @@ void ShaderEffect::releaseResources()
 
 //==============================================================================
 
-int ShaderEffect::getNumUniformComponents (ComponentProperty::Type type) noexcept
-{
-    using Type = ComponentProperty::Type;
-
-    switch (type)
-    {
-        case Type::number:
-        case Type::integer:
-        case Type::boolean:
-        case Type::array:
-            return 1;
-
-        case Type::point:
-            return 2;
-
-        case Type::color:
-            return 3;
-
-        case Type::rectangle:
-            return 4;
-
-        default:
-            return 0;
-    }
-}
-
-int ShaderEffect::getNumPictures (const GpuImageShader& shader, const std::vector<Property>& properties)
-{
-    int numPictures = 0;
-
-    for (const auto& textureName : shader.getInputTextureNames())
-        numPictures += detail::findShaderSeriesProperty (properties, textureName) < 0 ? 1 : 0;
-
-    return numPictures;
-}
-
-bool ShaderEffect::setUniform (ShaderUniforms& uniforms, const Property& property, const var& value)
-{
-    return setUniform (uniforms, uniforms.findMember (property.name.toString()), property.type, value);
-}
-
-bool ShaderEffect::setUniform (ShaderUniforms& uniforms, ShaderUniforms::MemberHandle member, ComponentProperty::Type type, const var& value)
-{
-    using Type = ComponentProperty::Type;
-
-    const auto setScalar = [&uniforms, member] (float scalar)
-    {
-        return uniforms.set (member, Span<const float> (&scalar, 1));
-    };
-
-    switch (type)
-    {
-        case Type::number:
-            return setScalar (detail::ComponentPropertyValueTraits<float>::fromVar (value));
-
-        case Type::integer:
-            return setScalar (static_cast<float> (detail::ComponentPropertyValueTraits<int>::fromVar (value)));
-
-        case Type::boolean:
-            return setScalar (detail::ComponentPropertyValueTraits<bool>::fromVar (value) ? 1.0f : 0.0f);
-
-        case Type::color:
-        {
-            const auto color = VariantConverter<Color>::fromVar (value);
-            const float components[] = { color.getRedFloat(), color.getGreenFloat(), color.getBlueFloat(), color.getAlphaFloat() };
-
-            return uniforms.set (member, components);
-        }
-
-        // A point, a rectangle and an array of numbers are held as the array of their numbers
-        case Type::point:
-        case Type::rectangle:
-        case Type::array:
-            return uniforms.set (member, value);
-
-        default:
-            return false;
-    }
-}
-
-Result ShaderEffect::checkProperties (const GpuImageShader& shader, const std::vector<Property>& properties)
+Result ShaderEffect::checkProperties (const GpuImageShader& shader, const std::vector<ShaderProperty>& properties)
 {
     const auto& uniforms = shader.getUniformLayout();
 
     for (const auto& property : properties)
     {
         const auto& name = property.name.toString();
-        const auto numComponents = getNumUniformComponents (property.type);
+        const auto numComponents = ShaderProperty::getNumUniformComponents (property.type);
 
         if (numComponents == 0)
             return Result::fail ("The property '" + name + "' has a type a shader can't take: it takes a number, an integer, a boolean, a color, a point, a rectangle or an array of numbers");
@@ -630,7 +537,7 @@ GpuTexture::Ptr ShaderEffect::render (Graphics& g, const GpuTexture::Ptr& input)
             if (property.type == ComponentProperty::Type::array)
                 uniforms.set (member, readSeries (*shown, property.name).first);
             else
-                setUniform (uniforms, member, property.type, shown->findProperty (property.name));
+                ShaderProperty::setUniform (uniforms, member, property.type, shown->findProperty (property.name));
         }
     }
 

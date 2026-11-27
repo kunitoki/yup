@@ -198,7 +198,7 @@ private:
     /* An input of the shader: a property of the component, with the default its `shader` block gives it. */
     struct ShaderInput
     {
-        ShaderEffect::Property property;
+        ShaderProperty property;
         var fallback;                                   // The default, when it reads nothing that changes
         std::unique_ptr<PropertyExpression> expression; // The default, when it does
     };

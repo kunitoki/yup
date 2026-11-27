@@ -194,10 +194,10 @@ public:
 
         /** The inputs the block declares, in the order it declares them. Each has a type a uniform
             takes, and fills the member of the uniform block of the shader that has its name (see
-            ShaderEffect::setUniform). An array of numbers named as a texture of the shader fills
-            that texture instead (see ShaderEffect::getNumPictures).
+            ShaderProperty::setUniform). An array of numbers named as a texture of the shader fills
+            that texture instead (see ShaderProperty::getNumPictures).
         */
-        std::vector<ShaderEffect::Property> properties;
+        std::vector<ShaderProperty> properties;
 
         /** The `shader` element of the stylesheet. Each of its `property` children declares one of
             the @ref properties, by its `name`, and holds the expression of its default as its

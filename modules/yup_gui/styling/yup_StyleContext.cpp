@@ -1680,19 +1680,18 @@ StyleContext::ShaderEntry* StyleContext::findShaderEntry (const String& name)
         auto& entry = found->second;
         entry.loaded.block = block;
 
-        for (const auto& property : block)
+        for (const auto& property : ShaderProperty::readBlock (block, name))
         {
-            const auto propertyName = property.getProperty ("name").toString().trim();
-            const auto value = property.getProperty ("value").toString().trim();
+            const auto value = property.element.getProperty ("value").toString().trim();
 
-            if (property.getType().toString() != "property" || propertyName.isEmpty() || value.isEmpty())
+            if (value.isEmpty())
                 continue;
 
             auto& fallback = entry.defaults.emplace_back();
-            fallback.name = Identifier (propertyName);
+            fallback.name = property.name;
             fallback.cascadeKey = fallback.name;
             fallback.value = value;
-            fallback.element = property;
+            fallback.element = property.element;
         }
 
         loadShader (name, entry);
@@ -1773,45 +1772,17 @@ bool StyleContext::loadShader (const String& name, ShaderEntry& entry)
 
     // The members of the shader, which `created` keeps until the load is over
     const auto& uniforms = created.getReference()->getUniformLayout();
-    std::vector<ShaderEffect::Property> properties;
+    std::vector<ShaderProperty> properties;
     StringArray declared;
 
-    for (const auto& property : block)
+    for (const auto& property : ShaderProperty::readBlock (block, name, &uniforms, created.getReference()->getInputTextureNames()))
     {
-        const auto propertyName = property.getProperty ("name").toString().trim();
+        declared.add (property.name.toString());
 
-        if (property.getType().toString() != "property" || propertyName.isEmpty())
-            continue;
-
-        declared.add (propertyName);
-
-        const auto typeName = property.getProperty ("type").toString().trim();
-        const auto type = ComponentProperty::getTypeFromName (typeName);
-
-        // Of the arrays, the one of numbers fills a uniform
-        const bool isFilling = type != ComponentProperty::Type::array
-                            || ComponentProperty::getElementTypeFromName (typeName) == ComponentProperty::Type::number;
-
-        const auto numComponents = isFilling ? ShaderEffect::getNumUniformComponents (type) : 0;
-
-        // An array named as a texture of the shader fills that texture, not a member of the block
-        const bool fillsTexture = isFilling
-                               && type == ComponentProperty::Type::array
-                               && created.getReference()->getInputTextureNames().contains (propertyName);
-
-        String problem;
-
-        if (numComponents == 0)
-            problem = "The property '" + propertyName + "' of the shader '" + name + "' can't be of type '" + typeName + "': a shader takes a number, an integer, a boolean, a color, a point, a rectangle or a number[]";
-        else if (! fillsTexture && ! uniforms.hasMember (propertyName))
-            problem = "The uniform block of the shader '" + name + "' has no member '" + propertyName + "'";
-        else if (! fillsTexture && uniforms.getNumComponents (propertyName) < numComponents)
-            problem = "The member '" + propertyName + "' of the uniform block of the shader '" + name + "' is too small for a " + typeName;
-
-        if (problem.isEmpty())
-            properties.push_back ({ Identifier (propertyName), type });
+        if (property.problem.isEmpty())
+            properties.push_back ({ property.name, property.type });
         else
-            fail ({ .message = problem, .element = property });
+            fail ({ .message = property.problem, .element = property.element });
     }
 
     // What a shader is given beside its properties fills the members of their names, whatever the shader means by them:
@@ -1883,7 +1854,7 @@ void StyleContext::reloadShader (const String& name, ShaderEntry& entry)
         return;
 
     // The effects running the shader take the new one, unless it now reads more textures than an effect has: those are made again
-    const bool runsAsEffect = ShaderEffect::getNumPictures (*entry.loaded.shader, entry.loaded.properties) <= 1;
+    const bool runsAsEffect = ShaderProperty::getNumPictures (*entry.loaded.shader, entry.loaded.properties) <= 1;
 
     for (auto& [component, cache] : *caches)
     {
@@ -2004,7 +1975,7 @@ ComponentEffect::Ptr StyleContext::createEffect (Component& component, const Sty
     if (loaded == nullptr)
         return nullptr;
 
-    if (ShaderEffect::getNumPictures (*loaded->shader, loaded->properties) > 1)
+    if (ShaderProperty::getNumPictures (*loaded->shader, loaded->properties) > 1)
     {
         report ({ .message = "The shader '" + name + "' reads two textures, an effect gives it one", .element = effectDecl.element });
         return nullptr;

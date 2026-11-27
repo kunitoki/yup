@@ -199,6 +199,19 @@ TEST_F (ComponentPropertyTest, TypeNamesIncludeArrays)
     EXPECT_FALSE (ComponentProperty::isExpressionType (Type::drawing));
 }
 
+TEST_F (ComponentPropertyTest, ATypeIsNamedAsADeclarationNamesIt)
+{
+    using Type = ComponentProperty::Type;
+
+    EXPECT_EQ (ComponentProperty::getTypeName (Type::number), "number");
+    EXPECT_EQ (ComponentProperty::getTypeName (Type::font), "font");
+    EXPECT_EQ (ComponentProperty::getTypeName (Type::any), "any");
+
+    // The two a declaration can't name
+    EXPECT_EQ (ComponentProperty::getTypeName (Type::enumeration), "enumeration");
+    EXPECT_EQ (ComponentProperty::getTypeName (Type::array), "array");
+}
+
 TEST_F (ComponentPropertyTest, StorageKeyFallsBackToName){
     ComponentProperty property {
         .name = Identifier ("custom"),

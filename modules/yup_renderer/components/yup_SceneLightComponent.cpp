@@ -152,6 +152,7 @@ const ComponentTypeInfo& SceneLightComponent::getClassTypeInfo()
         const LightNode defaults {};
 
         return ComponentTypeBuilder<SceneLightComponent> (Identifier ("Light3D"), SceneNodeComponent::getClassTypeInfo())
+            .description ("A Node3D that lights: directional down its -z axis, point, or spot.")
             .enumeration<LightNode::Type> (
                 SceneLightComponentIds::type,
                 { { "directional", LightNode::Type::directional },

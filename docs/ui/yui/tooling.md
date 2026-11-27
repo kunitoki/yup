@@ -92,6 +92,12 @@ A binding to a property the file doesn't list is then an error, which catches
 misspelled names. Actions need no declaration, since they are looked up when
 they run.
 
+Without `--models`, a file is checked with the `<name>.models.json` next to
+it when there is one: `yup_yui_tool lint ui/main.yui` reads
+`ui/main.models.json`, and each of several files its own. Every command and
+every tool of an agent follows this rule. A models file that can't be read is
+an error of the arguments (exit code `2`).
+
 ### Machine readable output
 
 `--json` prints the problems to the standard output instead, for editors and
@@ -216,6 +222,8 @@ palette roles and the names of the `colors.` constants. Editors build their comp
 
 - `properties` and `signals` are the ones the type declares itself. The others
   come from its `base`, which the root type doesn't have.
+- `description` tells what the type is, when the type says so, as the elements
+  of a 3D scene do.
 - `type` is `number`, `integer`, `boolean`, `string`, `color`, `point`,
   `rectangle`, `transform`, `enumeration`, `font`, `drawing`, `array` or `any`.
   An `array` has an `elementType` when its elements are typed, an
@@ -432,7 +440,8 @@ is declared at: a drawing, a shader (after `effect:`, `use` and `shader:`), a
 component, a palette, a color of a palette, a token, or the file of an import.
 `hover` answers what the property or the signal a statement starts with is:
 its `code`, its `text` and the `values` of an enumeration. On the name of a
-shader it answers its block. Both answer `{}` when there is nothing to tell.
+shader it answers its block, and on the type a component starts with what the
+type says it is. Both answer `{}` when there is nothing to tell.
 
 ## Tools for agents
 

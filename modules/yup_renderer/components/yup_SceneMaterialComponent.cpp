@@ -564,51 +564,29 @@ bool SceneMaterialComponent::readShaderInputs (const DataTree& block, const Shad
     const auto resolver = document != nullptr ? document->getComponentResolver() : DrawingScope::ComponentResolver();
     bool isUsable = true;
 
-    for (const auto& property : block)
+    for (const auto& property : ShaderProperty::readBlock (block, shaderName, &uniforms))
     {
-        const auto name = property.getProperty ("name").toString().trim();
-
-        if (property.getType().toString() != "property" || name.isEmpty())
-            continue;
-
-        const auto typeName = property.getProperty ("type").toString().trim();
-        const auto type = ComponentProperty::getTypeFromName (typeName);
-
-        // Of the arrays, the one of numbers fills a uniform
-        const auto isFilling = type != ComponentProperty::Type::array
-                            || ComponentProperty::getElementTypeFromName (typeName) == ComponentProperty::Type::number;
-
-        const auto numComponents = isFilling ? ShaderEffect::getNumUniformComponents (type) : 0;
-        String problem;
-
-        if (numComponents == 0)
-            problem = "The property '" + name + "' of the shader '" + shaderName + "' can't be of type '" + typeName + "': a shader takes a number, an integer, a boolean, a color, a point, a rectangle or a number[]";
-        else if (! uniforms.hasMember (name))
-            problem = "The uniform block of the shader '" + shaderName + "' has no member '" + name + "'";
-        else if (uniforms.getNumComponents (name) < numComponents)
-            problem = "The member '" + name + "' of the uniform block of the shader '" + shaderName + "' is too small for a " + typeName;
-
         // Told at the property, as the ones of an image shader are
-        if (problem.isNotEmpty())
+        if (property.problem.isNotEmpty())
         {
-            addShaderProblem (problems, property, {}, problem);
+            addShaderProblem (problems, property.element, {}, property.problem);
             isUsable = false;
             continue;
         }
 
         auto& input = inputs.emplace_back();
-        input.property = { Identifier (name), type };
+        input.property = { property.name, property.type };
 
-        const auto fallback = property.getProperty ("value").toString().trim();
+        const auto fallback = property.element.getProperty ("value").toString().trim();
         if (fallback.isEmpty())
             continue;
 
         // The default of a block is an expression of the document, evaluated for the material: a constant is kept, and what
         // reads a role of the palette or a property is evaluated again as long as the property has no value
-        auto compiled = PropertyExpression::compile (*this, fallback, type, resolver);
+        auto compiled = PropertyExpression::compile (*this, fallback, property.type, resolver);
 
         if (compiled.failed())
-            addShaderProblem (problems, property, {}, "The default of the property '" + name + "' of the shader '" + shaderName + "' can't be used: " + compiled.getErrorMessage());
+            addShaderProblem (problems, property.element, {}, "The default of the property '" + property.name.toString() + "' of the shader '" + shaderName + "' can't be used: " + compiled.getErrorMessage());
         else if (compiled.getReference()->hasInputs())
             input.expression = std::move (compiled.getReference());
         else
@@ -665,7 +643,7 @@ bool SceneMaterialComponent::updateUniforms (MaterialShaderNode& node, double el
 
         if (input.property.type != ComponentProperty::Type::color)
         {
-            ShaderEffect::setUniform (values, input.property, value);
+            ShaderProperty::setUniform (values, input.property, value);
             continue;
         }
 
@@ -703,6 +681,7 @@ const ComponentTypeInfo& SceneMaterialComponent::getClassTypeInfo()
 
         const Material defaults {};
         ComponentTypeBuilder<Self> builder (Identifier ("Material3D"));
+        builder.description ("The material of the meshes of what it is written in, and of what that holds: the factors and textures of a PBR material, or a 'shader'. It is no Node3D.");
 
         // A factor of the material, which holds it
         const auto addFactor = [&]<class Value> (const char* name, Value Material::* field, const char* description)

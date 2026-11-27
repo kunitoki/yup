@@ -2554,7 +2554,7 @@ TEST_F (DrawingStyleShaderTest, GivesAShaderTheValuesOfItsPropertiesAndTheSizeOf
     const float resolution[] = { 24.0f, 12.0f, 1.0f / 24.0f, 1.0f / 12.0f };
 
     EXPECT_TRUE (expected.set ("speed", 0.5f));
-    EXPECT_TRUE (ShaderEffect::setUniform (expected, { "tint", ComponentProperty::Type::color }, VariantConverter<Color>::toVar (theme->getPalette().getColor (ThemePalette::Role::accent))));
+    EXPECT_TRUE (ShaderProperty::setUniform (expected, { "tint", ComponentProperty::Type::color }, VariantConverter<Color>::toVar (theme->getPalette().getColor (ThemePalette::Role::accent))));
     EXPECT_TRUE (expected.set ("center", center));
     EXPECT_TRUE (expected.set ("area", area));
     EXPECT_TRUE (expected.set ("steps", 3.0f));
@@ -2572,7 +2572,7 @@ TEST_F (DrawingStyleShaderTest, GivesAShaderTheValuesOfItsPropertiesAndTheSizeOf
     const float wholeResolution[] = { 48.0f, 24.0f, 1.0f / 48.0f, 1.0f / 24.0f };
 
     EXPECT_TRUE (defaults.set ("speed", 1.0f));
-    EXPECT_TRUE (ShaderEffect::setUniform (defaults, { "tint", ComponentProperty::Type::color }, VariantConverter<Color>::toVar (theme->getPalette().getColor (ThemePalette::Role::accent))));
+    EXPECT_TRUE (ShaderProperty::setUniform (defaults, { "tint", ComponentProperty::Type::color }, VariantConverter<Color>::toVar (theme->getPalette().getColor (ThemePalette::Role::accent))));
     EXPECT_TRUE (defaults.set ("center", center));
     EXPECT_TRUE (defaults.set ("steps", 3.0f));
     EXPECT_TRUE (defaults.set ("inverted", 1.0f));
@@ -2763,7 +2763,7 @@ TEST_F (DrawingStyleShaderTest, AFilterRunsShadersAsItsPrimitives)
     auto expectedCrt = crt->createUniforms();
     const float resolution[] = { 32.0f, 16.0f, 1.0f / 32.0f, 1.0f / 16.0f };
     EXPECT_TRUE (expectedCrt.set ("intensity", 1.0f));
-    EXPECT_TRUE (ShaderEffect::setUniform (expectedCrt, { "tint", ComponentProperty::Type::color }, VariantConverter<Color>::toVar (Color (0xffff0000))));
+    EXPECT_TRUE (ShaderProperty::setUniform (expectedCrt, { "tint", ComponentProperty::Type::color }, VariantConverter<Color>::toVar (Color (0xffff0000))));
     EXPECT_TRUE (expectedCrt.set ("resolution", resolution));
     EXPECT_TRUE (expectedCrt.set ("scale", 1.0f));
     EXPECT_TRUE (measured[3].uniforms == expectedCrt);
@@ -2898,7 +2898,7 @@ TEST_F (DrawingStyleShaderTest, ASeriesFillsTheTextureOfItsNameAndIsNoPicture)
     const float gains[] = { 1.0f, 2.0f };
 
     EXPECT_TRUE (expected.set ("gains", gains));
-    EXPECT_TRUE (ShaderEffect::setUniform (expected, { "tint", ComponentProperty::Type::color }, VariantConverter<Color>::toVar (Color (0xffff0000))));
+    EXPECT_TRUE (ShaderProperty::setUniform (expected, { "tint", ComponentProperty::Type::color }, VariantConverter<Color>::toVar (Color (0xffff0000))));
     EXPECT_FALSE (expected.hasMember ("levels"));
     EXPECT_TRUE (measure (*style.getReference(), "scope").uniforms == expected);
 
@@ -2916,10 +2916,10 @@ TEST_F (DrawingStyleShaderTest, ASeriesFillsTheTextureOfItsNameAndIsNoPicture)
                String ("Filtered/layer[0]/filter[0]/use[0]: the shader 'Scope' samples the series 'levels' as a texture, which a 'filter' doesn't fill: paint it with a 'use', or set it as an 'effect:'"));
 
     // An effect counts its pictures the same way
-    EXPECT_EQ (ShaderEffect::getNumPictures (*scope, { { "levels", ComponentProperty::Type::array } }), 0);
-    EXPECT_EQ (ShaderEffect::getNumPictures (*scope, { { "levels", ComponentProperty::Type::number } }), 1);
-    EXPECT_EQ (ShaderEffect::getNumPictures (*scope, {}), 1);
-    EXPECT_EQ (ShaderEffect::getNumPictures (*mixed, { { "levels", ComponentProperty::Type::array } }), 1);
+    EXPECT_EQ (ShaderProperty::getNumPictures (*scope, { { "levels", ComponentProperty::Type::array } }), 0);
+    EXPECT_EQ (ShaderProperty::getNumPictures (*scope, { { "levels", ComponentProperty::Type::number } }), 1);
+    EXPECT_EQ (ShaderProperty::getNumPictures (*scope, {}), 1);
+    EXPECT_EQ (ShaderProperty::getNumPictures (*mixed, { { "levels", ComponentProperty::Type::array } }), 1);
 }
 
 TEST_F (DrawingStyleShaderTest, ListsWhatAUseTakesToPaintAndToRunAShader)

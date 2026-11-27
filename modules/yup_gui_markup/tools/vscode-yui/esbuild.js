@@ -2,7 +2,7 @@
 //
 //     node esbuild.js [--watch]
 //
-// With --test it bundles the tests of what needs no editor instead, which `npm test` runs with Node.
+// With --test it bundles the tests of what needs no editor instead, every test/*.test.ts, which `npm test` runs with Node.
 
 const esbuild = require ("esbuild");
 const fs = require ("fs");
@@ -11,7 +11,7 @@ const tests = process.argv.includes ("--test");
 const outdir = tests ? "out-test" : "out";
 
 const options = {
-    entryPoints: tests ? ["test/agentServer.test.ts", "test/agentFiles.test.ts", "test/versionControl.test.ts", "test/documentFiles.test.ts", "test/diagnostics.test.ts", "test/positions.test.ts", "test/syntax.test.ts"]
+    entryPoints: tests ? fs.readdirSync ("test").filter (name => name.endsWith (".test.ts")).map (name => `test/${name}`)
                        : ["src/extension.ts", "src/toolWorker.ts"],
     outdir,
     bundle: true,
@@ -19,6 +19,9 @@ const options = {
     format: "cjs",
     target: "node20",
     external: ["vscode"],
+
+    // The script of a page is written in the page by who makes it, which takes it as its text
+    loader: { ".page.js": "text" },
     logLevel: "info"
 };
 

@@ -83,19 +83,16 @@ export function realPathOf (toolPath: string): string | undefined {
     return folder === undefined ? undefined : path.join (folder, ...parts.slice (1));
 }
 
-/** Blanks out comments, keeping the line structure of the document intact. */
-export function withoutComments (text: string): string {
-    return text.replace (/\/\*[\s\S]*?\*\//g, comment => comment.replace (/[^\n]/g, " ")).replace (/\/\/[^\n]*/g, "");
-}
-
-// The files a file names. A document names them between quotes, and they are of a kind it reads. A model written as
-// text names the buffers and the images it keeps in files of their own
+// The files a file names. A document names them between quotes of either style, and they are of a kind it reads. A
+// model written as text names the buffers and the images it keeps in files of their own
 function namesIn (file: string, data: Uint8Array): string[] {
     const kind = path.extname (file).toLowerCase ();
     const text = () => Buffer.from (data).toString ("utf8");
 
     if (kind === ".yui") {
-        return Array.from (withoutComments (text ()).matchAll (/"([^"\n\\]+)"/g), match => match[1])
+        // Read as the parser of documents reads it: a string ends at the quote it starts with, unless a backslash is
+        // before it, and what a string holds is no comment, as what a comment holds is no string
+        return Array.from (text ().matchAll (/\/\/[^\n]*|\/\*[\s\S]*?\*\/|(["'])((?:\\[\s\S]|(?!\1)[^\\\n])*)\1/g), match => match[2] ?? "")
             .filter (name => referenced.has (path.extname (name).toLowerCase ()));
     }
 
@@ -289,6 +286,12 @@ export async function collectDocumentFiles (document: EditedDocument, modelsPath
 
     if (modelsPath !== undefined && models !== undefined)
         files.push ({ path: toolPathOf (modelsPath), data: models });
+
+    // The tool reads the models next to a document by itself: those that are gone are forgotten there too
+    const beside = path.join (path.dirname (main), path.basename (main, ".yui") + ".models.json");
+
+    if (! fs.existsSync (beside))
+        files.push ({ path: toolPath (beside), data: new Uint8Array (), removed: true });
 
     return { main: toolPath (main), models: modelsPath !== undefined && models !== undefined ? toolPathOf (modelsPath) : "", files, problems, sought };
 }

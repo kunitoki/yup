@@ -37,7 +37,8 @@ ComponentTypeInfo::ComponentTypeInfo (Identifier typeNameToUse,
                                       std::vector<ComponentSignal> signalsToUse,
                                       Factory factoryToUse,
                                       ChildAttacher childAttacherToUse,
-                                      std::vector<ComponentPart> partsToUse)
+                                      std::vector<ComponentPart> partsToUse,
+                                      String descriptionToUse)
     : typeName (std::move (typeNameToUse))
     , baseTypeInfo (baseTypeInfoToUse)
     , properties (std::move (propertiesToUse))
@@ -45,6 +46,7 @@ ComponentTypeInfo::ComponentTypeInfo (Identifier typeNameToUse,
     , parts (std::move (partsToUse))
     , factory (std::move (factoryToUse))
     , childAttacher (std::move (childAttacherToUse))
+    , description (std::move (descriptionToUse))
 {
     rebuildIndices();
 }

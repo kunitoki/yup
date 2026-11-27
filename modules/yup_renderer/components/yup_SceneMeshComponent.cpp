@@ -270,6 +270,7 @@ const ComponentTypeInfo& SceneMeshComponent::getClassTypeInfo()
     };
 
     static const auto info = ComponentTypeBuilder<SceneMeshComponent> (Identifier ("Mesh3D"), SceneNodeComponent::getClassTypeInfo())
+                                 .description ("A Node3D drawing triangles: the x, y and z of each of its 'vertices', three 'indices' a triangle, counter-clockwise seen from its front.")
                                  .addProperty (geometryProperty (SceneMeshComponentIds::vertices, Type::number, &SceneMeshComponent::vertices, "The x, y, z of each vertex, one after the other."))
                                  .addProperty (geometryProperty (SceneMeshComponentIds::normals, Type::number, &SceneMeshComponent::normals, "The x, y, z of the normal of each vertex. Without them each triangle gets flat normals."))
                                  .addProperty (geometryProperty (SceneMeshComponentIds::uvs, Type::number, &SceneMeshComponent::uvs, "The u, v texture coordinates of each vertex, v pointing down."))

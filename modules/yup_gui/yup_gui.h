@@ -183,6 +183,7 @@
 #include "mouse/yup_PointerSimulator.h"
 #include "component/yup_ComponentTypeInfo.h"
 #include "component/yup_ComponentTypeRegistry.h"
+#include "effects/yup_ShaderProperty.h"
 #include "effects/yup_ShaderEffect.h"
 #include "drawing/yup_DrawingScope.h"
 #include "drawing/yup_PropertyExpression.h"

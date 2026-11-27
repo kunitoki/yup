@@ -595,7 +595,7 @@ configuration takes as long as building them. Files binding to the models of the
 | `BASE_DIR` | path | current source dir | Folder the lookup paths are relative to. |
 | `NAMESPACE` | string | `yup` | C++ namespace wrapping the function. |
 | `VERIFY` | flag | off | Check the `FILES` when configuring, loaded as the library serves them, failing on errors. |
-| `VERIFY_MODELS` | path | *(none)* | With `VERIFY`, the JSON file declaring the models the files bind to. |
+| `VERIFY_MODELS` | path | *(none)* | With `VERIFY`, the JSON file declaring the models the files bind to. Without it, each file is checked with the `<name>.models.json` next to it, when there is one. |
 | `FILES` | list | *(required)* | The `.yui` files, relative to the current source dir or absolute. |
 | `ASSETS` | list | - | Files embedded as they are: models, textures, compiled bundles, anything a document reads. |
 | `SHADERS` | list | - | GLSL 450 fragment stages, the files `shader Name { fragment: "P"; }` names. Embedded as `P.ysl`. |

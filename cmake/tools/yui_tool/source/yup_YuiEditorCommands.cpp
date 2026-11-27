@@ -21,8 +21,9 @@
 
 
 #include "yup_YuiCommands.h"
+#include "yup_YuiSchemaCommand.h"
 #include "yup_YuiToolIndex.h"
-#include "yup_YuiToolSupport.h"
+#include "yup_YuiToolModels.h"
 
 #include <algorithm>
 #include <cmath>
@@ -48,26 +49,25 @@ struct Asked
     YuiToolModels models;
 };
 
-// Reads the arguments of a command of an editor, printing what is wrong with them
-bool readAsked (int argc, char** argv, bool needsPlace, Asked& asked)
+// Reads the arguments of a command of an editor, failing with what is wrong with them
+Result readAsked (int argc, char** argv, bool needsPlace, Asked& asked)
 {
     bool hasModels = false;
 
     for (int i = 2; i < argc; ++i)
     {
         const String argument (argv[i]);
-        const auto hasValue = i + 1 < argc;
 
-        if (argument == "--models" && hasValue)
+        if (const auto* path = readYuiToolOption (argc, argv, i, "--models"))
         {
-            if (! asked.models.load (argv[++i]))
-                return false;
+            if (const auto loaded = asked.models.load (path); loaded.failed())
+                return loaded;
 
             hasModels = true;
         }
-        else if (needsPlace && argument == "--at" && hasValue)
+        else if (const auto* given = needsPlace ? readYuiToolOption (argc, argv, i, "--at") : nullptr)
         {
-            const String value (argv[++i]);
+            const String value (given);
             const auto line = value.upToFirstOccurrenceOf (":", false, false);
             const auto column = value.fromFirstOccurrenceOf (":", false, false);
 
@@ -80,10 +80,7 @@ bool readAsked (int argc, char** argv, bool needsPlace, Asked& asked)
             asked.place = isWhole (line) && isWhole (column) ? YuiToolPlace { line.getIntValue(), column.getIntValue() } : YuiToolPlace();
 
             if (asked.place.line < 1 || asked.place.column < 1)
-            {
-                std::cerr << "invalid place, expected <line>:<column>, both from 1: " << value << "\n";
-                return false;
-            }
+                return Result::fail ("invalid place, expected <line>:<column>, both from 1: " + value);
         }
         else if (asked.file == File() && ! argument.startsWithChar ('-'))
         {
@@ -91,28 +88,21 @@ bool readAsked (int argc, char** argv, bool needsPlace, Asked& asked)
         }
         else
         {
-            std::cerr << "invalid argument: " << argv[i] << "\n";
-            return false;
+            return Result::fail ("invalid argument: " + String::fromUTF8 (argv[i]));
         }
     }
 
     if (asked.file == File() || (needsPlace && asked.place.line < 1))
-    {
-        std::cerr << (needsPlace ? "expected a file and --at <line>:<column>\n" : "expected a file\n");
-        return false;
-    }
+        return Result::fail (needsPlace ? "expected a file and --at <line>:<column>" : "expected a file");
 
     if (! asked.file.existsAsFile())
-    {
-        std::cerr << "can't read '" << asked.file.getFullPathName() << "'\n";
-        return false;
-    }
+        return Result::fail ("can't read '" + asked.file.getFullPathName() + "'");
 
-    // Without models named, those next to the file are used, as the tools of agents use them
-    if (const auto beside = asked.file.getSiblingFile (asked.file.getFileNameWithoutExtension() + ".models.json"); ! hasModels && beside.existsAsFile())
+    // Without models named, those next to the file are used
+    if (const auto beside = findYuiToolModelsFile (asked.file); ! hasModels && beside.existsAsFile())
         ignoreUnused (asked.models.loadFile (beside));
 
-    return true;
+    return Result::ok();
 }
 
 int answer (const var& told)
@@ -372,14 +362,11 @@ var describeTargets (const std::vector<YuiToolSource>& sources)
         if (! ids.addIfNotAlreadyThere (id))
             return;
 
-        auto* target = new DynamicObject();
-        target->setProperty ("id", id);
-        target->setProperty ("label", label);
-        target->setProperty ("drawing", kind == "drawing" ? name : String());
-        target->setProperty ("palette", kind == "palette" ? name : String());
-        target->setProperty ("component", kind == "component" ? name : String());
-
-        targets.add (var (target));
+        targets.add (var::object ({ { "id", id },
+                                    { "label", label },
+                                    { "drawing", kind == "drawing" ? name : String() },
+                                    { "palette", kind == "palette" ? name : String() },
+                                    { "component", kind == "component" ? name : String() } }));
     };
 
     if (sources.front().index->getRoot() != nullptr)
@@ -461,23 +448,15 @@ var describeOutline (const std::vector<YuiToolSource>& sources)
     };
 
     for (const auto& color : index.findColors())
-    {
-        auto* record = new DynamicObject();
-        record->setProperty ("range", describeRange (index, color.start, color.end));
-        record->setProperty ("color", var (Array<var> { part (color.red), part (color.green), part (color.blue), part (color.alpha) }));
+        colors.add (var::object ({ { "range", describeRange (index, color.start, color.end) },
+                                   { "color", var (Array<var> { part (color.red), part (color.green), part (color.blue), part (color.alpha) }) } }));
 
-        colors.add (var (record));
-    }
-
-    auto* outline = new DynamicObject();
-    outline->setProperty ("file", main.file.getFullPathName());
-    outline->setProperty ("imports", var (imports));
-    outline->setProperty ("symbols", var (symbols));
-    outline->setProperty ("colors", var (colors));
-    outline->setProperty ("targets", describeTargets (sources));
-    outline->setProperty ("hosts", describeHosts (sources));
-
-    return var (outline);
+    return var::object ({ { "file", main.file.getFullPathName() },
+                          { "imports", var (imports) },
+                          { "symbols", var (symbols) },
+                          { "colors", var (colors) },
+                          { "targets", describeTargets (sources) },
+                          { "hosts", describeHosts (sources) } });
 }
 
 //==============================================================================
@@ -505,10 +484,7 @@ public:
 
     var toJson() const
     {
-        auto* found = new DynamicObject();
-        found->setProperty ("items", var (items));
-
-        return var (found);
+        return var::object ({ { "items", var (items) } });
     }
 
 private:
@@ -520,7 +496,7 @@ void addTypes (Completions& found, const std::vector<YuiToolSource>& sources)
 {
     for (const auto* info : ComponentTypeRegistry::getInstance().getRegisteredTypes())
         if (info->hasFactory())
-            found.add (info->getTypeName().toString(), "type");
+            found.add (info->getTypeName().toString(), "type", {}, info->getDescription());
 
     for (const auto& source : sources)
         for (const auto& declaration : source.index->getDeclarations())
@@ -924,12 +900,7 @@ var tellPlace (const YuiToolSource& source, int offset)
 {
     const auto place = source.index->getPlace (offset);
 
-    auto* told = new DynamicObject();
-    told->setProperty ("file", source.file.getFullPathName());
-    told->setProperty ("line", place.line);
-    told->setProperty ("column", place.column);
-
-    return var (told);
+    return var::object ({ { "file", source.file.getFullPathName() }, { "line", place.line }, { "column", place.column } });
 }
 
 // Where what is named at a place of a file is declared, nothing when it is not
@@ -1019,7 +990,8 @@ String describeShader (const YuiToolIndex& index, const YuiToolDeclaration& shad
     return code + "\n}";
 }
 
-// What the property or the signal a statement starts with is, or the shader named elsewhere, nothing for anything else
+// What the property or the signal a statement starts with is, the type a component starts with, or the shader named
+// elsewhere, nothing for anything else
 var describeHover (const std::vector<YuiToolSource>& sources, int offset)
 {
     const auto& index = *sources.front().index;
@@ -1049,12 +1021,13 @@ var describeHover (const std::vector<YuiToolSource>& sources, int offset)
         if (shader == nullptr)
             return makeNothing();
 
-        auto* told = new DynamicObject();
-        told->setProperty ("code", describeShader (*owner->index, *shader));
-        told->setProperty ("range", describeRange (index, start, start + name.length()));
-
-        return var (told);
+        return var::object ({ { "code", describeShader (*owner->index, *shader) }, { "range", describeRange (index, start, start + name.length()) } });
     }
+
+    // A type that describes itself is told where a component of it starts
+    if (const auto headed = index.findBlocksAt (start, true); ! headed.empty() && headed.back()->start == start)
+        if (const auto* type = ComponentTypeRegistry::getInstance().findType (Identifier (name)); type != nullptr && type->getDescription().isNotEmpty())
+            return var::object ({ { "code", name }, { "text", type->getDescription() }, { "range", describeRange (index, start, start + name.length()) } });
 
     const auto chain = index.findBlocksAt (start);
     const YuiToolBlock* element = nullptr;
@@ -1106,8 +1079,8 @@ int runYuiOutlineCommand (int argc, char** argv)
 {
     Asked asked;
 
-    if (! readAsked (argc, argv, false, asked))
-        return 2;
+    if (const auto read = readAsked (argc, argv, false, asked); read.failed())
+        return refuseYuiToolCommand (read);
 
     registerYuiComponentTypes();
 
@@ -1118,8 +1091,8 @@ int runYuiCompleteCommand (int argc, char** argv)
 {
     Asked asked;
 
-    if (! readAsked (argc, argv, true, asked))
-        return 2;
+    if (const auto read = readAsked (argc, argv, true, asked); read.failed())
+        return refuseYuiToolCommand (read);
 
     registerYuiComponentTypes();
 
@@ -1132,8 +1105,8 @@ int runYuiDefinitionCommand (int argc, char** argv)
 {
     Asked asked;
 
-    if (! readAsked (argc, argv, true, asked))
-        return 2;
+    if (const auto read = readAsked (argc, argv, true, asked); read.failed())
+        return refuseYuiToolCommand (read);
 
     const auto sources = readYuiToolSources (asked.file);
 
@@ -1144,8 +1117,8 @@ int runYuiHoverCommand (int argc, char** argv)
 {
     Asked asked;
 
-    if (! readAsked (argc, argv, true, asked))
-        return 2;
+    if (const auto read = readAsked (argc, argv, true, asked); read.failed())
+        return refuseYuiToolCommand (read);
 
     registerYuiComponentTypes();
 

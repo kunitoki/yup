@@ -141,16 +141,16 @@ void main() { color = vec4 (params.scale, 0.0, 1.0); })";
 
 TEST_F (ShaderEffectTests, TellsHowManyScalarsAPropertyNeedsOfAMember)
 {
-    EXPECT_EQ (ShaderEffect::getNumUniformComponents (Type::number), 1);
-    EXPECT_EQ (ShaderEffect::getNumUniformComponents (Type::integer), 1);
-    EXPECT_EQ (ShaderEffect::getNumUniformComponents (Type::boolean), 1);
-    EXPECT_EQ (ShaderEffect::getNumUniformComponents (Type::array), 1);
-    EXPECT_EQ (ShaderEffect::getNumUniformComponents (Type::point), 2);
-    EXPECT_EQ (ShaderEffect::getNumUniformComponents (Type::color), 3);
-    EXPECT_EQ (ShaderEffect::getNumUniformComponents (Type::rectangle), 4);
+    EXPECT_EQ (ShaderProperty::getNumUniformComponents (Type::number), 1);
+    EXPECT_EQ (ShaderProperty::getNumUniformComponents (Type::integer), 1);
+    EXPECT_EQ (ShaderProperty::getNumUniformComponents (Type::boolean), 1);
+    EXPECT_EQ (ShaderProperty::getNumUniformComponents (Type::array), 1);
+    EXPECT_EQ (ShaderProperty::getNumUniformComponents (Type::point), 2);
+    EXPECT_EQ (ShaderProperty::getNumUniformComponents (Type::color), 3);
+    EXPECT_EQ (ShaderProperty::getNumUniformComponents (Type::rectangle), 4);
 
     for (const auto type : { Type::string, Type::transform, Type::enumeration, Type::font, Type::drawing, Type::any })
-        EXPECT_EQ (ShaderEffect::getNumUniformComponents (type), 0);
+        EXPECT_EQ (ShaderProperty::getNumUniformComponents (type), 0);
 }
 
 TEST_F (ShaderEffectTests, WithoutAGpuTheComponentIsPaintedAsItIsAndNothingFails)
@@ -214,47 +214,47 @@ TEST_F (ShaderEffectTests, WritesAPropertyToTheMemberOfItsNameByItsType)
 
     // A color as it is written, not premultiplied: red, green, blue and alpha from 0 to 1
     const float tint[] = { 1.0f, 0.0f, 0.0f, 0.0f };
-    EXPECT_TRUE (ShaderEffect::setUniform (uniforms, { "tint", Type::color }, VariantConverter<Color>::toVar (Color (0x00ff0000))));
+    EXPECT_TRUE (ShaderProperty::setUniform (uniforms, { "tint", Type::color }, VariantConverter<Color>::toVar (Color (0x00ff0000))));
     EXPECT_TRUE (expected.set ("tint", tint));
 
     // A vec3 takes it without its alpha
     const float shade[] = { 1.0f, 1.0f, 0.0f };
-    EXPECT_TRUE (ShaderEffect::setUniform (uniforms, { "shade", Type::color }, VariantConverter<Color>::toVar (Color (0xffffff00))));
+    EXPECT_TRUE (ShaderProperty::setUniform (uniforms, { "shade", Type::color }, VariantConverter<Color>::toVar (Color (0xffffff00))));
     EXPECT_TRUE (expected.set ("shade", shade));
 
     const float area[] = { 1.0f, 2.0f, 3.0f, 4.0f };
-    EXPECT_TRUE (ShaderEffect::setUniform (uniforms, { "area", Type::rectangle }, VariantConverter<Rectangle<float>>::toVar ({ 1.0f, 2.0f, 3.0f, 4.0f })));
+    EXPECT_TRUE (ShaderProperty::setUniform (uniforms, { "area", Type::rectangle }, VariantConverter<Rectangle<float>>::toVar ({ 1.0f, 2.0f, 3.0f, 4.0f })));
     EXPECT_TRUE (expected.set ("area", area));
 
     const float origin[] = { 5.0f, 6.0f };
-    EXPECT_TRUE (ShaderEffect::setUniform (uniforms, { "origin", Type::point }, VariantConverter<Point<float>>::toVar ({ 5.0f, 6.0f })));
+    EXPECT_TRUE (ShaderProperty::setUniform (uniforms, { "origin", Type::point }, VariantConverter<Point<float>>::toVar ({ 5.0f, 6.0f })));
     EXPECT_TRUE (expected.set ("origin", origin));
 
-    EXPECT_TRUE (ShaderEffect::setUniform (uniforms, { "amount", Type::number }, 0.5));
+    EXPECT_TRUE (ShaderProperty::setUniform (uniforms, { "amount", Type::number }, 0.5));
     EXPECT_TRUE (expected.set ("amount", 0.5f));
 
     // An integer is cut to a whole number, where the member alone would round it
-    EXPECT_TRUE (ShaderEffect::setUniform (uniforms, { "steps", Type::integer }, 2.75));
+    EXPECT_TRUE (ShaderProperty::setUniform (uniforms, { "steps", Type::integer }, 2.75));
     EXPECT_TRUE (expected.set ("steps", 2));
 
-    EXPECT_TRUE (ShaderEffect::setUniform (uniforms, { "inverted", Type::boolean }, true));
+    EXPECT_TRUE (ShaderProperty::setUniform (uniforms, { "inverted", Type::boolean }, true));
     EXPECT_TRUE (expected.set ("inverted", true));
 
     EXPECT_TRUE (uniforms == expected);
     EXPECT_FALSE (uniforms == shader->createUniforms());
 
     // What can't be written leaves the uniforms as they are
-    EXPECT_FALSE (ShaderEffect::setUniform (uniforms, { "missing", Type::number }, 1.0));
-    EXPECT_FALSE (ShaderEffect::setUniform (uniforms, { "amount", Type::string }, "high"));
-    EXPECT_FALSE (ShaderEffect::setUniform (uniforms, { "origin", Type::point }, "here"));
+    EXPECT_FALSE (ShaderProperty::setUniform (uniforms, { "missing", Type::number }, 1.0));
+    EXPECT_FALSE (ShaderProperty::setUniform (uniforms, { "amount", Type::string }, "high"));
+    EXPECT_FALSE (ShaderProperty::setUniform (uniforms, { "origin", Type::point }, "here"));
     EXPECT_TRUE (uniforms == expected);
 
     // A property the component has no value for is zero
     auto unset = shader->createUniforms();
-    ShaderEffect::setUniform (unset, { "tint", Type::color }, var());
-    ShaderEffect::setUniform (unset, { "area", Type::rectangle }, var());
-    ShaderEffect::setUniform (unset, { "amount", Type::number }, var());
-    ShaderEffect::setUniform (unset, { "inverted", Type::boolean }, var());
+    ShaderProperty::setUniform (unset, { "tint", Type::color }, var());
+    ShaderProperty::setUniform (unset, { "area", Type::rectangle }, var());
+    ShaderProperty::setUniform (unset, { "amount", Type::number }, var());
+    ShaderProperty::setUniform (unset, { "inverted", Type::boolean }, var());
     EXPECT_TRUE (unset == shader->createUniforms());
 }
 
@@ -267,11 +267,11 @@ TEST_F (ShaderEffectTests, WritesAnArrayOfNumbersToAnArray)
     auto expected = shader->createUniforms();
 
     const float levels[] = { 0.25f, 0.5f, 1.0f };
-    EXPECT_TRUE (ShaderEffect::setUniform (uniforms, { "levels", Type::array }, var (Array<var> { 0.25, 0.5, 1.0 })));
+    EXPECT_TRUE (ShaderProperty::setUniform (uniforms, { "levels", Type::array }, var (Array<var> { 0.25, 0.5, 1.0 })));
     EXPECT_TRUE (expected.set ("levels", levels));
     EXPECT_TRUE (uniforms == expected);
 
-    EXPECT_FALSE (ShaderEffect::setUniform (uniforms, { "levels", Type::array }, var (Array<var> { "low", "high" })));
+    EXPECT_FALSE (ShaderProperty::setUniform (uniforms, { "levels", Type::array }, var (Array<var> { "low", "high" })));
     EXPECT_TRUE (uniforms == expected);
 }
 
@@ -288,7 +288,7 @@ TEST_F (ShaderEffectTests, WritesAPropertyToAMemberFoundOnceAsToTheMemberOfItsNa
 
     struct Value
     {
-        ShaderEffect::Property property;
+        ShaderProperty property;
         var value;
     };
 
@@ -305,8 +305,8 @@ TEST_F (ShaderEffectTests, WritesAPropertyToAMemberFoundOnceAsToTheMemberOfItsNa
         const auto member = layout.findMember (property.name.toString());
         ASSERT_TRUE (member.isValid()) << property.name.toString();
 
-        EXPECT_TRUE (ShaderEffect::setUniform (byHandle, member, property.type, value)) << property.name.toString();
-        EXPECT_TRUE (ShaderEffect::setUniform (byName, property, value)) << property.name.toString();
+        EXPECT_TRUE (ShaderProperty::setUniform (byHandle, member, property.type, value)) << property.name.toString();
+        EXPECT_TRUE (ShaderProperty::setUniform (byName, property, value)) << property.name.toString();
     }
 
     EXPECT_TRUE (byHandle == byName);
@@ -316,11 +316,11 @@ TEST_F (ShaderEffectTests, WritesAPropertyToAMemberFoundOnceAsToTheMemberOfItsNa
     const auto amount = layout.findMember ("amount");
     const auto origin = layout.findMember ("origin");
 
-    EXPECT_FALSE (ShaderEffect::setUniform (byHandle, layout.findMember ("missing"), Type::number, 1.0));
-    EXPECT_FALSE (ShaderEffect::setUniform (byHandle, ShaderUniforms::MemberHandle(), Type::color, VariantConverter<Color>::toVar (Colors::white)));
-    EXPECT_FALSE (ShaderEffect::setUniform (byHandle, amount, Type::string, "high"));
-    EXPECT_FALSE (ShaderEffect::setUniform (byHandle, origin, Type::point, "here"));
-    EXPECT_FALSE (ShaderEffect::setUniform (byHandle, origin, Type::point, var()));
+    EXPECT_FALSE (ShaderProperty::setUniform (byHandle, layout.findMember ("missing"), Type::number, 1.0));
+    EXPECT_FALSE (ShaderProperty::setUniform (byHandle, ShaderUniforms::MemberHandle(), Type::color, VariantConverter<Color>::toVar (Colors::white)));
+    EXPECT_FALSE (ShaderProperty::setUniform (byHandle, amount, Type::string, "high"));
+    EXPECT_FALSE (ShaderProperty::setUniform (byHandle, origin, Type::point, "here"));
+    EXPECT_FALSE (ShaderProperty::setUniform (byHandle, origin, Type::point, var()));
     EXPECT_TRUE (byHandle == byName);
 }
 
@@ -568,7 +568,7 @@ TEST_F (ShaderEffectTests, TellsWhatPreventsPropertiesFromFillingAShader)
     const auto shader = compile (typesFragment);
     ASSERT_NE (shader, nullptr);
 
-    const auto failureOf = [] (const GpuImageShader::Ptr& checkedShader, const std::vector<ShaderEffect::Property>& properties)
+    const auto failureOf = [] (const GpuImageShader::Ptr& checkedShader, const std::vector<ShaderProperty>& properties)
     {
         const auto checked = ShaderEffect::checkProperties (*checkedShader, properties);
         return checked.failed() ? checked.getErrorMessage() : String();
@@ -869,9 +869,9 @@ TEST_F (ShaderEffectMetalTests, AnArrayFillsTheTextureOfItsNameBesideThePictureO
     EXPECT_EQ (shader->getInputTextureNames(), StringArray ({ "source", "gates" }));
 
     // The texture an array names is no picture: the shader still reads one, the component
-    const std::vector<ShaderEffect::Property> properties { { "gates", Type::array } };
-    EXPECT_EQ (ShaderEffect::getNumPictures (*shader, properties), 1);
-    EXPECT_EQ (ShaderEffect::getNumPictures (*shader, {}), 2);
+    const std::vector<ShaderProperty> properties { { "gates", Type::array } };
+    EXPECT_EQ (ShaderProperty::getNumPictures (*shader, properties), 1);
+    EXPECT_EQ (ShaderProperty::getNumPictures (*shader, {}), 2);
 
     Filled screen ("screen", Color (0xff0000ff));
     screen.setComponentEffect (new ShaderEffect (screen, shader, properties));

@@ -75,7 +75,9 @@
 # not compile fails as well, and editing one configures again. The tool is
 # built for the host the first time, into the build tree, so the option costs a
 # build of yup_gui, of yup_gui_markup, of yup_renderer, of yup_audio_gui and of that transpiler. VERIFY_MODELS is
-# the JSON file declaring the models the files bind to (see `--models`).
+# the JSON file declaring the models the files bind to (see `--models`). Without
+# it, each file is checked with the `<name>.models.json` next to it, when there
+# is one.
 
 function (_yup_build_yui_tool output_variable)
     get_property (tool_executable GLOBAL PROPERTY YUP_YUI_TOOL_EXECUTABLE)

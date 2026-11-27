@@ -11,8 +11,6 @@ type Request = Asked & {
 interface ToolModule {
     wasmMemory: { buffer: ArrayBuffer };
     _yuiToolAllocate (size: number): number;
-    _yuiAgentCall?: unknown;
-    _yuiToolMissingFiles?: unknown;
     ccall (name: string, returns: string | null, types: string[], values: unknown[]): unknown;
 }
 
@@ -40,12 +38,6 @@ parentPort?.on ("message", (request: Request) => {
         output = [];
         errors = [];
 
-        // A module built before the tools of an agent existed still runs the commands
-        if (! ("args" in request) && tool._yuiAgentCall === undefined) {
-            parentPort?.postMessage ({ id: request.id, error: "the yup_yui_tool module of this installation has no tools for agents: build it again" });
-            return;
-        }
-
         // The tools of an agent answer with JSON, which stands for what a command prints
         let code: unknown = 0;
         let answer: unknown;
@@ -57,9 +49,8 @@ parentPort?.on ("message", (request: Request) => {
         else
             code = tool.ccall ("yuiToolRun", "number", ["string"], [JSON.stringify (request.args)]);
 
-        // The files the documents loaded for it name without the tool having them, which a module built before it
-        // told them does not tell
-        const missing: unknown = tool._yuiToolMissingFiles === undefined ? [] : JSON.parse (String (tool.ccall ("yuiToolMissingFiles", "string", [], [])));
+        // The files the documents loaded for it name without the tool having them
+        const missing: unknown = JSON.parse (String (tool.ccall ("yuiToolMissingFiles", "string", [], [])));
 
         parentPort?.postMessage ({ id: request.id, code, stdout: typeof answer === "string" ? answer : output.join ("\n"), stderr: errors.join ("\n"), missing });
     }).catch ((error: unknown) => {

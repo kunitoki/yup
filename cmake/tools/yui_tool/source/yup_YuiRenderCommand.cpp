@@ -20,8 +20,11 @@
 */
 
 #include "yup_YuiCommands.h"
+#include "yup_YuiInspectCommand.h"
 #include "yup_YuiToolGuides.h"
-#include "yup_YuiToolSupport.h"
+#include "yup_YuiToolModels.h"
+#include "yup_YuiToolResources.h"
+#include "yup_YuiToolView.h"
 
 #include <iostream>
 
@@ -69,26 +72,23 @@ int runYuiRenderCommand (int argc, char** argv)
 
     for (int i = 2; i < argc; ++i)
     {
-        const String argument (argv[i]);
-        const auto hasValue = i + 1 < argc;
-
-        if (argument == "--output" && hasValue)
+        if (const auto* path = readYuiToolOption (argc, argv, i, "--output"))
         {
-            output = File::getCurrentWorkingDirectory().getChildFile (argv[++i]);
+            output = File::getCurrentWorkingDirectory().getChildFile (path);
         }
-        else if (argument == "--scale" && hasValue)
+        else if (const auto* factor = readYuiToolOption (argc, argv, i, "--scale"))
         {
-            scale = String (argv[++i]).getFloatValue();
+            scale = String (factor).getFloatValue();
 
             if (scale <= 0.0f || scale > 8.0f)
             {
-                std::cerr << "invalid scale, expected a factor up to 8: " << argv[i] << "\n";
+                std::cerr << "invalid scale, expected a factor up to 8: " << factor << "\n";
                 return 2;
             }
         }
-        else if (argument == "--margin" && hasValue)
+        else if (const auto* pixels = readYuiToolOption (argc, argv, i, "--margin"))
         {
-            const String value (argv[++i]);
+            const String value (pixels);
 
             if (! isYuiToolNumber (value))
             {
@@ -98,29 +98,23 @@ int runYuiRenderCommand (int argc, char** argv)
 
             margin = value.getFloatValue();
         }
-        else if (argument == "--guides" && hasValue)
+        else if (const auto* names = readYuiToolOption (argc, argv, i, "--guides"))
         {
-            guided.addTokens (argv[++i], ",", "");
+            guided.addTokens (names, ",", "");
         }
-        else if (argument == "--region" && hasValue)
+        else if (const auto* area = readYuiToolOption (argc, argv, i, "--region"))
         {
-            region = parseRegion (argv[++i]);
+            region = parseRegion (area);
 
             if (! region.has_value())
             {
-                std::cerr << "invalid region, expected <x>,<y>,<width>,<height>: " << argv[i] << "\n";
+                std::cerr << "invalid region, expected <x>,<y>,<width>,<height>: " << area << "\n";
                 return 2;
             }
         }
-        else if (const auto isValid = readYuiToolViewOption (argc, argv, i, options, models))
+        else if (const auto read = readYuiToolViewOption (argc, argv, i, options, models); read.failed())
         {
-            if (! *isValid)
-                return 2;
-        }
-        else
-        {
-            std::cerr << "invalid argument: " << argv[i] << "\n";
-            return 2;
+            return refuseYuiToolCommand (read);
         }
     }
 
@@ -143,6 +137,11 @@ int runYuiRenderCommand (int argc, char** argv)
         std::cerr << "can't read '" << options.input.getFullPathName() << "'\n";
         return 2;
     }
+
+    // Without models given, those next to the file are used
+    if (const auto beside = findYuiToolModelsFile (options.input); ! options.hasModels && beside.existsAsFile())
+        if (const auto loaded = models.load (beside.getFullPathName()); loaded.failed())
+            return refuseYuiToolCommand (loaded);
 
     YuiToolView view (options, models);
     const auto& shown = view.getShown();

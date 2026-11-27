@@ -17,13 +17,15 @@
     { "open": "{", "close": "}" },
     { "open": "[", "close": "]" },
     { "open": "(", "close": ")" },
-    { "open": "\"", "close": "\"", "notIn": ["string", "comment"] }
+    { "open": "\"", "close": "\"", "notIn": ["string", "comment"] },
+    { "open": "'", "close": "'", "notIn": ["string", "comment"] }
   ],
   "surroundingPairs": [
     ["{", "}"],
     ["[", "]"],
     ["(", ")"],
-    ["\"", "\""]
+    ["\"", "\""],
+    ["'", "'"]
   ],
   "wordPattern": "(-?\\d*\\.?\\d+)|([A-Za-z_][A-Za-z0-9_]*)",
   "indentationRules": {

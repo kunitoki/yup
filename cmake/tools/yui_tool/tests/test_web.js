@@ -532,3 +532,102 @@ test ("the files a document names are told once to who asks, and not those it wa
 
     assert.deepEqual (missingFiles (), []);
 });
+
+//==============================================================================
+// The VS Code extension, which lists by hand what the tool knows: in its grammar and in its snippets
+
+// A file of the extension, all of which are JSON
+function readExtension (name) {
+    return JSON.parse (fs.readFileSync (path.join (repository, "modules/yup_gui_markup/tools/vscode-yui", name), "utf8"));
+}
+
+// The words a rule of the grammar lists, between the first parentheses of what it matches
+function wordsOf (rule) {
+    return rule.match.match (/[(][?]:([^()]+)[)]/)[1].split ("|");
+}
+
+function schemaTopic (topic) {
+    return JSON.parse (agent ("yui_schema", { topic }).text);
+}
+
+// What a snippet writes while its stops are left as they are: each with its text, or the first of its choices
+function writtenBy (snippet) {
+    const texts = new Map ();
+    const written = snippet.body.join ("\n").replace (/[$][{]([0-9]+)(?::([^{}]*)|[|]([^,|]+)[^{}]*)[}]/g, (stop, number, text, choice) => {
+        texts.set (number, text ?? choice);
+        return text ?? choice;
+    });
+
+    return written.replace (/[$]([0-9]+)/g, (stop, number) => texts.get (number));
+}
+
+// Where a snippet that is no document by itself is written, and what uses what it declares: the tool tells the
+// problems of what it builds, which a component, a drawing or a rule nothing uses is not
+const snippetPlaces = {
+    component: written => `${written}\nName { }\n`,
+    property: written => `component Probe : Column {\n${written}\n}\n\nProbe { }\n`,
+    alias: written => `component Probe : Column {\n${written}\n    Slider { id: knob; }\n}\n\nProbe { }\n`,
+    signal: written => `component Probe : Column {\n${written}\n}\n\nProbe { }\n`,
+    drawing: written => `${written}\nComponent { drawing: Name; }\n`,
+    repeat: written => `drawing Probe {\n    let c: bounds.center;\n    let r: bounds.width * 0.4;\n${written}\n}\n\nComponent { drawing: Probe; }\n`,
+    style: written => `${written}\nSlider { class: knob; }\n`,
+    rule: written => `style {\n${written}\n}\n\nSlider { class: knob; }\n`,
+    transition: written => `style {\n    .knob {\n${written}\n    }\n}\n\nSlider { class: knob; }\n`,
+    keyframes: written => `style {\n${written}\n}\n`,
+    animation: written => `style {\n    @keyframes pulse { from { glow: 0; } to { glow: 1; } }\n\n    .knob {\n${written}\n    }\n}\n\nSlider { class: knob; }\n`,
+    model: written => `Scene3D {\n${written}\n}\n`,
+    bind: written => `Slider {\n${written}\n}\n`,
+    handler: written => `TextButton {\n${written}\n}\n`,
+    "handler-arguments": written => `component Probe : Column {\n    signal onChanged (value: number);\n\n    Slider {\n${written}\n    }\n}\n\nProbe { }\n`,
+    changed: written => `Slider {\n${written}\n}\n`
+};
+
+test ("the shapes the grammar of the extension lists are the elements of a drawing", () => {
+    const grammar = readExtension ("syntaxes/yui.tmLanguage.json").repository;
+    const elements = new Set (schemaTopic ("drawing").elements.map (element => element.type));
+    const shapes = wordsOf (grammar.shapes.patterns[0]);
+
+    // What declares, repeats or uses is a keyword of the language, which the grammar lists apart
+    const keywords = grammar.keywords.patterns.filter (rule => ["keyword.control.yui", "storage.type.yui"].includes (rule.name)).flatMap (wordsOf);
+
+    assert.deepEqual (shapes.filter (name => ! elements.has (name)), []);
+    assert.deepEqual ([...elements].filter (name => ! shapes.includes (name) && ! keywords.includes (name)), []);
+});
+
+test ("the functions the grammar of the extension lists cover those of an expression", () => {
+    const listed = wordsOf (readExtension ("syntaxes/yui.tmLanguage.json").repository.functions.patterns[0]);
+
+    // A function is told as `name (parameters) -> result`. What makes a value by a name after a dot, as
+    // transform.rotation, is listed by the name before it
+    const names = schemaTopic ("expressions").functions.map (signature => signature.split (" (")[0].split (".")[0]);
+
+    assert.deepEqual ([...new Set (names)].filter (name => ! listed.includes (name)), []);
+});
+
+test ("the snippets of the extension write what the tool finds no problem in", () => {
+    // What the snippets name: a document to import, a model with a node named Knob, a shader and a model property
+    write ("snippets/palette.yui", "");
+    write ("snippets/models/device.glb", model);
+    write ("snippets/fx/name.frag", tintFragment);
+    write ("snippets/models.json", JSON.stringify ({ params: { cutoff: 0.5 } }));
+
+    const told = {};
+
+    for (const snippet of Object.values (readExtension ("snippets/yui.code-snippets"))) {
+        // A module built without the compiler of shaders tells the bundle the source of one lacks
+        if (snippet.prefix === "shader" && ! compilesShaders ())
+            continue;
+
+        const file = `snippets/${snippet.prefix}.snippet.yui`;
+        const place = snippetPlaces[snippet.prefix] ?? (written => written);
+
+        write (file, place (writtenBy (snippet)));
+
+        const { code, diagnostics } = lint ("--models", "snippets/models.json", file);
+
+        if (code !== 0 || diagnostics.length > 0)
+            told[snippet.prefix] = diagnostics.map (diagnostic => `${diagnostic.line}:${diagnostic.column}: ${diagnostic.severity}: ${diagnostic.message}`);
+    }
+
+    assert.deepEqual (told, {});
+});

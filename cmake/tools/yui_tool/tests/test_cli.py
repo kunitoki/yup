@@ -113,6 +113,15 @@ TYPED = ('import "parts.yui";\n\n'
          '    Dial {\n        id: other;\n        cap\n    }\n'
          '    Slider { wid\n')
 PARTS = 'drawing Bar { rect { bounds: bounds; fill: #ff0000; } }\ncomponent Toolbar : Row { }\n'
+# A document writing the path it imports and a string between single quotes. The string holds a quote, and what
+# would end its statement and open a block were it not in one
+QUOTED = ("import 'parts.yui';\n\n"
+          "shader Glow {\n"
+          "    fragment: 'fx/it\\'s; {.frag';\n"
+          "    property tint: color = #ff8800;\n"
+          "}\n\n"
+          "Column {\n    id: panel;\n"
+          "    Slider { wid\n")
 NEEDLE = "drawing Needle {\n    circle { center: bounds.center; radius: 4 * normalized; fill: #ff0000; }\n}\n"
 # An image shader tinting the picture it reads, and one whose third line does not compile
 TINT_FRAGMENT = ('#version 450\n'
@@ -373,6 +382,67 @@ class YuiToolCliTests(unittest.TestCase):
             with self.subTest(models=models):
                 self.assertEqual(self.invoke("verify", "--models", models, "ui.yui").returncode, 2)
         self.assertEqual(self.invoke("verify", "ui.yui", "--models").returncode, 2)
+
+    def test_the_models_next_to_a_file_are_used_when_none_are_given(self):
+        document = "Slider { id: gain; value <=> model.gain; }\n"
+        self.write("ui.yui", document)
+        self.write("ui.models.json", json.dumps({"model": {"gain": 0.5}}))
+        plain = self.write("plain.yui", document)
+
+        # A <name>.yui file is checked with the <name>.models.json next to it, and one that has none as before
+        self.assertEqual(self.diagnostics("lint", "ui.yui", code=0), [])
+        self.assertEqual(self.diagnostics("verify", "ui.yui", code=0), [])
+        self.assertEqual(self.diagnostics("lint", "--stdin", "--path", "ui.yui", stdin=document, code=0), [])
+
+        found = self.diagnostics("verify", "plain.yui", code=1)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("model", found[0]["message"])
+        self.diagnostics("lint", "plain.yui", code=1)
+
+        # Each of several files is checked with its own
+        found = self.diagnostics("verify", "ui.yui", "plain.yui", code=1)
+        self.assertEqual([entry["file"] for entry in found], [str(plain)])
+
+        # What shows a file reads them as well
+        shown = self.invoke("inspect", "ui.yui")
+        self.assertEqual(shown.returncode, 0, shown.stderr)
+        self.assertNotIn(": error: ", shown.stderr)
+        self.assertIn(": error: ", self.invoke("inspect", "plain.yui").stderr)
+
+        drawn = self.invoke("render", "ui.yui", "--output", "out.png")
+        self.assertIn(drawn.returncode, (0, 3), drawn.stderr)
+        self.assertNotIn(": error: ", drawn.stderr)
+        self.assertIn(": error: ", self.invoke("render", "plain.yui", "--output", "out.png").stderr)
+
+    def test_the_models_given_win_over_those_next_to_a_file(self):
+        self.write("ui.yui", "Slider { id: gain; value <=> model.gain; }\n")
+        self.write("ui.models.json", json.dumps({"model": {"gain": 0.5}}))
+        self.write("other.json", json.dumps({"model": {"level": 0.5}}))
+
+        # Those next to the file declare what the document binds to and the ones given do not: these are the ones used
+        for command in ("verify", "lint"):
+            with self.subTest(command=command):
+                found = self.diagnostics(command, "--models", "other.json", "ui.yui", code=1)
+                self.assertTrue(any("gain" in entry["message"] for entry in found), found)
+
+        self.assertIn(": error: ", self.invoke("inspect", "ui.yui", "--models", "other.json").stderr)
+        self.assertIn(": error: ", self.invoke("render", "ui.yui", "--models", "other.json", "--output", "out.png").stderr)
+
+    def test_unusable_models_next_to_a_file_are_a_usage_error(self):
+        self.write("ui.yui", VALID)
+        models = self.write("ui.models.json", "{ not json")
+        self.write("good.json", json.dumps({"model": {"gain": 0.5}}))
+
+        # As the ones given are, and told with their file
+        for args in (("verify", "ui.yui"), ("lint", "ui.yui"), ("inspect", "ui.yui"), ("render", "ui.yui", "--output", "out.png")):
+            with self.subTest(args=args):
+                result = self.invoke(*args)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn(f"{models}: error: ", result.stderr)
+
+        # They are left unread when others are given, and an editor is answered without them
+        self.assertEqual(self.invoke("lint", "--models", "good.json", "ui.yui").returncode, 0)
+        self.assertEqual(self.invoke("outline", "ui.yui").returncode, 0)
 
     # ==========================================================================
     # lint
@@ -820,6 +890,10 @@ class YuiToolCliTests(unittest.TestCase):
         self.assertIn("agx", {entry["name"]: entry for entry in types["Scene3D"]["properties"]}["toneMapping"]["values"])
         self.assertEqual({entry["name"]: entry for entry in types["Mesh3D"]["properties"]}["vertices"]["type"], "array")
 
+        # A type tells what it is, when it says so
+        self.assertIn("Node3D", types["Model3D"]["description"])
+        self.assertNotIn("description", types["Slider"])
+
     # ==========================================================================
     # import-svg
 
@@ -1246,6 +1320,9 @@ class YuiToolCliTests(unittest.TestCase):
         # Only what a statement starts with is one
         self.assertEqual(self.ask("hover", "ui.yui", "--at", self.place(TYPED, "id: cutoff", 1)), {})
 
+        # A type that does not tell what it is tells nothing
+        self.assertEqual(self.ask("hover", "ui.yui", "--at", self.place(TYPED, "Column", 1)), {})
+
     def test_editor_commands_tell_the_shaders_of_a_file(self):
         path = self.write("fx.yui", SHADERS)
         crt = 'shader Crt {\n    fragment: "fx/crt.frag";\n    property intensity: number;\n    property tint: color;\n}'
@@ -1332,6 +1409,37 @@ class YuiToolCliTests(unittest.TestCase):
         told = ask("hover", "    toneMapping", 1)
         self.assertEqual(told["code"], "toneMapping: enumeration")
         self.assertIn("agx", told["values"])
+
+        # A type that tells what it is tells it where it is offered, and where a component of it starts
+        self.assertIn("Node3D", labels["Mesh3D"]["documentation"])
+
+        told = ask("hover", "    Mesh3D", 1)
+        self.assertEqual((told["code"], told["range"]), ("Mesh3D", [22, 5, 22, 11]))
+        self.assertIn("triangles", told["text"])
+
+    def test_editor_commands_read_what_is_written_between_single_quotes(self):
+        self.write("ui.yui", QUOTED)
+        parts = self.write("parts.yui", PARTS)
+
+        # A string is no code, between single quotes as between double ones: what it holds, a quote written
+        # after a backslash included, neither ends its statement nor opens a block
+        outline = self.ask("outline", "ui.yui")
+        symbols = outline["symbols"]
+        self.assertEqual([(symbol["name"], symbol["kind"]) for symbol in symbols], [("Glow", "shader"), ("Column #panel", "element")])
+        self.assertEqual([(child["name"], child["detail"]) for child in symbols[0]["children"]], [("tint", "color")])
+        self.assertEqual([child["name"] for child in symbols[1]["children"]], ["Slider"])
+        self.assertEqual(len(outline["colors"]), 1)
+
+        # The file imported is followed, and told where its path is written
+        self.assertEqual(outline["imports"], [{"path": "parts.yui", "range": [1, 9, 1, 18], "file": str(parts)}])
+        self.assertEqual([target["id"] for target in outline["targets"]], ["root", "drawing:Bar", "component:Toolbar"])
+        self.assertEqual(self.ask("definition", "ui.yui", "--at", "1:10"), {"file": str(parts), "line": 1, "column": 1})
+
+        # What follows the string is completed as what it is written in, a component of the interface
+        found = self.ask("complete", "ui.yui", "--at", self.place(QUOTED, "Slider { wid"))
+        labels = {item["label"] for item in found["items"]}
+        self.assertTrue({"width", "Toolbar"} <= labels, labels)
+        self.assertNotIn("fragment", labels)
 
     def test_editor_commands_usage_errors(self):
         self.write("ui.yui", VALID)
@@ -1570,6 +1678,7 @@ class YuiToolCliTests(unittest.TestCase):
         self.assertEqual(len(shaders["uses"]), 4)
         self.assertIn("vec3 normal", " ".join(shaders["surface"]))
         self.assertEqual([entry["name"] for entry in scenes["types"]], ["Scene3D", "Node3D", "Camera3D", "Light3D", "Mesh3D", "Model3D", "Material3D"])
+        self.assertTrue(all(entry["what"] for entry in scenes["types"]))
         self.assertTrue(all(topic["docs"].endswith(".md") and topic["notes"] for topic in (shaders, scenes)))
 
         # What they give as an example is what the tool accepts

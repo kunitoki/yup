@@ -1,5 +1,6 @@
 // Tests of the grammar and of the snippets, run by `npm test` with Node: the scopes the grammar gives a `shader`
-// block, as an editor reading it does, and the snippets being ones an editor can insert.
+// block and a string of either quote style, as an editor reading it does, and the snippets being ones an editor
+// can insert.
 
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
@@ -12,6 +13,7 @@ interface Rule {
     begin?: string;
     end?: string;
     captures?: Record<string, { name: string }>;
+    patterns?: Rule[];
     include?: string;
 }
 
@@ -39,8 +41,9 @@ const rules = grammar.patterns.flatMap (rule => rule.include === undefined ? [ru
     each place the rule matching the closest wins, the first of those matching at the same place,
     and the line is read on from the end of what it matched.
 
-    What a rule that begins and ends holds is given the scope of the rule alone, which is all the
-    lines tested here need of the strings and of the comments.
+    What a rule that begins and ends holds is read before its end, so that a quote after a backslash
+    does not end a string, and is given the scope of the rule alone, which is all the lines tested
+    here need of the strings and of the comments.
 */
 function scopesOf (line: string): string[][] {
     const scopes: string[][] = Array.from (line, () => []);
@@ -72,10 +75,17 @@ function scopesOf (line: string): string[][] {
         let end = found.index + found[0].length;
 
         if (rule.end !== undefined) {
-            const closing = new RegExp (rule.end, "g");
+            const held = (rule.patterns ?? []).flatMap (inner => inner.match === undefined ? [] : [inner.match]);
+            const closing = new RegExp ([...held, `(?<end>${rule.end})`].join ("|"), "g");
 
             closing.lastIndex = end;
-            end = closing.exec (line) === null ? line.length : closing.lastIndex;
+
+            let closed = closing.exec (line);
+
+            while (closed !== null && closed.groups?.["end"] === undefined)
+                closed = closing.exec (line);
+
+            end = closed === null ? line.length : closing.lastIndex;
         }
 
         mark (rule.name, found.index, end);
@@ -130,6 +140,24 @@ test ("the file and the properties of a shader are highlighted as the statements
     assert.deepEqual (scopesAt (property, "tint"), ["variable.other.property.yui"]);
     assert.deepEqual (scopesAt (property, "color"), ["storage.type.primitive.yui"]);
     assert.deepEqual (scopesAt (property, "#ff8800"), ["constant.other.color.rgb-value.yui"]);
+});
+
+test ("a string between single quotes is highlighted as one between double quotes", () => {
+    for (const [quote, other, scope] of [['"', "'", "string.quoted.double.yui"], ["'", '"', "string.quoted.single.yui"]]) {
+        const imported = `import ${quote}parts/title.yui${quote};`;
+
+        assert.deepEqual (scopesAt (imported, "import"), ["keyword.control.yui"]);
+        assert.deepEqual (scopesAt (imported, "parts/title"), [scope]);
+        assert.deepEqual (scopesAt (imported, ";"), ["punctuation.terminator.yui"]);
+
+        // What it holds is its text: two slashes, the other quote, and its own quote after a backslash
+        for (const held of ["see // docs", `it${other}s`, `it\\${quote}s`]) {
+            const line = `    text: ${quote}${held}${quote}; gap: 4;`;
+
+            assert.deepEqual (scopesAt (line, held), [scope], line);
+            assert.deepEqual (scopesAt (line, "gap"), ["support.type.property-name.yui", "meta.object-literal.key.yui"], line);
+        }
+    }
 });
 
 test ("a shader is named where it is used as a drawing is, and its name is a property of a material", () => {

@@ -71,6 +71,7 @@ public:
         @param factory         An optional factory used to instantiate this type.
         @param childAttacher   An optional way to add a child, inherited by the derived types.
         @param parts           The parts of what this type paints that a style can place.
+        @param description     A human readable description of the type, surfaced by the schema and tooling.
     */
     ComponentTypeInfo (Identifier typeName,
                        const ComponentTypeInfo* baseTypeInfo,
@@ -78,11 +79,15 @@ public:
                        std::vector<ComponentSignal> signals = {},
                        Factory factory = {},
                        ChildAttacher childAttacher = {},
-                       std::vector<ComponentPart> parts = {});
+                       std::vector<ComponentPart> parts = {},
+                       String description = {});
 
     //==============================================================================
     /** Returns the type name, for example "Slider". */
     const Identifier& getTypeName() const noexcept { return typeName; }
+
+    /** Returns the description of the type, surfaced by the schema and tooling, empty when it has none. */
+    const String& getDescription() const noexcept { return description; }
 
     /** Returns the base type's info, or nullptr for the root type. */
     const ComponentTypeInfo* getBaseTypeInfo() const noexcept { return baseTypeInfo; }
@@ -192,6 +197,7 @@ private:
     std::vector<ComponentPart> parts;
     Factory factory;
     ChildAttacher childAttacher;
+    String description;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComponentTypeInfo)
 };
@@ -412,6 +418,13 @@ public:
     ComponentTypeBuilder& childAttacher (ComponentTypeInfo::ChildAttacher customChildAttacher)
     {
         typeChildAttacher = std::move (customChildAttacher);
+        return *this;
+    }
+
+    /** Describes the type, for the schema and tooling. */
+    ComponentTypeBuilder& description (String text)
+    {
+        typeDescription = std::move (text);
         return *this;
     }
 
@@ -813,7 +826,8 @@ public:
             std::move (signals),
             std::move (typeFactory),
             std::move (typeChildAttacher),
-            std::move (parts)
+            std::move (parts),
+            std::move (typeDescription)
         };
     }
 
@@ -884,6 +898,7 @@ private:
     std::vector<ComponentPart> parts;
     ComponentTypeInfo::Factory typeFactory;
     ComponentTypeInfo::ChildAttacher typeChildAttacher;
+    String typeDescription;
 };
 
 } // namespace yup

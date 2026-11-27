@@ -1,4 +1,5 @@
 src/**
+page/**
 test/*.ts
 out-test/**
 node_modules/**

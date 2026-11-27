@@ -515,6 +515,7 @@ const ComponentTypeInfo& SceneModelComponent::getClassTypeInfo()
     // The scene comes first, for a document that sets both to load its model once. Playing comes last: it starts the clip
     // that was selected, from where it was put and at the speed it was given
     static const auto info = ComponentTypeBuilder<SceneModelComponent> (Identifier ("Model3D"), SceneNodeComponent::getClassTypeInfo())
+                                 .description ("A Node3D drawing the model of a .glb or .gltf file, its 'source'.")
                                  .property (SceneModelComponentIds::scene, &SceneModelComponent::getSceneIndex, &SceneModelComponent::setSceneIndex, -1, "The index of the scene of the file to show, -1 for its default one.")
                                  .property (SceneModelComponentIds::source, &SceneModelComponent::getSource, &SceneModelComponent::setSource, String(), "The path of the .glb or .gltf file of the model, relative to the document.")
                                  .styleableProperty (SceneModelComponentIds::clip, &SceneModelComponent::getClip, &SceneModelComponent::setClip, String(), "The clip to play: its name, or its index among the clips of the model when no clip has that name. Empty for the first clip.")

@@ -19,8 +19,10 @@
   ==============================================================================
 */
 
+#include "yup_YuiInspectCommand.h"
 #include "yup_YuiCommands.h"
-#include "yup_YuiToolSupport.h"
+#include "yup_YuiToolModels.h"
+#include "yup_YuiToolView.h"
 
 #include <cmath>
 #include <iostream>
@@ -69,26 +71,14 @@ double rounded (float value)
     return std::round (static_cast<double> (value) * 100.0) / 100.0;
 }
 
-// The first element under another that has a type and an id, itself included
-DataTree findElement (const DataTree& parent, const String& type, const String& id)
+// The first element under another that has a type and a value of a property, itself included
+DataTree findElement (const DataTree& parent, const String& type, const Identifier& property, const String& value)
 {
-    if (parent.getType().toString() == type && parent.getProperty ("id").toString() == id)
+    if (parent.getType().toString() == type && parent.getProperty (property).toString() == value)
         return parent;
 
     for (const auto& child : parent)
-        if (const auto found = findElement (child, type, id); found.isValid())
-            return found;
-
-    return {};
-}
-
-DataTree findDrawing (const DataTree& parent, const String& name)
-{
-    if (parent.getType().toString() == "drawing" && parent.getProperty ("name").toString() == name)
-        return parent;
-
-    for (const auto& child : parent)
-        if (const auto found = findDrawing (child, name); found.isValid())
+        if (const auto found = findElement (child, type, property, value); found.isValid())
             return found;
 
     return {};
@@ -98,12 +88,12 @@ DataTree findDrawing (const DataTree& parent, const String& name)
 // with, else anywhere, as what a `use` paints is written in another drawing
 DataTree findDrawingElement (const DataTree& document, const DrawingStyle::ElementBounds& measured)
 {
-    const auto drawing = findDrawing (document, measured.path.upToFirstOccurrenceOf ("/", false, false));
+    const auto drawing = findElement (document, "drawing", "name", measured.path.upToFirstOccurrenceOf ("/", false, false));
 
-    if (const auto found = drawing.isValid() ? findElement (drawing, measured.type, measured.id) : DataTree(); found.isValid())
+    if (const auto found = drawing.isValid() ? findElement (drawing, measured.type, "id", measured.id) : DataTree(); found.isValid())
         return found;
 
-    return findElement (document, measured.type, measured.id);
+    return findElement (document, measured.type, "id", measured.id);
 }
 
 // Moves to a component the document describes, looked for under another one, and tells its path
@@ -156,14 +146,11 @@ public:
 
         const auto tree = describe (described, path, true);
 
-        auto* layout = new DynamicObject();
-        layout->setProperty ("file", input.getFullPathName());
-        layout->setProperty ("width", rounded (root.getWidth()));
-        layout->setProperty ("height", rounded (root.getHeight()));
-        layout->setProperty ("root", tree);
-        layout->setProperty ("warnings", var (warnings));
-
-        return var (layout);
+        return var::object ({ { "file", input.getFullPathName() },
+                              { "width", rounded (root.getWidth()) },
+                              { "height", rounded (root.getHeight()) },
+                              { "root", tree },
+                              { "warnings", var (warnings) } });
     }
 
 private:
@@ -348,6 +335,13 @@ Component* findYuiToolComponent (YuiDocument& document, const String& path)
     return current.component;
 }
 
+Component* findYuiToolElement (YuiDocument& document, const String& idOrPath)
+{
+    auto* component = document.findById (idOrPath);
+
+    return component != nullptr ? component : findYuiToolComponent (document, idOrPath);
+}
+
 var describeYuiToolComponent (YuiDocument& document, const Component& component)
 {
     if (document.getRoot() == nullptr)
@@ -384,18 +378,8 @@ int runYuiInspectCommand (int argc, char** argv)
     YuiToolModels models;
 
     for (int i = 2; i < argc; ++i)
-    {
-        const auto isValid = readYuiToolViewOption (argc, argv, i, options, models);
-
-        if (! isValid.has_value())
-        {
-            std::cerr << "invalid argument: " << argv[i] << "\n";
-            return 2;
-        }
-
-        if (! *isValid)
-            return 2;
-    }
+        if (const auto read = readYuiToolViewOption (argc, argv, i, options, models); read.failed())
+            return refuseYuiToolCommand (read);
 
     const auto& target = options.target;
 
@@ -410,6 +394,11 @@ int runYuiInspectCommand (int argc, char** argv)
         std::cerr << "can't read '" << options.input.getFullPathName() << "'\n";
         return 2;
     }
+
+    // Without models given, those next to the file are used
+    if (const auto beside = findYuiToolModelsFile (options.input); ! options.hasModels && beside.existsAsFile())
+        if (const auto loaded = models.load (beside.getFullPathName()); loaded.failed())
+            return refuseYuiToolCommand (loaded);
 
     YuiToolView view (options, models);
     const auto& shown = view.getShown();

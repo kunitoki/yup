@@ -35,6 +35,15 @@
             { "name": "constant.character.escape.yui", "match": "\\\\(?:x[0-9A-Fa-f]+|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|[0-7]{1,3}|.)" },
             { "name": "constant.other.placeholder.yui", "match": "%[-+ #0]*[0-9]*(?:\\.[0-9]+)?[diouxXeEfgGcs%]" }
           ]
+        },
+        {
+          "name": "string.quoted.single.yui",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            { "name": "constant.character.escape.yui", "match": "\\\\[\\\\\"'nrt]" },
+            { "name": "constant.other.placeholder.yui", "match": "%[-+ #0]*[0-9]*(?:\\.[0-9]+)?[diouxXeEfgGcs%]" }
+          ]
         }
       ]
     },
@@ -147,7 +156,7 @@
     },
     "functions": {
       "patterns": [
-        { "name": "support.function.builtin.yui", "match": "\\b(?:sin|cos|tan|asin|acos|atan2|atan|sqrt|pow|exp|log2|log10|log|abs|floor|ceil|round|trunc|sign|fmod|min|max|clamp|lerp|mix|map|smoothstep|hypot|deg|rad|len|format|rgba|rgb|hsla|hsl|polar|linearGradient|radialGradient|angularGradient|action|set|edit|point|size|rect|line|path|dash|transform|color|font|cubicBezier|hue-rotate|drop-shadow)\\b(?=\\s*\\()" },
+        { "name": "support.function.builtin.yui", "match": "\\b(?:sin|cos|tan|asin|acos|atan2|atan|sqrt|pow|exp|log2|log10|log|abs|floor|ceil|round|trunc|sign|fmod|min|max|clamp|lerp|mix|map|smoothstep|hypot|deg|rad|len|format|bool|int|float|double|string|rgba|rgb|hsla|hsl|polar|linearGradient|radialGradient|angularGradient|action|set|edit|point|size|rect|line|path|dash|transform|color|font|pattern|cubicBezier|hue-rotate|drop-shadow)\\b(?=\\s*\\()" },
         { "name": "entity.name.function.yui", "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=\\s*\\()" }
       ]
     },

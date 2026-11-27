@@ -82,6 +82,7 @@
 #include "yup_JoystickComponent.cpp"
 #include "yup_ScrollBar.cpp"
 #include "yup_ShaderEffect.cpp"
+#include "yup_ShaderProperty.cpp"
 #include "yup_Slider.cpp"
 #include "yup_StackLayout.cpp"
 #include "yup_LayoutComponent.cpp"

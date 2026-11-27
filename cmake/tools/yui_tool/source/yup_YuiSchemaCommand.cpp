@@ -19,8 +19,8 @@
   ==============================================================================
 */
 
+#include "yup_YuiSchemaCommand.h"
 #include "yup_YuiCommands.h"
-#include "yup_YuiToolSupport.h"
 
 #include <iostream>
 #include <map>
@@ -33,53 +33,6 @@ namespace
 
 // Bumped when a field is removed or changes meaning, not when one is added
 constexpr int schemaVersion = 1;
-
-const char* getTypeName (ComponentProperty::Type type)
-{
-    switch (type)
-    {
-        case ComponentProperty::Type::number:
-            return "number";
-
-        case ComponentProperty::Type::integer:
-            return "integer";
-
-        case ComponentProperty::Type::boolean:
-            return "boolean";
-
-        case ComponentProperty::Type::string:
-            return "string";
-
-        case ComponentProperty::Type::color:
-            return "color";
-
-        case ComponentProperty::Type::point:
-            return "point";
-
-        case ComponentProperty::Type::rectangle:
-            return "rectangle";
-
-        case ComponentProperty::Type::transform:
-            return "transform";
-
-        case ComponentProperty::Type::enumeration:
-            return "enumeration";
-
-        case ComponentProperty::Type::font:
-            return "font";
-
-        case ComponentProperty::Type::drawing:
-            return "drawing";
-
-        case ComponentProperty::Type::array:
-            return "array";
-
-        case ComponentProperty::Type::any:
-            break;
-    }
-
-    return "any";
-}
 
 // Only the defaults a `.yui` file can spell as a literal are listed
 var describeDefault (const ComponentProperty& property)
@@ -97,10 +50,10 @@ var describeDefault (const ComponentProperty& property)
 
 void describeType (DynamicObject& record, ComponentProperty::Type type, ComponentProperty::Type elementType)
 {
-    record.setProperty ("type", getTypeName (type));
+    record.setProperty ("type", ComponentProperty::getTypeName (type));
 
     if (type == ComponentProperty::Type::array && elementType != ComponentProperty::Type::any)
-        record.setProperty ("elementType", getTypeName (elementType));
+        record.setProperty ("elementType", ComponentProperty::getTypeName (elementType));
 }
 
 var describeProperty (const ComponentProperty& property)
@@ -239,6 +192,9 @@ var describeYuiToolComponentType (const ComponentTypeInfo& info, bool includeInh
     if (const auto* base = info.getBaseTypeInfo())
         record->setProperty ("base", base->getTypeName().toString());
 
+    if (info.getDescription().isNotEmpty())
+        record->setProperty ("description", info.getDescription());
+
     record->setProperty ("instantiable", info.hasFactory());
     record->setProperty ("properties", var (properties));
     record->setProperty ("signals", var (signals));
@@ -277,30 +233,24 @@ var describeDrawingTopic()
         elements.add (var (record));
     }
 
-    auto* topic = new DynamicObject();
-    topic->setProperty ("elements", var (elements));
-    topic->setProperty ("shapePaint", var (DrawingStyle::getShapePaintProperties()));
-    topic->setProperty ("notes", "A shape takes its geometry, its properties and those of shapePaint. In geometry, a name followed by '=' has that default. "
-                                 "A 'use' also takes the properties its drawing declares. Every value is an expression. "
-                                 "A 'vertex' is one point of a line and only goes among the shapes of a 'repeat'. "
-                                 "A 'part' names one of the parts the type of the component lists in the schema.");
-    topic->setProperty ("docs", "docs/ui/yui/drawing.md");
-
-    return var (topic);
+    return var::object ({ { "elements", var (elements) },
+                          { "shapePaint", var (DrawingStyle::getShapePaintProperties()) },
+                          { "notes", "A shape takes its geometry, its properties and those of shapePaint. In geometry, a name followed by '=' has that default. "
+                                     "A 'use' also takes the properties its drawing declares. Every value is an expression. "
+                                     "A 'vertex' is one point of a line and only goes among the shapes of a 'repeat'. "
+                                     "A 'part' names one of the parts the type of the component lists in the schema." },
+                          { "docs", "docs/ui/yui/drawing.md" } });
 }
 
 var describeStylesTopic()
 {
-    auto* topic = new DynamicObject();
-    topic->setProperty ("declarations", var (StyleSheet::getDeclarationNames()));
-    topic->setProperty ("pseudoClasses", var (StyleSelector::getPseudoClassNames()));
-    topic->setProperty ("paletteRoles", var (ThemePalette::getRoleNames()));
-    topic->setProperty ("notes", "A rule sets the declarations listed here and the styleable properties of the components it selects, which the "
-                                 "components topic lists for a type. A selector is made of a type, #id, .class, :pseudoClass and [property=value], "
-                                 "joined by a space for a descendant or '>' for a child. A state property of a type, such as 'checked', is a pseudo-class too.");
-    topic->setProperty ("docs", "docs/ui/yui/styles.md");
-
-    return var (topic);
+    return var::object ({ { "declarations", var (StyleSheet::getDeclarationNames()) },
+                          { "pseudoClasses", var (StyleSelector::getPseudoClassNames()) },
+                          { "paletteRoles", var (ThemePalette::getRoleNames()) },
+                          { "notes", "A rule sets the declarations listed here and the styleable properties of the components it selects, which the "
+                                     "components topic lists for a type. A selector is made of a type, #id, .class, :pseudoClass and [property=value], "
+                                     "joined by a space for a descendant or '>' for a child. A state property of a type, such as 'checked', is a pseudo-class too." },
+                          { "docs", "docs/ui/yui/styles.md" } });
 }
 
 var describeExpressionsTopic()
@@ -369,18 +319,15 @@ var describeExpressionsTopic()
         if (! constant.startsWith ("colors."))
             constants.add (constant);
 
-    auto* topic = new DynamicObject();
-    topic->setProperty ("functions", var (functions));
-    topic->setProperty ("members", var (memberRecord));
-    topic->setProperty ("enumerations", var (enumerationRecord));
-    topic->setProperty ("constants", var (constants));
-    topic->setProperty ("notes", "A member is read as value.name and a method called as value.name (arguments), on a value of the type they are listed for. "
-                                 "The value of an enumeration is written by its name where one is expected. colors.<name> is a named color of CSS, such as "
-                                 "colors.orange. An expression also reads the properties of the component it is in, those of the components and models "
-                                 "it names as id.property, palette.<role>, and tokens.");
-    topic->setProperty ("docs", "docs/ui/yui/language.md");
-
-    return var (topic);
+    return var::object ({ { "functions", var (functions) },
+                          { "members", var (memberRecord) },
+                          { "enumerations", var (enumerationRecord) },
+                          { "constants", var (constants) },
+                          { "notes", "A member is read as value.name and a method called as value.name (arguments), on a value of the type they are listed for. "
+                                     "The value of an enumeration is written by its name where one is expected. colors.<name> is a named color of CSS, such as "
+                                     "colors.orange. An expression also reads the properties of the component it is in, those of the components and models "
+                                     "it names as id.property, palette.<role>, and tokens." },
+                          { "docs", "docs/ui/yui/language.md" } });
 }
 
 var describeShadersTopic()
@@ -389,7 +336,7 @@ var describeShadersTopic()
     StringArray propertyTypes;
 
     for (const auto& name : ComponentProperty::getDeclaredTypeNames())
-        if (ShaderEffect::getNumUniformComponents (ComponentProperty::getTypeFromName (name)) > 0)
+        if (ShaderProperty::getNumUniformComponents (ComponentProperty::getTypeFromName (name)) > 0)
             propertyTypes.add (name);
 
     propertyTypes.add ("number[]");
@@ -465,23 +412,16 @@ vec4 yupMaterial (YupSurface surface)
 #if YUP_MODULE_AVAILABLE_yup_renderer
 var describeScenesTopic()
 {
-    static const std::pair<const char*, const char*> types[] {
-        { "Scene3D", "The component showing a scene, laid out as any other. It holds the 3D types, and paints what else it holds over the scene." },
-        { "Node3D", "A place of the scene, moving what it holds: position, rotation, scale and lookAt. With 'node' it is the part of that name of the Model3D it is in." },
-        { "Camera3D", "A Node3D seeing down its -z axis, y up. The scene is seen from the first one that is active." },
-        { "Light3D", "A Node3D that lights: directional down its -z axis, point, or spot." },
-        { "Mesh3D", "A Node3D drawing triangles: the x, y and z of each of its 'vertices', three 'indices' a triangle, counter-clockwise seen from its front." },
-        { "Model3D", "A Node3D drawing the model of a .glb or .gltf file, its 'source'." },
-        { "Material3D", "The material of the meshes of what it is written in, and of what that holds: the factors and textures of a PBR material, or a 'shader'. It is no Node3D." }
-    };
-
+    // In the order a scene is written in, each as its type describes itself
     Array<var> described;
 
-    for (const auto& [name, what] : types)
+    for (const auto* name : { "Scene3D", "Node3D", "Camera3D", "Light3D", "Mesh3D", "Model3D", "Material3D" })
     {
+        const auto* info = ComponentTypeRegistry::getInstance().findType (Identifier (name));
+
         auto* record = new DynamicObject();
         record->setProperty ("name", name);
-        record->setProperty ("what", what);
+        record->setProperty ("what", info != nullptr ? info->getDescription() : String());
 
         described.add (var (record));
     }
@@ -566,11 +506,9 @@ int runYuiSchemaCommand (int argc, char** argv)
 
     for (int i = 2; i < argc; ++i)
     {
-        const String argument (argv[i]);
-
-        if (argument == "--output" && i + 1 < argc)
+        if (const auto* path = readYuiToolOption (argc, argv, i, "--output"))
         {
-            output = File::getCurrentWorkingDirectory().getChildFile (argv[++i]);
+            output = File::getCurrentWorkingDirectory().getChildFile (path);
             continue;
         }
 

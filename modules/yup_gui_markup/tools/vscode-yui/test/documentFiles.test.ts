@@ -102,6 +102,80 @@ test ("a document is given with the files it names, byte for byte, where they ar
     assert.deepEqual (collected.problems, []);
 });
 
+test ("what a string holds is no comment, and what a comment holds is no string", async () => {
+    const folder = write ("commented", {
+        "main.yui": [
+            'Column {',
+            '    Label { text: "see // docs"; } Image { source: "slashes.png"; }',
+            '    Label { text: "a /* b"; }',
+            '    Image { source: "star.png"; }',
+            '    Label { text: "c */ d"; }',
+            `    /* it's "left/out.png" */ Image { source: "kept.png"; }`,
+            '}',
+            ''
+        ].join ("\n"),
+        "slashes.png": "after a string holding two slashes",
+        "star.png": "between the strings holding what opens and what closes a comment",
+        "kept.png": "after a comment holding quotes",
+        "left/out.png": "named in a comment"
+    });
+
+    const collected = await collectDocumentFiles (edited (path.join (folder, "main.yui")), undefined);
+
+    assert.deepEqual (names (collected), ["kept.png", "main.yui", "slashes.png", "star.png"]);
+    assert.deepEqual (collected.problems, []);
+});
+
+test ("a file imported by a path between single quotes is given, with the files it names", async () => {
+    const folder = write ("quoted", {
+        "main.yui": "import 'parts/title.yui';\n\nColumn {\n    Title { }\n}\n",
+        "parts/title.yui": 'component Title : Row {\n    Image { source: "logo.png"; }\n}\n',
+        "logo.png": "named by the file imported"
+    });
+
+    const collected = await collectDocumentFiles (edited (path.join (folder, "main.yui")), undefined);
+
+    assert.deepEqual (names (collected), ["logo.png", "main.yui", "parts/title.yui"]);
+});
+
+test ("a string ends at the quote it starts with, unless a backslash is before it", async () => {
+    const folder = write ("ended", {
+        "main.yui": [
+            `style { .hint { text: 'say "hi'; } .logo { source: "quote.png"; } }`,
+            '',
+            'Column {',
+            `    Label { text: "it's"; } Image { source: "apostrophe.png"; }`,
+            '    Label { text: "say \\"hi"; } Image { source: "escaped.png"; }',
+            '    Label { text: ""; } Image { source: "empty.png"; }',
+            '}',
+            ''
+        ].join ("\n"),
+        "quote.png": "after a string holding a double quote",
+        "apostrophe.png": "after a string holding a single quote",
+        "escaped.png": "after a string holding the quote it starts with",
+        "empty.png": "after a string holding nothing"
+    });
+
+    const collected = await collectDocumentFiles (edited (path.join (folder, "main.yui")), undefined);
+
+    assert.deepEqual (names (collected), ["apostrophe.png", "empty.png", "escaped.png", "main.yui", "quote.png"]);
+});
+
+test ("the models next to a document that are gone are forgotten by the tool, which reads them by itself", async () => {
+    const folder = write ("neighbor", { "main.yui": "Component { }\n", "main.models.json": "{}" });
+    const models = path.join (folder, "main.models.json");
+
+    const withModels = await collectDocumentFiles (edited (path.join (folder, "main.yui")), models);
+
+    assert.equal (withModels.files.some (file => file.removed === true), false);
+
+    fs.rmSync (models);
+
+    const without = await collectDocumentFiles (edited (path.join (folder, "main.yui")), undefined);
+
+    assert.deepEqual (without.files.filter (file => file.removed === true).map (file => file.path), [withModels.models]);
+});
+
 test ("the buffers and the images a model written as text keeps in other files are given with it", async () => {
     const model = {
         buffers: [{ uri: "knob.bin" }, { uri: "data:application/octet-stream;base64,AAAA" }],

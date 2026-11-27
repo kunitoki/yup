@@ -820,6 +820,7 @@ const ComponentTypeInfo& SceneNodeComponent::getClassTypeInfo()
     };
 
     static const auto info = ComponentTypeBuilder<SceneNodeComponent> (Identifier ("Node3D"))
+                                 .description ("A place of the scene, moving what it holds: position, rotation, scale and lookAt. With 'node' it is the part of that name of the Model3D it is in.")
                                  .property (SceneNodeComponentIds::node, &SceneNodeComponent::getNodeName, &SceneNodeComponent::setNodeName, String(), "Binds the node to an entity of the Model3D it is in, instead of making one: the name of the entity, or the names leading to it from the root of the model separated by '/'.")
                                  .enumeration<SurfaceSlot> (
                                      SceneNodeComponentIds::surface,

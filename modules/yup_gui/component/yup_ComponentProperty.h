@@ -225,6 +225,24 @@ struct ComponentProperty
         return index >= 0 ? scalarTypes[index] : Type::any;
     }
 
+    /** Returns the name of a type, the one @ref getTypeFromName reads as it: `enumeration` and
+        `array` for the two types a `.yui` declaration doesn't name that way.
+    */
+    static String getTypeName (Type type)
+    {
+        if (type == Type::enumeration)
+            return "enumeration";
+
+        if (type == Type::array)
+            return "array";
+
+        for (const auto& name : getDeclaredTypeNames())
+            if (getTypeFromName (name) == type)
+                return name;
+
+        return "any";
+    }
+
     /** Returns the element type a `.yui` array declaration such as `string[]` names, Type::any otherwise.
 
         Only the scalar types an expression reads make an array (see @ref isExpressionType), so

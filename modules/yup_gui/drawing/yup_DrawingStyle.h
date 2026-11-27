@@ -91,7 +91,7 @@ class DependencyObserver;
     mode, inside its clips. The shader has to make its picture alone, declaring no texture, and
     can't be painted inside a `repeat`. Each property its `shader` block declares is set by the
     `use`, or else takes the default of the block, or else is zero, and fills the member of the
-    uniform block of the shader that has its name, as ShaderEffect::setUniform() converts it. The
+    uniform block of the shader that has its name, as ShaderProperty::setUniform() converts it. The
     shader is given three more members when its block has them and declares no property of their
     name: `resolution`, the size of the texture in pixels, `scale`, the pixels a unit takes, and
     `time`, the seconds the shader has been showing for. The texture is drawn again only when one
