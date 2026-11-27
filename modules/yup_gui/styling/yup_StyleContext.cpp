@@ -55,6 +55,11 @@ std::optional<GpuPlatform> findWindowGraphicsApi (Component& component)
     return device != nullptr && device->isGpuAvailable() ? std::optional<GpuPlatform> (device->getPlatform()) : std::nullopt;
 }
 
+} // namespace
+
+namespace detail
+{
+
 /* Tracks one component state property (style, cursor, effect, paint margin) owned by a
    stylesheet while leaving later explicit application overrides untouched. */
 template <class T>
@@ -109,6 +114,11 @@ struct StyledOverride
         return shouldRestore;
     }
 };
+
+} // namespace detail
+
+namespace
+{
 
 bool isManagedByRoot (const Component& component, const Component& root)
 {
@@ -263,7 +273,7 @@ struct StyleContext::ComponentCache
 
     String drawingName;
     DrawingStyle::Ptr drawingStyle;
-    StyledOverride<ComponentStyle::Ptr> drawingOverride;
+    detail::StyledOverride<ComponentStyle::Ptr> drawingOverride;
 
     // The drawing made again here for one the component was given itself, kept to tell it from another one set since
     DrawingStyle::Ptr attachedDrawing;
@@ -273,9 +283,9 @@ struct StyleContext::ComponentCache
     std::optional<uint32> attachedShaderGeneration;
 
     String effectName;
-    StyledOverride<ComponentEffect::Ptr> effectOverride;
-    StyledOverride<MouseCursor> cursorOverride;
-    StyledOverride<EdgeSpacing<float>> paintMarginOverride;
+    detail::StyledOverride<ComponentEffect::Ptr> effectOverride;
+    detail::StyledOverride<MouseCursor> cursorOverride;
+    detail::StyledOverride<EdgeSpacing<float>> paintMarginOverride;
 };
 
 struct StyleContext::CacheMap : std::map<Component*, ComponentCache>

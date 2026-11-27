@@ -94,11 +94,6 @@ inline void drawFittedImage (Graphics& g, const Image& image, const Rectangle<fl
     g.drawImage (image, destBounds);
 }
 
-} // namespace detail
-
-namespace
-{
-
 /* Orders the sources of pictures. The source a paint reads is most often the string the paint before read: String::compare()
    tells that without reading it, which a data URI or an inline SVG makes long. */
 struct SourceOrder
@@ -106,7 +101,12 @@ struct SourceOrder
     bool operator() (const String& first, const String& second) const noexcept { return first.compare (second) < 0; }
 };
 
-const Image& resolveDrawingImage (std::map<String, Image, SourceOrder>& cache, const String& source, const Component* component, const DrawingStyle::ImageResolver& resolver)
+} // namespace detail
+
+namespace
+{
+
+const Image& resolveDrawingImage (std::map<String, Image, detail::SourceOrder>& cache, const String& source, const Component* component, const DrawingStyle::ImageResolver& resolver)
 {
     if (const auto found = cache.find (source); found != cache.end())
         return found->second;
@@ -122,7 +122,7 @@ const Image& resolveDrawingImage (std::map<String, Image, SourceOrder>& cache, c
     return cache.emplace (source, std::move (image)).first->second;
 }
 
-std::shared_ptr<Drawable> resolveDrawingSvg (std::map<String, std::shared_ptr<Drawable>, SourceOrder>& cache,
+std::shared_ptr<Drawable> resolveDrawingSvg (std::map<String, std::shared_ptr<Drawable>, detail::SourceOrder>& cache,
                                              const String& source,
                                              bool inlineOnly,
                                              const Component* component)
@@ -391,8 +391,8 @@ struct DrawingStyle::Slot
     std::unique_ptr<ExpressionState> state;
     DrawingScope::BoundInputs inputs;
     ExpressionDrawing::Cache cache;
-    std::map<String, Image, SourceOrder> imageCache;
-    std::map<String, std::shared_ptr<Drawable>, SourceOrder> svgCache;
+    std::map<String, Image, detail::SourceOrder> imageCache;
+    std::map<String, std::shared_ptr<Drawable>, detail::SourceOrder> svgCache;
 
     // The revisions of the patterns the node paints with, added up, as they were when it was last prepared
     uint32 patternRevisions = 0;
