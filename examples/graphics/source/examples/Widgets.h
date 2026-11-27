@@ -547,12 +547,10 @@ private:
             addSlider (Type::LinearHorizontal, "Linear horizontal");
             addSlider (Type::LinearBarHorizontal, "Bar horizontal");
             addSlider (Type::TwoValueHorizontal, "Two values horizontal");
-            addSlider (Type::ThreeValueHorizontal, "Three values horizontal");
             addSlider (Type::IncDecButtons, "Inc / dec buttons");
             addSlider (Type::LinearVertical, "Linear vertical");
             addSlider (Type::LinearBarVertical, "Bar vertical");
             addSlider (Type::TwoValueVertical, "Two values vertical");
-            addSlider (Type::ThreeValueVertical, "Three values vertical");
             addSlider (Type::Rotary, "Rotary");
             addSlider (Type::RotaryHorizontalDrag, "Rotary, horizontal drag");
             addSlider (Type::RotaryVerticalDrag, "Rotary, vertical drag");
@@ -578,7 +576,8 @@ private:
         void resized() override
         {
             constexpr auto captionHeight = 32.0f;
-            constexpr auto numHorizontal = 5;
+            constexpr auto numHorizontal = 4;
+            constexpr auto numVertical = 3;
 
             auto area = getLocalBounds().reduced (0.0f, spacing);
 
@@ -596,15 +595,15 @@ private:
             auto verticalRow = area.removeFromTop (area.getHeight() * 0.6f);
             auto rotaryRow = area.withTrimmedTop (spacing);
 
-            const auto verticalWidth = verticalRow.getWidth() / 4.0f;
-            for (int i = numHorizontal; i < numHorizontal + 4; ++i)
+            const auto verticalWidth = verticalRow.getWidth() / numVertical;
+            for (int i = numHorizontal; i < numHorizontal + numVertical; ++i)
             {
                 auto cell = verticalRow.removeFromLeft (verticalWidth).reduced (4.0f, 0.0f);
                 place (entries[(size_t) i], cell.removeFromTop (captionHeight), cell.withSizeKeepingCenter (yup::jmin (cell.getWidth(), 48.0f), cell.getHeight()));
             }
 
             const auto rotaryWidth = rotaryRow.getWidth() / 3.0f;
-            for (int i = numHorizontal + 4; i < (int) entries.size(); ++i)
+            for (int i = numHorizontal + numVertical; i < (int) entries.size(); ++i)
             {
                 auto cell = rotaryRow.removeFromLeft (rotaryWidth).reduced (4.0f, 0.0f);
                 auto caption = cell.removeFromTop (captionHeight);
@@ -661,10 +660,6 @@ private:
                 case yup::Slider::TwoValueHorizontal:
                 case yup::Slider::TwoValueVertical:
                     return yup::String (slider.getMinValue(), 1) + " - " + yup::String (slider.getMaxValue(), 1);
-
-                case yup::Slider::ThreeValueHorizontal:
-                case yup::Slider::ThreeValueVertical:
-                    return yup::String (slider.getMinValue(), 1) + " < " + yup::String (slider.getValue(), 1) + " < " + yup::String (slider.getMaxValue(), 1);
 
                 default:
                     return yup::String (slider.getValue(), 1);
