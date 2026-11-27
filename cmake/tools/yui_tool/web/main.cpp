@@ -362,7 +362,9 @@ public:
     // The page gives the window its size and the canvas the size it is seen at, which a window the browser
     // may resize would take back from it
     PreviewWindow()
-        : DocumentWindow (ComponentNative::Options().withResizableWindow (false))
+        : DocumentWindow (ComponentNative::Options()
+                          .withResizableWindow (false)
+                          .withVSync (true))
     {
         addChildComponent (guides);
     }
