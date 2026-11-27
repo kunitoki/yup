@@ -109,6 +109,7 @@ jobs:
       working-directory: ${{ runner.workspace }}/build
       run: |
         mkdir -p coverage
+        find . -path "*/thirdparty/*" -name "*.gcda" -delete
         lcov --directory . --capture --output-file coverage/coverage.info --ignore-errors ${IGNORE_ERRORS}
         lcov --remove coverage/coverage.info \
           "*/pybind11/*" \
