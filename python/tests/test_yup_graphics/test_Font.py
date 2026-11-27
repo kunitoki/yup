@@ -163,3 +163,37 @@ def test_system_font_loaders(loader):
         pytest.skip(f"{loader} found no font on this machine")
 
     assert not font.isEmpty()
+
+#==================================================================================================
+
+def test_font_names_features_and_codepoints():
+    font = yup.Font.loadFontFromFile(_variable_font_file())
+
+    assert font.getFamilyName() == "Linefont"
+    assert font.getStyleName() == "Thin"
+    assert list(font.getFeatureTags()) == ["mark", "rlig"]
+    assert ord("E") in font.getCodepoints()
+
+    empty = yup.Font()
+    assert empty.getFamilyName() == ""
+    assert len(empty.getFeatureTags()) == 0
+    assert empty.getCodepoints() == []
+
+def test_system_fonts():
+    families = list(yup.Font.findSystemFontFamilies())
+    if not families:
+        pytest.skip("no system fonts on this machine")
+
+    styles = list(yup.Font.findSystemFontStyles(families[0]))
+    assert styles
+
+    assert not yup.Font.loadSystemFont(families[0]).isEmpty()
+    assert not yup.Font.loadSystemFont(families[0], styles[0]).isEmpty()
+
+    assert len(yup.Font.findSystemFontStyles("No Such Font Family 1234")) == 0
+
+    with pytest.raises(ValueError):
+        yup.Font.loadSystemFont("No Such Font Family 1234")
+
+    with pytest.raises(ValueError):
+        yup.Font.loadSystemFont(families[0], "No Such Style 1234")

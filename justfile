@@ -308,7 +308,7 @@ update_emscripten_examples DEMOPATH="../yup-demos/demos":
   @just update_emscripten_example FluidSimulation fluid-simulation {{DEMOPATH}}
   @just update_emscripten_example ListBox list-box {{DEMOPATH}}
   @just update_emscripten_example Lottie lottie {{DEMOPATH}}
-  @just update_emscripten_example ImageMesh image-mesh {{DEMOPATH}}
+  @just update_emscripten_example Images image-mesh {{DEMOPATH}}
   @just update_emscripten_example Paths paths {{DEMOPATH}}
   @just update_emscripten_example Pbr pbr {{DEMOPATH}}
   @just update_emscripten_example Scene3D scene3d {{DEMOPATH}}

@@ -30,11 +30,11 @@
     frame cycle, then composites the result onto the screen via drawImage().
     A button allows saving the raw pixel data to disk.
 */
-class OffscreenRenderDemo : public yup::Component
+class OffscreenRenderPage : public yup::Component
 {
 public:
-    OffscreenRenderDemo()
-        : yup::Component ("OffscreenRenderDemo")
+    OffscreenRenderPage()
+        : yup::Component ("offscreenRenderPage")
     {
         renderButton = std::make_unique<yup::TextButton> ("Re-render offscreen");
         renderButton->onClick = [this]

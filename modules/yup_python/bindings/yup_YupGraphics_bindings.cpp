@@ -1893,12 +1893,32 @@ void registerYupGraphicsBindings (py::module_& m)
         .def_static ("setColorEmojiFallbackFont", &Font::setColorEmojiFallbackFont, "font"_a)
         .def_static ("getColorEmojiFallbackFont", &Font::getColorEmojiFallbackFont)
 
+        // System fonts
+        .def_static ("findSystemFontFamilies", &Font::findSystemFontFamilies)
+        .def_static ("findSystemFontStyles", &Font::findSystemFontStyles, "familyName"_a)
+        .def_static ("loadSystemFont", [] (const String& familyName, const String& styleName) -> Font
+        {
+            auto result = Font::loadSystemFont (familyName, styleName);
+            if (! result.wasOk())
+                throw py::value_error (std::string (result.getErrorMessage().toRawUTF8()));
+
+            return result.getValue();
+        }, "familyName"_a, "styleName"_a = String())
+
         // Metrics
         .def ("isEmpty", &Font::isEmpty)
         .def ("getAscent", &Font::getAscent)
         .def ("getDescent", &Font::getDescent)
         .def ("getWeight", &Font::getWeight)
         .def ("isItalic", &Font::isItalic)
+        .def ("getFamilyName", &Font::getFamilyName)
+        .def ("getStyleName", &Font::getStyleName)
+        .def ("getFeatureTags", &Font::getFeatureTags)
+        .def ("getCodepoints", [] (const Font& self)
+        {
+            const auto codepoints = self.getCodepoints();
+            return std::vector<uint32> (codepoints.begin(), codepoints.end());
+        })
         .def ("getHeight", &Font::getHeight)
         .def ("setHeight", &Font::setHeight, "newHeight"_a)
         .def ("withHeight", &Font::withHeight, "height"_a)

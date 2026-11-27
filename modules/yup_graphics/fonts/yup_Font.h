@@ -147,6 +147,51 @@ public:
     static Font getColorEmojiFallbackFont();
 
     //==============================================================================
+    /** Returns the families of the fonts installed on the system.
+
+        On macOS and iOS the list comes from CoreText, hidden system families (starting with a
+        dot) excluded. On Windows, Linux and Android the system font folders are scanned once,
+        on first use, and the result is kept for the lifetime of the process: fonts installed
+        while the app runs are not listed. WebAssembly has no system fonts, so the list is
+        always empty there.
+
+        @return The family names, sorted and without duplicates.
+
+        @see findSystemFontStyles, loadSystemFont
+    */
+    static StringArray findSystemFontFamilies();
+
+    /** Returns the styles of an installed font family, like "Regular", "Bold" or "Italic".
+
+        @param familyName The name of the family, as returned by findSystemFontFamilies(),
+                          compared ignoring case.
+        @return The style names of the family, or an empty list when the family is unknown.
+
+        @see findSystemFontFamilies, loadSystemFont
+    */
+    static StringArray findSystemFontStyles (const String& familyName);
+
+    /** Loads an installed font by its family and style names.
+
+        @code
+        for (const auto& family : Font::findSystemFontFamilies())
+            if (auto font = Font::loadSystemFont (family, "Bold"); font.wasOk())
+                useFont (font.getValue().withHeight (16.0f));
+        @endcode
+
+        @param familyName The name of the family, as returned by findSystemFontFamilies(),
+                          compared ignoring case.
+        @param styleName  The name of the style, as returned by findSystemFontStyles(). When
+                          empty, the "Regular" style is loaded, or else the upright style
+                          closest to a regular weight.
+        @return The result of the operation, holding the loaded font on success, or a failure
+                when the family or the style is not installed.
+
+        @see findSystemFontFamilies, findSystemFontStyles
+    */
+    static ResultValue<Font> loadSystemFont (const String& familyName, const String& styleName = {});
+
+    //==============================================================================
     /** Returns true if the font is empty (no font data loaded). */
     bool isEmpty() const noexcept { return font == nullptr; }
 
@@ -172,6 +217,40 @@ public:
 
     /** Returns true if the font is italic. */
     bool isItalic() const;
+
+    //==============================================================================
+    /** Returns the family name of the font, like "Helvetica Neue".
+
+        The name is read from the font data, preferring the typographic family name over the
+        legacy one, which some fonts limit to four styles per family.
+
+        @return The family name, or an empty string for an empty font or a font with no name.
+    */
+    String getFamilyName() const;
+
+    /** Returns the style name of the font, like "Regular" or "Bold Italic".
+
+        The name is read from the font data, preferring the typographic style name over the
+        legacy one. For a variable font it is the name of its default instance, and does not
+        change with the axis values.
+
+        @return The style name, or an empty string for an empty font or a font with no name.
+    */
+    String getStyleName() const;
+
+    /** Returns the OpenType features the font has, like "liga", "smcp" or "tnum".
+
+        These are the tags that withFeature() can turn on or off for this font.
+
+        @return The four letter tags of the features, sorted, or an empty list for an empty font.
+    */
+    StringArray getFeatureTags() const;
+
+    /** Returns the characters the font has a glyph for.
+
+        @return The Unicode code points, sorted, or an empty list for an empty font.
+    */
+    std::vector<yup_wchar> getCodepoints() const;
 
     //==============================================================================
     /** Returns the height the font is laid out at: the size of its em square, 12 by default. */

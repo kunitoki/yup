@@ -256,6 +256,11 @@ private:
 
 //==============================================================================
 
+#include "common/IconButton.h"
+#include "common/PaintProfilerPanel.h"
+
+//==============================================================================
+
 #if YUP_EXAMPLE_GRAPHICS_DEMO_AI
 #include "examples/AI.h"
 #endif
@@ -310,14 +315,14 @@ private:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_FluidSimulation
 #include "examples/FluidSimulation.h"
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Fonts
+#include "examples/Fonts.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_GpuAudio
 #include "examples/GpuAudioProcessing.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Images
 #include "examples/Images.h"
-#endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_ImageMesh
-#include "examples/ImageMesh.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Layout
 #include "examples/Layout.h"
@@ -327,15 +332,6 @@ private:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Lottie
 #include "examples/Lottie.h"
-#endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_OffscreenRender
-#include "examples/OffscreenRender.h"
-#endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_Opaque
-#include "examples/Opaque.h"
-#endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_PaintProfiler
-#include "examples/PaintProfiler.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Paths
 #include "examples/Paths.h"
@@ -354,9 +350,6 @@ private:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Shaders && YUP_ENABLE_SHADER_TRANSPILER
 #include "examples/Shaders.h"
-#endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_Sliders
-#include "examples/Slider.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_SpectrumAnalyzer
 #include "examples/SpectrumAnalyzer.h"
@@ -381,9 +374,6 @@ private:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TreeView
 #include "examples/TreeView.h"
-#endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_VariableFonts
-#include "examples/VariableFonts.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Widgets
 #include "examples/Widgets.h"
@@ -593,14 +583,14 @@ public:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_FluidSimulation
         addDemo ("FluidSimulation", "Fluid Simulation", [] { return std::make_unique<FluidSimulationDemo>(); });
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Fonts
+        addDemo ("Fonts", "Fonts", [] { return std::make_unique<FontsDemo>(); });
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_GpuAudio
         addDemo ("GpuAudio", "GPU Audio", [] { return std::make_unique<GpuAudioProcessingDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Images
         addDemo ("Images", "Images", [] { return std::make_unique<ImagesDemo>(); });
-#endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_ImageMesh
-        addDemo ("ImageMesh", "Image Mesh", [] { return std::make_unique<ImageMeshDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Layout
         addDemo ("Layout", "Layout", [] { return std::make_unique<LayoutExample>(); });
@@ -610,15 +600,6 @@ public:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Lottie
         addDemo ("Lottie", "Lottie", [] { return std::make_unique<LottieDemo>(); });
-#endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_OffscreenRender
-        addDemo ("OffscreenRender", "Offscreen Render", [] { return std::make_unique<OffscreenRenderDemo>(); });
-#endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_Opaque
-        addDemo ("Opaque", "Opaque Demo", [] { return std::make_unique<OpaqueDemo>(); });
-#endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_PaintProfiler
-        addDemo ("PaintProfiler", "Paint Profiler", [] { return std::make_unique<PaintProfilerDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Paths
         addDemo ("Paths", "Paths", [] { return std::make_unique<PathsExample>(); });
@@ -637,9 +618,6 @@ public:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Shaders && YUP_ENABLE_SHADER_TRANSPILER
         addDemo ("Shaders", "Shaders", [] { return std::make_unique<ShadersDemo>(); });
-#endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_Sliders
-        addDemo ("Sliders", "Sliders", [] { return std::make_unique<SliderDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_SpectrumAnalyzer
         addDemo ("SpectrumAnalyzer", "FFT Analyzer", [] { return std::make_unique<SpectrumAnalyzerDemo>(); });
@@ -664,9 +642,6 @@ public:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TreeView
         addDemo ("TreeView", "Tree View", [] { return std::make_unique<TreeViewDemo>(); });
-#endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_VariableFonts
-        addDemo ("VariableFonts", "Variable Fonts", [] { return std::make_unique<VariableFontsExample>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Widgets
         addDemo ("Widgets", "Widgets", [] { return std::make_unique<WidgetsDemo>(); });
@@ -727,6 +702,13 @@ public:
 
         addChildComponent (loadingOverlay);
 
+        profilerButton.onClick = [this]
+        {
+            toggleProfiler();
+        };
+        addChildComponent (profilerButton);
+        profilerButton.setVisible (! singleDemoMode);
+
         selectComponent (initialIndex);
 
         updateWindowTitle();
@@ -735,6 +717,8 @@ public:
 
     ~CustomWindow() override
     {
+        profilerWindow.reset();
+        profilerPanel.setTarget (nullptr);
     }
 
     void resized() override
@@ -744,6 +728,7 @@ public:
         constexpr auto tabBarHeight = 40;
         constexpr auto logoHeight = 64;
         constexpr auto minimumDemoWidth = 480;
+        constexpr auto profilerButtonSize = 32;
 
         auto bounds = getSafeAreaBounds().reduced (margin);
         auto width = bounds.getWidth();
@@ -761,6 +746,8 @@ public:
                 auto tabRow = bounds.removeFromTop (tabBarHeight);
                 logoBounds = tabRow.removeFromLeft (tabBarHeight).reduced (6);
                 tabRow.removeFromLeft (margin);
+                profilerButton.setBounds (tabRow.removeFromRight (profilerButtonSize).withSizeKeepingCenter (profilerButtonSize, profilerButtonSize));
+                tabRow.removeFromRight (margin);
                 tabBar->setBounds (tabRow);
 
                 bounds.removeFromTop (margin);
@@ -769,6 +756,8 @@ public:
             {
                 auto sidebar = bounds.removeFromLeft (listBoxWidth);
                 logoBounds = sidebar.removeFromTop (logoHeight).withSizeKeepingCenter (logoHeight - 12, logoHeight - 12);
+                profilerButton.setBounds (sidebar.removeFromBottom (profilerButtonSize).removeFromLeft (profilerButtonSize));
+                sidebar.removeFromBottom (margin);
                 listBox->setBounds (sidebar);
 
                 bounds.removeFromLeft (margin);
@@ -779,6 +768,13 @@ public:
                 listBox->scrollToRow (currentDemo);
                 scrollToSelectedDemo = false;
             }
+        }
+
+        // A docked profiler takes the bottom of the demo area
+        if (profilerPanel.isVisible() && profilerPanel.getParentComponent() == this)
+        {
+            profilerPanel.setBounds (bounds.removeFromBottom (bounds.getHeight() * 0.4f));
+            bounds.removeFromBottom (margin);
         }
 
         // Demo components take the remaining space
@@ -822,6 +818,10 @@ public:
 
             case yup::KeyPress::textZKey:
                 setFullScreen (! isFullScreen());
+                break;
+
+            case yup::KeyPress::textTKey:
+                toggleProfiler();
                 break;
 
             default:
@@ -880,11 +880,46 @@ public:
         components[index]->setVisible (true);
 
         loadingOverlay.track (dynamic_cast<const LoadingDemo*> (components[index]));
+
+        if (isProfilerOpen())
+            profilerPanel.setTarget (components[index]);
+    }
+
+    /** Shows or hides the paint profiler of the current demo: in its own window on desktop,
+        docked below the demo on mobile and on the web.
+    */
+    void toggleProfiler()
+    {
+        const bool shouldOpen = ! isProfilerOpen();
+
+#if YUP_DESKTOP && ! YUP_WASM
+        if (shouldOpen)
+        {
+            profilerWindow = std::make_unique<PaintProfilerWindow> (profilerPanel, [this]
+            {
+                toggleProfiler();
+            });
+            profilerWindow->centreWithSize ({ 920, 520 });
+            profilerWindow->setVisible (true);
+            profilerWindow->toFront (true);
+        }
+        else
+        {
+            profilerWindow.reset();
+        }
+#else
+        if (profilerPanel.getParentComponent() != this)
+            addChildComponent (profilerPanel);
+
+        profilerPanel.setVisible (shouldOpen);
+        resized();
+#endif
+
+        profilerPanel.setTarget (shouldOpen && yup::isPositiveAndBelow (currentDemo, components.size()) ? components[currentDemo] : nullptr);
+        profilerButton.setOn (shouldOpen);
     }
 
 private:
-    /** Gives back what the device still keeps of the demo that went away: its finished frames, the
-        shader caches and the buffers 2D drawing grew to, which the next demo allocates again as it needs. */
     void releaseUnusedGpuResources()
     {
         auto* nativeComponent = getNativeComponent();
@@ -892,6 +927,11 @@ private:
 
         if (auto device = context != nullptr ? context->getGpuDevice() : nullptr; device != nullptr)
             device->releaseUnusedResources();
+    }
+
+    bool isProfilerOpen() const
+    {
+        return profilerWindow != nullptr || (profilerPanel.isVisible() && profilerPanel.getParentComponent() == this);
     }
 
     int findDemoIndex (const yup::String& name) const
@@ -979,6 +1019,9 @@ private:
     std::unique_ptr<yup::TabBar> tabBar;
     yup::OwnedArray<yup::Component> components;
     LoadingOverlay loadingOverlay;
+    IconButton profilerButton { "paintProfiler", YUP_ICON_GAUGE_HIGH };
+    PaintProfilerPanel profilerPanel;
+    std::unique_ptr<PaintProfilerWindow> profilerWindow;
     yup::Image logo, logoBlack;
     yup::Rectangle<float> logoBounds;
     int currentDemo = -1;

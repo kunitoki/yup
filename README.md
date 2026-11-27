@@ -102,7 +102,7 @@ Start with browsing the [documentation](https://yup.readthedocs.io/).
 </div>
 
 <div>
-  <a href="./examples/graphics/source/examples/ImageMesh.h"><img src="./docs/_static/images/yup_image_mesh.jpg" style="width:48.75%;" /></a>
+  <a href="./examples/graphics/source/examples/images/ImageMeshPage.h"><img src="./docs/_static/images/yup_image_mesh.jpg" style="width:48.75%;" /></a>
   <a href="./examples/graphics/source/examples/ListBox.h"><img src="./docs/_static/images/yup_list_box.jpg" style="width:48.75%;" /></a>
 </div>
 

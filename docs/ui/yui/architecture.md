@@ -435,7 +435,9 @@ flowchart LR
   `ComponentDocument`, the interface of `yup_gui` that `YuiDocument`
   implements: `ComponentDocument::findFor (component)` finds it, to read the
   files next to it, to listen to its reloads and to report problems where they
-  are written. This is how the 3D elements and `ImageComponent` work with
+  are written. A load forgets the problems reported before it and changes
+  `getLoadGeneration()`, which a component compares to report again what is
+  still wrong. This is how the 3D elements and `ImageComponent` work with
   documents without depending on `yup_gui_markup`.
 
 ## See also
