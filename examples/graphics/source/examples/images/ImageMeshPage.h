@@ -33,11 +33,11 @@
     thousands of spinning logos bounce around, all drawn by one
     Graphics::drawImageMeshInstanced() call, with their count, alpha and blending adjustable.
 */
-class ImageMeshDemo : public yup::Component
+class ImageMeshPage : public yup::Component
 {
 public:
-    ImageMeshDemo()
-        : yup::Component ("ImageMeshDemo")
+    ImageMeshPage()
+        : yup::Component ("imageMeshPage")
     {
         loadLogo();
 
@@ -141,6 +141,10 @@ public:
 
     void refreshDisplay (double lastFrameTimeSeconds)
     {
+        // Frame callbacks keep coming while the tab is hidden
+        if (! isShowing())
+            return;
+
         const auto elapsed = static_cast<float> (yup::jlimit (0.0, 0.1, lastFrameTimeSeconds));
         time += elapsed;
 
@@ -405,5 +409,5 @@ private:
     yup::ToggleButton additiveToggle;
     yup::Label alphaLabel;
     yup::Slider alphaSlider { yup::Slider::LinearHorizontal };
-    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&ImageMeshDemo::refreshDisplay, this) };
+    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&ImageMeshPage::refreshDisplay, this) };
 };

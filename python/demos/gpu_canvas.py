@@ -2,7 +2,7 @@
 """
 YUP GPU Canvas Demo
 
-Follows the OffscreenRenderDemo pattern: renders 2D content to an
+Follows the offscreen page of the C++ Images demo: renders 2D content to an
 offscreen GpuCanvas via beginDraw()/commit(), then composites the
 result onto the screen with drawImage().
 """

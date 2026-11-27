@@ -5,7 +5,9 @@ cube rendered with a custom pipeline, textured with a live animation, and passed
 through a separable Gaussian blur post-process.
 
 The complete, runnable source lives in the graphics example under
-[`examples/graphics/source/examples/SpinningCubeDemo.h`](https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/SpinningCubeDemo.h).
+[`examples/graphics/source/examples/SpinningCube.h`](https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/SpinningCube.h).
+Drag the cube to spin it (a flick keeps its momentum), scroll or pinch to blur it,
+double-click to reset, and drop a Lottie file on it to change its texture.
 
 ![The RHI spinning cube demo](../../_static/images/yup_rhi_cube.jpg)
 
@@ -14,7 +16,7 @@ The complete, runnable source lives in the graphics example under
 - Custom 3D geometry: per-vertex position / color / normal in a `GpuBuffer`,
   drawn with `drawIndexed()` and backface culling.
 - A per-frame MVP transform pushed as a uniform buffer on the render pass.
-- Runtime shader compilation via `GpuPipeline::compileFromGlsl()`.
+- Pipelines created from precompiled shader bundles via `GpuPipeline::compileFromBundle()`.
 - An offscreen 2D `GpuCanvas` used as an animated texture, sampled by the cube's
   fragment shader.
 - A two-pass separable Gaussian blur post-process built from a second
@@ -34,28 +36,29 @@ if (! ctx.isGpuAvailable())
 
 ## 2. Compile the cube pipeline
 
-The cube uses a vertex + fragment shader pair. With the transpiler enabled, GLSL
-450 is compiled directly; the binding-map sidecar is derived via reflection:
+The cube uses a vertex + fragment shader pair, precompiled at build time into a
+`.ysl` shader bundle embedded in the app:
 
 ```cpp
 GpuPipelineOptions options;
-options.vertexBuffers.push_back (cubeLayout);  // position/color/normal
+options.vertexBuffers.push_back (cubeLayout);  // position/color/normal/uv
 options.indexFormat          = GpuIndexFormat::uint16;
 options.cullMode             = GpuCullMode::back;
 options.winding              = GpuFaceWinding::counterClockwise;
 options.depthStencil.enabled = true;
 
-auto result = GpuPipeline::compileFromGlsl (ctx, vertGlsl, fragGlsl, options);
+auto bundle = ShaderBundle::loadFromData (ShaderBundleFile_data, ShaderBundleFile_size);
+if (bundle.failed())
+    return;
+
+auto result = GpuPipeline::compileFromBundle (device, bundle.getReference(), options);
 if (result.wasOk())
     cubePipeline = result.getValue();
-else
-    statusLabel->setText (result.getErrorMessage(), dontSendNotification);
 ```
 
 See [Pipelines & shaders](pipelines.md) for the vertex layout and options in
-detail. For production, prefer [`compileFromBundle()`](pipelines.md#1-from-a-shader-bundle-recommended)
-with a pre-built `.ysl` bundle, or cache pipelines with
-[`GpuPipelineCache`](pipelines.md#gpupipelinecache).
+detail, including [`compileFromGlsl()`](pipelines.md) for compiling GLSL at runtime,
+and [`GpuPipelineCache`](pipelines.md#gpupipelinecache) to cache pipelines.
 
 ## 3. Upload the geometry once
 
@@ -108,14 +111,14 @@ GpuRenderOptions load { false, Colors::transparentBlack };
 auto hPass = blurCanvasH->beginRenderPass (frame, { true, Colors::transparentBlack });
 hPass.setPipeline (blurPipeline);
 hPass.setTexture (0, 0, sceneCanvas->asTexture());
-hPass.setUniformBuffer (0, 1, &horizontalParams, sizeof horizontalParams);
+hPass.setUniformBuffer (0, 2, &horizontalParams, sizeof horizontalParams);
 hPass.draw (3);
 hPass.finish();
 
 auto vPass = blurCanvasV->beginRenderPass (frame, { true, Colors::transparentBlack });
 vPass.setPipeline (blurPipeline);
 vPass.setTexture (0, 0, blurCanvasH->asTexture());
-vPass.setUniformBuffer (0, 1, &verticalParams, sizeof verticalParams);
+vPass.setUniformBuffer (0, 2, &verticalParams, sizeof verticalParams);
 vPass.draw (3);
 vPass.finish();
 
