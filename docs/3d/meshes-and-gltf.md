@@ -62,7 +62,9 @@ view.repaint();                                      // a SceneComponent draws w
   positions, the normals and the tangents.
 - **They are copied** into the storage the primitive already has, so a call
   allocates nothing and a caller deforming at every frame keeps its own buffer.
-- **The bounds follow**, and with them picking, culling and the shadow fits.
+- **The bounds follow**, and with them picking, the shadow fits and what a
+  frame leaves out: a mesh whose bounds the camera does not see is not drawn,
+  and a shadow map only draws the meshes that cast into it.
 - **The renderer sees it.** `getChangeCount()` counts the calls: when it
   changes, the shadow maps the mesh casts into are drawn again and the
   accumulation of the full tier restarts, as for an entity that moved. So only

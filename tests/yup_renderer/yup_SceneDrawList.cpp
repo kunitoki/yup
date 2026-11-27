@@ -298,6 +298,43 @@ TEST_F (SceneDrawListTests, OpaqueItemsAreGroupedByPipelineThenMaterial)
     EXPECT_NE (items[1].material, items[2].material);
 }
 
+TEST_F (SceneDrawListTests, OpaqueItemsOfTheSameMaterialKeepTheOrderTheyWereCollectedIn)
+{
+    const Material::Ptr materials[] = { makeMaterial ("a"), makeMaterial ("b"), makeMaterial ("c", Material::AlphaMode::opaque, true) };
+
+    // More of them than a sort orders by insertion, their materials interleaved, at various depths
+    std::vector<Entity> entities;
+    for (int i = 0; i < 300; ++i)
+    {
+        auto entity = entities.emplace_back (makeEntity());
+        entity.getOrAttach<TransformNode>().setPosition ({ static_cast<float> (i % 7), 0.0f, static_cast<float> (i % 5) });
+        entity.attach<MeshNode> (makeTriangle (materials[i % 3]));
+    }
+
+    // Whatever the camera sees them from: the shadow maps tell their casters by their place in the list
+    for (const auto& view : { Matrix4(), Matrix4::lookAt ({ 3.0f, 2.0f, 1.0f }, {}, { 0.0f, 1.0f, 0.0f }) })
+    {
+        drawList.build (root, view);
+
+        const auto items = drawList.getOpaqueItems();
+        ASSERT_EQ (items.size(), entities.size());
+
+        for (size_t material = 0; material < 3; ++material)
+        {
+            std::vector<const MeshNode*> drawn, attached;
+
+            for (const auto& item : items)
+                if (item.material == materials[material].get())
+                    drawn.push_back (item.node);
+
+            for (size_t i = material; i < entities.size(); i += 3)
+                attached.push_back (entities[i].get<MeshNode>());
+
+            EXPECT_EQ (drawn, attached) << material;
+        }
+    }
+}
+
 TEST_F (SceneDrawListTests, LightsAreGatheredInWorldSpace)
 {
     auto lamp = makeEntity();
@@ -1487,4 +1524,227 @@ TEST_F (SceneDrawListMaterialShaderTests, LightsAreSelectedForTheItemsTheirMater
     ASSERT_EQ (drawList.getForwardOpaqueItems().size(), 1u);
     EXPECT_EQ (drawList.getDeferredItems()[0].numLights, 1);
     EXPECT_EQ (drawList.getForwardOpaqueItems()[0].numLights, 0);
+}
+
+//==============================================================================
+/** The items a camera sees, told by a list built with its projection. The camera of the fixture
+    stands at the origin and looks down -Z through a square frustum of 90 degrees from 0.1 to 100:
+    at a depth d it reaches d to the left, to the right, up and down.
+*/
+class SceneDrawListCullingTests : public SceneDrawListTests
+{
+protected:
+    /** Adds the triangle of makeTriangle() scaled by @p size, its right angle at @p corner: its
+        bounds reach @p size along +X and +Y from there, at the depth of the corner.
+    */
+    Entity addTriangle (Vector3<float> corner, float size = 1.0f, Material::Ptr material = nullptr)
+    {
+        auto entity = makeEntity();
+        entity.getOrAttach<TransformNode>().setPosition (corner);
+        entity.getOrAttach<TransformNode>().setScale ({ size, size, size });
+        entity.attach<MeshNode> (makeTriangle (std::move (material)));
+        return entity;
+    }
+
+    /** Builds the list of what a camera sees through @p cameraProjection, at the origin looking down -Z unless @p view tells otherwise. */
+    void buildForCamera (const Matrix4& cameraProjection, const Matrix4& view = {})
+    {
+        SceneDrawList::BuildOptions options;
+        options.projection = cameraProjection;
+        drawList.build (root, view, options);
+    }
+
+    /** The item drawing the mesh of @p entity, or one drawing nothing. */
+    const SceneDrawList::DrawItem& getItem (const Entity& entity) const
+    {
+        for (const auto items : { drawList.getOpaqueItems(), drawList.getBlendItems() })
+            for (const auto& item : items)
+                if (item.node == entity.get<MeshNode>())
+                    return item;
+
+        ADD_FAILURE() << "The list has no item of the entity";
+        return noItem;
+    }
+
+    const Matrix4 projection = Matrix4::perspective (MathConstants<float>::halfPi, 1.0f, 0.1f, 100.0f);
+    const SceneDrawList::DrawItem noItem {};
+};
+
+TEST_F (SceneDrawListCullingTests, WithoutAProjectionEveryItemIsInView)
+{
+    const auto ahead = addTriangle ({ -0.5f, -0.5f, -5.0f });
+    const auto behind = addTriangle ({ -0.5f, -0.5f, 5.0f });
+    const auto aside = addTriangle ({ 50.0f, 0.0f, -5.0f }, 1.0f, makeMaterial ("glass", Material::AlphaMode::blend));
+
+    buildForCamera (projection);
+    EXPECT_FALSE (getItem (behind).inView);
+    EXPECT_FALSE (getItem (aside).inView);
+
+    // Whatever the list before told, and when selecting the lights of each draw, which computes its bounds as culling does
+    for (const auto selectLights : { false, true })
+    {
+        drawList.build (root, {}, { false, selectLights });
+
+        for (const auto& entity : { ahead, behind, aside })
+            EXPECT_TRUE (getItem (entity).inView) << selectLights;
+    }
+}
+
+TEST_F (SceneDrawListCullingTests, ItemsInsideTheFrustumOrAcrossItsPlanesAreInView)
+{
+    // At a depth of 5 the frustum reaches 5 to each side: from -5.5 to -4.5 is across the left
+    // plane, across the bottom one, across both
+    const Entity entitiesInView[] = {
+        addTriangle ({ -0.5f, -0.5f, -5.0f }),
+        addTriangle ({ 1.0f, 1.0f, -20.0f }, 1.0f, makeMaterial ("glass", Material::AlphaMode::blend)),
+        addTriangle ({ -5.5f, 0.0f, -5.0f }),
+        addTriangle ({ 0.0f, -5.5f, -5.0f }),
+        addTriangle ({ -5.5f, -5.5f, -5.0f }),
+        addTriangle ({ -500.0f, -500.0f, -5.0f }, 1000.0f), // around the frustum, every corner of its bounds out of it
+    };
+
+    buildForCamera (projection);
+
+    for (const auto& entity : entitiesInView)
+        EXPECT_TRUE (getItem (entity).inView) << (&entity - entitiesInView);
+}
+
+TEST_F (SceneDrawListCullingTests, ItemsBeyondAPlaneOfTheFrustumAreOutOfView)
+{
+    // At a depth of 5 the frustum reaches 5 to each side, and it spans the depths from 0.1 to 100
+    const Entity entitiesOutOfView[] = {
+        addTriangle ({ -8.0f, 0.0f, -5.0f }),
+        addTriangle ({ 7.0f, 0.0f, -5.0f }),
+        addTriangle ({ 0.0f, -8.0f, -5.0f }),
+        addTriangle ({ 0.0f, 7.0f, -5.0f }),
+        addTriangle ({ -0.5f, -0.5f, -150.0f }),
+        addTriangle ({ -0.005f, -0.005f, -0.01f }, 0.01f),
+        addTriangle ({ 7.0f, 0.0f, -5.0f }, 1.0f, makeMaterial ("glass", Material::AlphaMode::blend)),
+        addTriangle ({ -0.5f, -0.5f, 5.0f }),           // behind the camera
+        addTriangle ({ -50.0f, -50.0f, 5.0f }, 100.0f), // and there wide enough to reach across the planes of the sides, which meet again behind it
+    };
+
+    buildForCamera (projection);
+
+    for (const auto& entity : entitiesOutOfView)
+        EXPECT_FALSE (getItem (entity).inView) << (&entity - entitiesOutOfView);
+}
+
+TEST_F (SceneDrawListCullingTests, FrustumFollowsTheViewMatrix)
+{
+    const auto alongZ = addTriangle ({ -0.5f, -0.5f, -5.0f });
+    const auto alongX = addTriangle ({ 5.0f, -0.5f, 0.0f });
+
+    buildForCamera (projection);
+    EXPECT_TRUE (getItem (alongZ).inView);
+    EXPECT_FALSE (getItem (alongX).inView);
+
+    // The camera turned to look down +X
+    buildForCamera (projection, Matrix4::lookAt ({}, { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }));
+    EXPECT_FALSE (getItem (alongZ).inView);
+    EXPECT_TRUE (getItem (alongX).inView);
+}
+
+TEST_F (SceneDrawListCullingTests, FrustumFollowsAProjectionMovedAsideAsTheJitterMovesIt)
+{
+    // At a depth of 5, a view whose image moved right by a quarter of its width shows from -7.5 to 2.5
+    const auto shown = addTriangle ({ -7.0f, 0.0f, -5.0f });
+    const auto hidden = addTriangle ({ 3.5f, 0.0f, -5.0f });
+
+    buildForCamera (projection);
+    EXPECT_FALSE (getItem (shown).inView);
+    EXPECT_TRUE (getItem (hidden).inView);
+
+    // As ViewData jitters its projection, by far more than its part of a pixel
+    buildForCamera (projection.followedBy (Matrix4::translation ({ 0.5f, 0.0f, 0.0f })));
+    EXPECT_TRUE (getItem (shown).inView);
+    EXPECT_FALSE (getItem (hidden).inView);
+}
+
+TEST_F (SceneDrawListCullingTests, EveryDepthRangeKeepsWhatIsAheadOfTheCamera)
+{
+    const auto nearby = addTriangle ({ -0.05f, -0.05f, -0.15f }, 0.1f);
+    const auto remote = addTriangle ({ -0.5f, -0.5f, -90.0f });
+    const auto distant = addTriangle ({ -0.5f, -0.5f, -100000.0f });
+    const auto behind = addTriangle ({ -50.0f, -50.0f, 5.0f }, 100.0f);
+
+    CameraNode camera;
+    camera.yFov = MathConstants<float>::halfPi;
+    camera.zFar = 0.0f;
+
+    // The same frustum from 0.1, to 100 or without a far plane
+    const struct
+    {
+        Matrix4 matrix;
+        bool endless;
+    } depthRanges[] = {
+        { projection, false },                                                                      // 0 at the near plane to 1 at the far one
+        { Matrix4::perspective (MathConstants<float>::halfPi, 1.0f, 0.1f, 100.0f, false), false }, // -1 to 1
+        { Matrix4 (std::array<float, 16> { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.1f / 99.9f, -1.0f, 0.0f, 0.0f, 10.0f / 99.9f, 0.0f }), false }, // 1 to 0
+        { Matrix4 (std::array<float, 16> { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f, 0.1f, 0.0f }), true },                   // 1 to 0
+        { camera.getProjectionMatrix (1.0f), true },                                                // 0 to 1
+    };
+
+    for (const auto& depthRange : depthRanges)
+    {
+        buildForCamera (depthRange.matrix);
+
+        const auto index = &depthRange - depthRanges;
+        EXPECT_TRUE (getItem (nearby).inView) << index;
+        EXPECT_TRUE (getItem (remote).inView) << index;
+        EXPECT_FALSE (getItem (behind).inView) << index;
+
+        // Without a far plane, however far
+        if (depthRange.endless)
+            EXPECT_TRUE (getItem (distant).inView) << index;
+    }
+}
+
+TEST_F (SceneDrawListCullingTests, ItemsOutOfViewKeepTheirPlaceInTheList)
+{
+    const auto solid = makeMaterial ("solid");
+    const auto glass = makeMaterial ("glass", Material::AlphaMode::blend);
+
+    // Every third one behind the camera
+    for (int i = 0; i < 12; ++i)
+        addTriangle ({ -0.5f, -0.5f, i % 3 == 0 ? 5.0f : -5.0f - static_cast<float> (i) }, 1.0f, i % 2 == 0 ? solid : glass);
+
+    const auto getNodes = [this]
+    {
+        std::vector<const MeshNode*> nodes;
+        for (const auto items : { drawList.getOpaqueItems(), drawList.getBlendItems() })
+            for (const auto& item : items)
+                nodes.push_back (item.node);
+
+        return nodes;
+    };
+
+    drawList.build (root, {});
+    const auto everyItem = getNodes();
+    ASSERT_EQ (everyItem.size(), 12u);
+
+    buildForCamera (projection);
+    EXPECT_EQ (getNodes(), everyItem);
+
+    auto numOutOfView = 0;
+    for (const auto items : { drawList.getOpaqueItems(), drawList.getBlendItems() })
+        for (const auto& item : items)
+            numOutOfView += item.inView ? 0 : 1;
+
+    EXPECT_EQ (numOutOfView, 4);
+}
+
+TEST_F (SceneDrawListCullingTests, LightsAreSelectedForTheItemsInViewOnly)
+{
+    const auto seen = addTriangle ({ -0.5f, -0.5f, -5.0f });
+    const auto unseen = addTriangle ({ -0.5f, -0.5f, 5.0f });
+    makeEntity().attach<LightNode>();
+
+    SceneDrawList::BuildOptions options;
+    options.selectLightsPerDraw = true;
+    options.projection = projection;
+    drawList.build (root, {}, options);
+
+    EXPECT_EQ (getItem (seen).numLights, 1);
+    EXPECT_EQ (getItem (unseen).numLights, 0);
 }

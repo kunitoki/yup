@@ -36,6 +36,12 @@ namespace yup
 
     Opaque and masked items are sorted by pipeline state (double-sided, then mirrored) and then
     by material, to limit state changes. Blended items are sorted back to front, so they are drawn over what is behind them.
+    Items equal in what they are sorted by keep the order they were collected in, so the order of
+    the opaque items does not follow the camera.
+
+    With BuildOptions::projection, the items the camera cannot see are told apart
+    (DrawItem::inView) and stay in the list: the passes drawing the view skip them, while they
+    still cast shadows into it and keep their previous transforms.
 
     With BuildOptions::materialShaders, the items under a MaterialShaderNode are colored by its
     MaterialShader (DrawItem::materialShader), the nearest node up to the root winning as a
@@ -50,7 +56,7 @@ namespace yup
     getLights() can hold a light that is not in the tree: when BuildOptions::addDefaultLight is
     set and the tree has no LightNode, it holds the default light owned by the list.
 
-    With BuildOptions::selectLightsPerDraw, every item also lists the lights shading it: the
+    With BuildOptions::selectLightsPerDraw, every item in view also lists the lights shading it: the
     maxLightsPerDraw most influential ones, faded out near the cutoff, see selectLights(), and
     the two reflection probes influencing it most, see selectReflectionProbes(), and the irradiance
     volume lighting it, see selectIrradianceVolume().
@@ -76,6 +82,7 @@ public:
         const Material* material = nullptr;          ///< The resolved material, never nullptr.
         float viewDistance = 0.0f;                   ///< Distance of the bounds center along the view direction.
         bool mirrored = false;                       ///< True if the world transform mirrors, which reverses the winding.
+        bool inView = true;                          ///< False when the world bounds of the primitive are outside the view of BuildOptions::projection: the passes drawing the view skip the item.
         std::array<uint16, maxLightsPerDraw> lightIndices {}; ///< Indices into getLights(), most influential first, see BuildOptions::selectLightsPerDraw.
         std::array<float, maxLightsPerDraw> lightWeights = [] { std::array<float, maxLightsPerDraw> ones; ones.fill (1.0f); return ones; }(); ///< What scales the intensity of each of lightIndices, see selectLights().
         int numLights = 0;                           ///< How many lightIndices are valid.
@@ -117,7 +124,7 @@ public:
         */
         bool addDefaultLight = false;
 
-        /** Fills DrawItem::lightIndices, DrawItem::lightWeights and DrawItem::numLights of every item with selectLights(),
+        /** Fills DrawItem::lightIndices, DrawItem::lightWeights and DrawItem::numLights of every item in view with selectLights(),
             DrawItem::reflectionProbes with selectReflectionProbes() and DrawItem::irradianceVolume with selectIrradianceVolume().
         */
         bool selectLightsPerDraw = false;
@@ -131,6 +138,21 @@ public:
             stays nullptr, as the captures of reflection probes and irradiance volumes need.
         */
         std::function<bool (const MaterialShader::Ptr&)> materialShaders = nullptr;
+
+        /** The projection the view is drawn with, the sub-pixel jitter of a temporal frame
+            included (ViewData::getJitteredProjection()): with it, the items whose world bounds lie
+            outside the frustum of the view matrix of build() and this projection get
+            DrawItem::inView false.
+
+            Any depth range is taken, 0 to 1 or -1 to 1, reversed or with an infinite far plane:
+            an item is only left out when its bounds are wholly beyond one plane of the clip
+            volume -w <= x, y, z <= w, which holds every one of them. So some items the camera
+            cannot see stay in view, and none it sees is left out.
+
+            Without it, the default, every item is in view, as a list drawn from several views
+            needs: the captures of reflection probes and irradiance volumes.
+        */
+        std::optional<Matrix4> projection = std::nullopt;
     };
 
     //==============================================================================
@@ -144,7 +166,8 @@ public:
     /** Rebuilds the list from an entity tree.
 
         @param root     The root of the tree to draw, usually Scene::getRoot().
-        @param view     The view matrix, used to sort blended items by distance.
+        @param view     The view matrix, used to sort blended items by distance, and with
+                        BuildOptions::projection to tell the items in view.
         @param options  What to add beyond the tree.
     */
     void build (const Entity& root, const Matrix4& view, const BuildOptions& options);

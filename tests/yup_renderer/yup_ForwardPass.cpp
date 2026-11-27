@@ -345,3 +345,28 @@ TEST_F (ForwardPassMockTests, PipelinesOfADestroyedShaderAreLetGoByTheNextRender
     EXPECT_TRUE (pass.prepareMaterialShader (device, kept, targets, 1));
     EXPECT_EQ (pipelinesMade, 16);
 }
+
+TEST_F (ForwardPassMockTests, ItemsOutOfViewAreNotDrawn)
+{
+    const MaterialShaderNode node (MaterialShader::createDefault());
+
+    for (const auto full : { false, true })
+    {
+        ForwardPass pass;
+        const auto targets = makeTargets (full);
+        ASSERT_TRUE (pass.prepareMaterialShader (device, node.getShader(), targets, 1));
+
+        // Of a material shader, the only opaque items the full tier takes
+        std::vector<SceneDrawList::DrawItem> opaque { makeItem (solid, &node), makeItem (solid, &node), makeItem (twoSided, &node) };
+        std::vector<SceneDrawList::DrawItem> blend { makeItem (blended), makeItem (blended), makeItem (blended, &node) };
+        opaque[1].inView = false;
+        blend[0].inView = false;
+        blend[2].inView = false;
+
+        const auto numPasses = passes.size();
+        ASSERT_TRUE (renderFrame (pass, opaque, blend, targets));
+
+        ASSERT_EQ (passes.size(), numPasses + 1) << full;
+        EXPECT_EQ (passes.back().draws, 3) << full;
+    }
+}

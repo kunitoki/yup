@@ -84,6 +84,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `SceneComponent` takes the frames of its window only while it has something to do, so a window showing a still scene can idle. While it is not showing it no longer updates its scene, `setContinuousUpdates (true)` included, and releases its render targets (`SceneRenderer::releaseTargets()`).
 - Added `reducePolylineToPixelColumns`, which reduces a line with more points than the pixels it is drawn across to the first, lowest, highest and last point of each pixel column. `CartesianPlane` draws its signals with it and keeps their paths between paints.
 - A `GpuCanvas` leases a Rive render context for each frame drawn into it instead of keeping one for its whole life, so the cached, filtered and effect canvases of an interface share a few contexts rather than holding about 1 MB each. **Breaking:** `RenderableTarget::getRenderContext()` returns nullptr outside a frame.
+- `yup_renderer`: `SceneRenderer::render()` draws no frame for a scene left as its last two frames drew it once its image is final, so a repaint over a still scene costs no GPU work, and meshes out of the camera's view are no longer drawn into it while they still cast shadows (`SceneDrawList::BuildOptions::projection`, `DrawItem::inView`).
 
 ### UI
 

@@ -25,8 +25,10 @@ namespace yup
 {
 
 //==============================================================================
-/** FNV-1a over the values a frame depends on, for the change tracking of SceneRenderer and
-    ProbeBaker. Floats are canonicalized first, so 0 and -0, and NaNs of any payload, hash the same.
+/** A 64 bit hash of the values a frame depends on, for the change tracking of SceneRenderer and
+    ProbeBaker. Each value is mixed in whole, with one multiplication and one shift, so hashing
+    every draw item of a frame stays cheap. Floats are canonicalized first, so 0 and -0, and NaNs
+    of any payload, hash the same.
 
     @internal
 */
@@ -35,12 +37,14 @@ class FrameSignature
 public:
     void addBits (uint64 value) noexcept
     {
-        addBytes (value, 8);
+        // The shift folds the high bits, where the product gathers the value, back over the low ones
+        hash = (hash ^ value) * 0x9e3779b97f4a7c15ull;
+        hash ^= hash >> 32;
     }
 
     void addFloat (float value) noexcept
     {
-        addBytes (getCanonicalBits (value), 4);
+        addBits (getCanonicalBits (value));
     }
 
     /** The bits addFloat() hashes for @p value: every NaN as one quiet NaN, and -0 as 0. Comparing
@@ -81,9 +85,9 @@ public:
 
     uint64 get() const noexcept { return hash; }
 
-    /** The hash through the splitmix64 finalizer. Sums of plain FNV-1a hashes of similar items
-        cancel out (two primitives of one mesh changing together leave the sum unchanged), sums of
-        finalized ones don't.
+    /** The hash through the splitmix64 finalizer. Sums of plain hashes of similar items can
+        cancel out (two primitives of one mesh changing together leaving the sum unchanged), sums
+        of finalized ones don't.
     */
     uint64 getFinalized() const noexcept
     {
@@ -94,15 +98,6 @@ public:
     }
 
 private:
-    void addBytes (uint64 value, int count) noexcept
-    {
-        for (int i = 0; i < count; ++i)
-        {
-            hash ^= (value >> (i * 8)) & 0xff;
-            hash *= 1099511628211ull;
-        }
-    }
-
     uint64 hash = 14695981039346656037ull;
 };
 

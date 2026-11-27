@@ -338,6 +338,27 @@ TEST_F (GBufferPassMockTests, DrawsEachRasterStateThenTheBackground)
     EXPECT_EQ (materials.getEntries().size(), 3u);
 }
 
+TEST_F (GBufferPassMockTests, ItemsOutOfViewAreNotDrawn)
+{
+    GBufferPass pass;
+    ASSERT_TRUE (pass.prepare (device).wasOk());
+
+    std::vector<SceneDrawList::DrawItem> items {
+        makeItem (singleSided, false),
+        makeItem (doubleSided, false),
+        makeItem (singleSided, false),
+    };
+
+    items[1].inView = false;
+
+    ASSERT_TRUE (renderFrame (pass, items, acquireTargets (64, 64)));
+
+    // The two items in view, then the background
+    ASSERT_EQ (passes.size(), 1u);
+    EXPECT_EQ (passes[0].draws, 3);
+    EXPECT_EQ (passes[0].countDistinctPipelines(), 2u);
+}
+
 TEST_F (GBufferPassMockTests, DrawsTheBackgroundWithoutItems)
 {
     GBufferPass pass;

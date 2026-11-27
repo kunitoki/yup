@@ -31,6 +31,51 @@ static float getLinearDeterminant (const Matrix4& m) noexcept
          + m (0, 2) * (m (1, 0) * m (2, 1) - m (2, 0) * m (1, 1));
 }
 
+using FrustumPlanes = std::array<std::array<float, 4>, 6>;
+
+/** The planes of the clip volume -w <= x, y, z <= w of @p viewProjection, in world space: a point
+    is inside where a * x + b * y + c * z + d >= 0 for the four values of each plane. The volume
+    holds the one of a 0 to 1 depth range, reversed or not, so no depth convention loses what it shows.
+*/
+static FrustumPlanes getFrustumPlanes (const Matrix4& viewProjection) noexcept
+{
+    FrustumPlanes planes;
+    const auto* m = viewProjection.getData();
+
+    for (size_t axis = 0; axis < 3; ++axis)
+    {
+        for (size_t i = 0; i < 4; ++i)
+        {
+            planes[2 * axis][i] = m[4 * i + 3] + m[4 * i + axis];
+            planes[2 * axis + 1][i] = m[4 * i + 3] - m[4 * i + axis];
+        }
+    }
+
+    return planes;
+}
+
+/** False when @p box lies wholly behind one of @p planes, by more than the rounding of the sums
+    can hide. A box that is not a number is never behind.
+*/
+static bool isBoxInFrustum (const FrustumPlanes& planes, const BoundingBox& box) noexcept
+{
+    const auto& low = box.getMin();
+    const auto& high = box.getMax();
+
+    for (const auto& plane : planes)
+    {
+        // The corner the farthest in front of the plane
+        const auto x = plane[0] * (plane[0] < 0.0f ? low.getX() : high.getX());
+        const auto y = plane[1] * (plane[1] < 0.0f ? low.getY() : high.getY());
+        const auto z = plane[2] * (plane[2] < 0.0f ? low.getZ() : high.getZ());
+
+        if (x + y + z + plane[3] < -1.0e-5f * (std::abs (x) + std::abs (y) + std::abs (z) + std::abs (plane[3])))
+            return false;
+    }
+
+    return true;
+}
+
 //==============================================================================
 
 SceneDrawList::SceneDrawList()
@@ -64,18 +109,24 @@ void SceneDrawList::build (const Entity& root, const Matrix4& view, const BuildO
         lights.push_back ({ defaultLight.get(), {}, Vector3<float> (-0.35f, -0.75f, -0.55f).normalized() });
 
     if (options.selectLightsPerDraw)
-    {
         rankLights (lights, lightRankings);
 
+    const auto culls = options.projection.has_value();
+    const auto frustum = culls ? getFrustumPlanes (view.followedBy (*options.projection)) : FrustumPlanes {};
+
+    if (culls || options.selectLightsPerDraw)
+    {
         for (auto* items : { &opaqueItems, &blendItems })
         {
             for (auto& item : *items)
             {
-                // A material shader is unlit
-                if (item.materialShader != nullptr)
+                const auto worldBounds = item.primitive->bounds.transformedBy (item.world);
+                item.inView = ! culls || isBoxInFrustum (frustum, worldBounds);
+
+                // A material shader is unlit, and only the passes drawing the view read the selection
+                if (! options.selectLightsPerDraw || ! item.inView || item.materialShader != nullptr)
                     continue;
 
-                const auto worldBounds = item.primitive->bounds.transformedBy (item.world);
                 item.numLights = selectLights (worldBounds, lights, lightRankings, item.lightIndices, item.lightWeights);
                 item.reflectionProbes = selectReflectionProbes (reflectionProbes, worldBounds);
                 item.irradianceVolume = selectIrradianceVolume (irradianceVolumes, worldBounds);

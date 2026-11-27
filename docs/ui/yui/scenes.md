@@ -888,6 +888,14 @@ all of these before the application runs.
 - **A still scene costs nothing.** It is drawn when something in it changes.
   On desktop GPUs the renderer then refines the picture over a few frames, and
   stops. See [Platform tiers](../../3d/platform-tiers.md).
+- **A repaint around a still scene shows the picture it has.** A label over
+  the scene, a tooltip or a neighbor that repaints does not have the scene
+  drawn again: only the first of those repaints after a change can still draw
+  it once. Some scenes are drawn again by every such repaint: one with a
+  material that has a `shader` block, one that the depth of field blurs on a
+  desktop GPU, and, where the picture is not refined over several frames
+  (phones, tablets and OpenGL, see [Platform tiers](../../3d/platform-tiers.md)),
+  one showing components on a mesh.
 - **What runs at every frame**: a playing clip, an `animation:`, a running
   transition, a material or an effect given the `time`, and `continuous`.
 - **Skinned and morphed meshes are deformed on the CPU**, each time their

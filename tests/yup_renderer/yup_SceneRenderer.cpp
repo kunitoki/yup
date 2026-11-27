@@ -70,6 +70,362 @@ TEST_F (SceneRendererTests, RenderWithoutDeviceFails)
     EXPECT_FALSE (renderer.getLastError().isEmpty());
 }
 
+#if YUP_APPLE
+/** A scene rendered again as it was, on a Metal device: once two frames in a row drew its image
+    and that image is final, it stands for the renders that follow, which draw no frame
+    (SceneRenderer::getNumDrawnFramesForTesting()), until something it is made of changes.
+*/
+class SceneRendererKeptImageTests : public SceneRendererBaselineScenes
+{
+protected:
+    void SetUp() override
+    {
+        device = GpuDevice::create (GpuPlatform::Metal, {});
+        if (device == nullptr)
+            GTEST_SKIP() << "No Metal device available";
+    }
+
+    static constexpr int size = 64;
+
+    /** A plate drawn with a material of its own under a sun, seen by a camera 3 units away. */
+    struct PlateScene
+    {
+        PlateScene()
+        {
+            material->metallicFactor = 0.0f;
+            plate = addPlate (scene, material);
+
+            sun = scene.createEntity ("sun");
+            sun.attach<LightNode>();
+
+            addCamera (scene, { 0.0f, 0.0f, 3.0f }, {});
+            camera = scene.getRoot().findChild ("camera");
+        }
+
+        Scene scene;
+        Material::Ptr material { new Material() };
+        Entity plate, sun, camera;
+    };
+
+    /** What a test changes of a scene or of the renderer drawing it. */
+    using Change = std::function<void (PlateScene&, SceneRenderer&)>;
+
+    /** Selects @p tier, the full one accumulating 4 jittered frames. */
+    static void selectTier (SceneRenderer& renderer, RenderSettings::TierPreference tier)
+    {
+        if (tier == RenderSettings::TierPreference::full)
+            setFullTierTaa (renderer, 4);
+        else
+            setTier (renderer, tier);
+    }
+
+    static const char* nameOf (RenderSettings::TierPreference tier)
+    {
+        return tier == RenderSettings::TierPreference::full ? "full" : "raster";
+    }
+
+    /** Renders @p scene and returns how many frames that drew: 1, or 0 when the image the frames
+        before drew stood for it.
+    */
+    int renderAndCount (SceneRenderer& renderer, Scene& scene, int width = size)
+    {
+        const auto drawnBefore = renderer.getNumDrawnFramesForTesting();
+        EXPECT_NE (renderer.render (device, scene, width, size), nullptr) << renderer.getLastError();
+        return renderer.getNumDrawnFramesForTesting() - drawnBefore;
+    }
+
+    /** Renders @p scene until its image is final, and once more: the frame after a change is drawn
+        twice before its image is kept.
+    */
+    void renderUntilFinal (SceneRenderer& renderer, Scene& scene, int width = size)
+    {
+        for (int frame = 0; frame < 32; ++frame)
+        {
+            ASSERT_NE (renderer.render (device, scene, width, size), nullptr) << renderer.getLastError();
+
+            if (renderer.isConverged())
+                break;
+        }
+
+        ASSERT_TRUE (renderer.isConverged());
+        ASSERT_NE (renderer.render (device, scene, width, size), nullptr) << renderer.getLastError();
+        ASSERT_TRUE (renderer.waitForGPU().wasOk());
+    }
+
+    /** On both tiers: once the image of a PlateScene is kept, each of @p changes has the next
+        render draw a frame, and the image is kept again once that frame is final.
+    */
+    void expectDrawnAgainAfter (std::initializer_list<std::pair<const char*, Change>> changes)
+    {
+        for (const auto tier : { RenderSettings::TierPreference::raster, RenderSettings::TierPreference::full })
+        {
+            PlateScene still;
+
+            SceneRenderer renderer;
+            selectTier (renderer, tier);
+
+            for (const auto& [name, change] : changes)
+            {
+                SCOPED_TRACE (String (nameOf (tier)) + ", " + name);
+
+                ASSERT_NO_FATAL_FAILURE (renderUntilFinal (renderer, still.scene));
+                ASSERT_EQ (renderAndCount (renderer, still.scene), 0);
+
+                change (still, renderer);
+                EXPECT_EQ (renderAndCount (renderer, still.scene), 1);
+            }
+
+            ASSERT_NO_FATAL_FAILURE (renderUntilFinal (renderer, still.scene));
+            EXPECT_EQ (renderAndCount (renderer, still.scene), 0) << nameOf (tier);
+            EXPECT_TRUE (renderer.waitForGPU().wasOk()) << nameOf (tier);
+        }
+    }
+};
+
+TEST_F (SceneRendererKeptImageTests, ASceneRenderedAgainAsItWasDrawsNoFrameAndReturnsTheSameTexture)
+{
+    for (const auto tier : { RenderSettings::TierPreference::raster, RenderSettings::TierPreference::full })
+    {
+        SCOPED_TRACE (nameOf (tier));
+
+        PlateScene still;
+
+        SceneRenderer renderer;
+        selectTier (renderer, tier);
+        ASSERT_NO_FATAL_FAILURE (renderUntilFinal (renderer, still.scene));
+
+        const auto drawn = renderer.getNumDrawnFramesForTesting();
+        ASSERT_GT (drawn, 0);
+
+        const auto kept = renderer.render (device, still.scene, size, size);
+        ASSERT_NE (kept, nullptr) << renderer.getLastError();
+
+        for (int frame = 0; frame < 3; ++frame)
+            EXPECT_EQ (renderer.render (device, still.scene, size, size), kept) << frame;
+
+        EXPECT_EQ (renderer.getNumDrawnFramesForTesting(), drawn);
+        EXPECT_TRUE (renderer.isConverged());
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+    }
+}
+
+TEST_F (SceneRendererKeptImageTests, TheFrameAfterAChangeIsDrawnTwiceBeforeItsImageIsKept)
+{
+    // Without temporal anti-aliasing a frame is final at once, on both tiers: it is drawn once more
+    // all the same, as a frame the GPU failed to execute is only found by the render after it
+    for (const auto tier : { RenderSettings::TierPreference::raster, RenderSettings::TierPreference::full })
+    {
+        SCOPED_TRACE (nameOf (tier));
+
+        PlateScene still;
+
+        SceneRenderer renderer;
+        setTierForExactFrames (renderer, tier);
+
+        EXPECT_EQ (renderAndCount (renderer, still.scene), 1);
+        EXPECT_TRUE (renderer.isConverged());
+        EXPECT_EQ (renderAndCount (renderer, still.scene), 1);
+        EXPECT_EQ (renderAndCount (renderer, still.scene), 0);
+        EXPECT_EQ (renderAndCount (renderer, still.scene), 0);
+
+        still.plate.getOrAttach<TransformNode>().setPosition ({ 0.2f, 0.0f, 0.0f });
+
+        EXPECT_EQ (renderAndCount (renderer, still.scene), 1);
+        EXPECT_EQ (renderAndCount (renderer, still.scene), 1);
+        EXPECT_EQ (renderAndCount (renderer, still.scene), 0);
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+    }
+}
+
+TEST_F (SceneRendererKeptImageTests, AMovedOrHiddenEntityIsDrawnAgain)
+{
+    expectDrawnAgainAfter ({
+        { "moved", [] (PlateScene& still, SceneRenderer&) { still.plate.getOrAttach<TransformNode>().setPosition ({ 0.2f, 0.0f, 0.0f }); } },
+        { "hidden", [] (PlateScene& still, SceneRenderer&) { still.plate.setVisible (false); } },
+    });
+}
+
+TEST_F (SceneRendererKeptImageTests, AChangedMaterialIsDrawnAgain)
+{
+    expectDrawnAgainAfter ({
+        { "base color", [] (PlateScene& still, SceneRenderer&) { still.material->baseColorFactor = { 1.0f, 0.2f, 0.2f, 1.0f }; } },
+        { "roughness", [] (PlateScene& still, SceneRenderer&) { still.material->roughnessFactor = 0.3f; } },
+        { "another material", [] (PlateScene& still, SceneRenderer&) { still.plate.attach<MaterialNode> (makeWallMaterial()); } },
+    });
+}
+
+TEST_F (SceneRendererKeptImageTests, AChangedLightIsDrawnAgain)
+{
+    expectDrawnAgainAfter ({
+        { "intensity", [] (PlateScene& still, SceneRenderer&) { still.sun.get<LightNode>()->intensity = 3.0f; } },
+        { "direction", [] (PlateScene& still, SceneRenderer&) { still.sun.getOrAttach<TransformNode>().setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.5f)); } },
+        { "another light", [] (PlateScene& still, SceneRenderer&) { still.scene.createEntity ("point").attach<LightNode> (LightNode::Type::point); } },
+    });
+}
+
+TEST_F (SceneRendererKeptImageTests, AMovedCameraIsDrawnAgain)
+{
+    expectDrawnAgainAfter ({
+        { "moved", [] (PlateScene& still, SceneRenderer&) { aimCamera (still.camera, { 0.5f, 0.0f, 3.0f }, {}); } },
+        { "field of view", [] (PlateScene& still, SceneRenderer&) { still.camera.get<CameraNode>()->yFov = 0.6f; } },
+        { "no camera", [] (PlateScene& still, SceneRenderer&) { still.camera.destroy(); } },
+    });
+}
+
+TEST_F (SceneRendererKeptImageTests, AChangedSettingIsDrawnAgain)
+{
+    // The ones of the scene and of the renderer, those applied after the temporal accumulation included
+    expectDrawnAgainAfter ({
+        { "background", [] (PlateScene& still, SceneRenderer&) { still.scene.getRoot().getOrAttach<BackgroundNode>().color = Color (0xff204060); } },
+        { "tone mapping", [] (PlateScene& still, SceneRenderer&) { still.scene.getRoot().getOrAttach<ToneMappingNode>().type = ToneMappingOperator::agx; } },
+        { "exposure", [] (PlateScene& still, SceneRenderer&) { still.scene.getRoot().getOrAttach<ExposureNode>().exposure = 2.0f; } },
+        { "ambient light", [] (PlateScene& still, SceneRenderer&) { still.scene.getRoot().getOrAttach<AmbientLightNode>().color = Colors::white; } },
+        { "bloom", [] (PlateScene&, SceneRenderer& renderer) { setBloom (renderer, true); } },
+        { "wireframe", [] (PlateScene&, SceneRenderer& renderer)
+          {
+              auto settings = renderer.getRenderSettings();
+              settings.wireframe = true;
+              renderer.setRenderSettings (settings);
+          } },
+        { "sample count", [] (PlateScene&, SceneRenderer& renderer) { renderer.setSampleCount (1); } },
+    });
+}
+
+TEST_F (SceneRendererKeptImageTests, AnotherSizeIsDrawnAgain)
+{
+    for (const auto tier : { RenderSettings::TierPreference::raster, RenderSettings::TierPreference::full })
+    {
+        SCOPED_TRACE (nameOf (tier));
+
+        PlateScene still;
+
+        SceneRenderer renderer;
+        selectTier (renderer, tier);
+        ASSERT_NO_FATAL_FAILURE (renderUntilFinal (renderer, still.scene));
+        ASSERT_EQ (renderAndCount (renderer, still.scene), 0);
+
+        EXPECT_EQ (renderAndCount (renderer, still.scene, size + 32), 1);
+
+        ASSERT_NO_FATAL_FAILURE (renderUntilFinal (renderer, still.scene, size + 32));
+        EXPECT_EQ (renderAndCount (renderer, still.scene, size + 32), 0);
+
+        // And back: the image of the first size went with its target
+        EXPECT_EQ (renderAndCount (renderer, still.scene), 1);
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+    }
+}
+
+TEST_F (SceneRendererKeptImageTests, ARestartedAccumulationAndReleasedTargetsAreDrawnAgain)
+{
+    expectDrawnAgainAfter ({
+        { "restartAccumulation", [] (PlateScene&, SceneRenderer& renderer) { renderer.restartAccumulation(); } },
+        { "releaseTargets", [] (PlateScene&, SceneRenderer& renderer) { renderer.releaseTargets(); } },
+    });
+}
+
+TEST_F (SceneRendererKeptImageTests, FramesThatAreMeasuredOrOutlineEntitiesAreAlwaysDrawn)
+{
+    PlateScene still;
+
+    SceneRenderer renderer;
+    setTier (renderer, RenderSettings::TierPreference::raster);
+    ASSERT_NO_FATAL_FAILURE (renderUntilFinal (renderer, still.scene));
+    ASSERT_EQ (renderAndCount (renderer, still.scene), 0);
+
+    // Each measured frame has stats of its own
+    renderer.setFrameStatsEnabled (true);
+
+    for (int frame = 0; frame < 3; ++frame)
+        EXPECT_EQ (renderAndCount (renderer, still.scene), 1) << frame;
+
+    // Not measured anymore, the image is kept again once two frames drew it
+    renderer.setFrameStatsEnabled (false);
+    EXPECT_EQ (renderAndCount (renderer, still.scene), 1);
+    EXPECT_EQ (renderAndCount (renderer, still.scene), 1);
+    EXPECT_EQ (renderAndCount (renderer, still.scene), 0);
+
+    // The outlines follow the bounds of their entities, which no change of the scene tells
+    renderer.setBoundsOverlay ({ still.plate });
+
+    for (int frame = 0; frame < 3; ++frame)
+        EXPECT_EQ (renderAndCount (renderer, still.scene), 1) << frame;
+
+    // Without them the frame is drawn again, and its image kept
+    renderer.setBoundsOverlay ({});
+    EXPECT_EQ (renderAndCount (renderer, still.scene), 1);
+    EXPECT_EQ (renderAndCount (renderer, still.scene), 1);
+    EXPECT_EQ (renderAndCount (renderer, still.scene), 0);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+TEST_F (SceneRendererKeptImageTests, ATextureLivingOnTheGpuIsDrawnAgainWhereNoFrameIsAccumulated)
+{
+    for (const auto tier : { RenderSettings::TierPreference::raster, RenderSettings::TierPreference::full })
+    {
+        SCOPED_TRACE (nameOf (tier));
+
+        PlateScene still;
+        auto texture = Texture::Ptr (new Texture (GpuTexture::create (device, GpuTextureDesc (2, 2, GpuTextureFormat::rgba8unorm))));
+        still.material->baseColorTexture = texture;
+
+        SceneRenderer renderer;
+        selectTier (renderer, tier);
+        ASSERT_NO_FATAL_FAILURE (renderUntilFinal (renderer, still.scene));
+
+        // Such a texture can be drawn again where it is, which nothing tells the renderer: the raster
+        // tier, which keeps nothing between its frames, shows it by drawing every frame. The full
+        // tier shows what it accumulated until it is told
+        const auto numDrawn = tier == RenderSettings::TierPreference::full ? 0 : 1;
+        EXPECT_EQ (renderAndCount (renderer, still.scene), numDrawn);
+        EXPECT_EQ (renderAndCount (renderer, still.scene), numDrawn);
+
+        texture->setGpuTexture (GpuTexture::create (device, GpuTextureDesc (2, 2, GpuTextureFormat::rgba8unorm)));
+        EXPECT_EQ (renderAndCount (renderer, still.scene), 1);
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+    }
+}
+
+TEST_F (SceneRendererKeptImageTests, FullTierFramesFollowingTheJitterAreAlwaysDrawn)
+{
+    // The depth of field and the debug views read the jittered frame, so no two of their frames are the same
+    const std::pair<const char*, Change> changes[] = {
+        { "depth of field", [] (PlateScene& still, SceneRenderer& renderer)
+          {
+              still.camera.get<CameraNode>()->fStop = 1.4f;
+              still.camera.get<CameraNode>()->focusDistance = 1.0f;
+
+              auto settings = renderer.getRenderSettings();
+              settings.depthOfField = true;
+              renderer.setRenderSettings (settings);
+          } },
+        { "debug view", [] (PlateScene&, SceneRenderer& renderer)
+          {
+              auto settings = renderer.getRenderSettings();
+              settings.debugView = RenderSettings::DebugView::normals;
+              renderer.setRenderSettings (settings);
+          } },
+    };
+
+    for (const auto& [name, change] : changes)
+    {
+        SCOPED_TRACE (name);
+
+        PlateScene still;
+
+        SceneRenderer renderer;
+        selectTier (renderer, RenderSettings::TierPreference::full);
+        change (still, renderer);
+        ASSERT_NO_FATAL_FAILURE (renderUntilFinal (renderer, still.scene));
+
+        for (int frame = 0; frame < 3; ++frame)
+            EXPECT_EQ (renderAndCount (renderer, still.scene), 1) << frame;
+
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+    }
+}
+#endif
+
 /** CPU only: mirrors the AgX tone mapping of lib/color.glsl. */
 class SceneRendererAgxMirrorTests : public ::testing::Test
 {

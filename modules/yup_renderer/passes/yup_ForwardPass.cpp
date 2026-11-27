@@ -596,6 +596,9 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
     {
         for (const auto& item : items)
         {
+            if (! item.inView)
+                continue;
+
             // An item of a material shader draws with its pipelines, once prepared for these targets,
             // which read the values of its node and neither the lights nor the probes of the draw
             const auto* shaderPipelines = findMaterialPipelines (item, variant);

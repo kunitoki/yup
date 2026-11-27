@@ -129,7 +129,8 @@ public:
     Result prepareMaterialShader (const GpuDevice::Ptr& device, const MaterialShader::Ptr& shader, const Targets& targets, uint32_t sampleCount);
 
     /** Draws @p opaque then @p blend items, after clearing the targets and drawing the visible
-        environment when @p clear is set, or over the loaded targets otherwise.
+        environment when @p clear is set, or over the loaded targets otherwise. The items out of
+        the view (SceneDrawList::DrawItem::inView) are not drawn.
 
         An item of a material shader (SceneDrawList::DrawItem::materialShader) is drawn with the
         pipelines prepareMaterialShader() compiled for its shader and these targets, and the

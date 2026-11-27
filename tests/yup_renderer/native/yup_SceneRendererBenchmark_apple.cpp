@@ -2346,8 +2346,10 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_DemoTargetFrameTimes)
 
 /** The demo's scene on the full tier at the demo size with nothing moving: its show lights stand
     where their first frame put them and the camera stays at the top. The rounds are timed once the
-    image converged, so every timed frame renders an image that is already final. Printed, written
-    and compared as DISABLED_DemoTargetFrameTimes, which "just perf_3d" runs it with.
+    image converged, so every timed frame renders an image that is already final: the frame stats
+    the rounds are timed with keep each of them drawn, without them such a frame draws nothing
+    (SceneRenderer::render()). Printed, written and compared as DISABLED_DemoTargetFrameTimes,
+    which "just perf_3d" runs it with.
 */
 TEST_F (SceneRendererBenchmarkTests, DISABLED_StillSceneTargetFrameTimes)
 {

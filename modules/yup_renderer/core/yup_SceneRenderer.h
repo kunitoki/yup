@@ -94,7 +94,8 @@ namespace yup
     tier. Reflection probes and irradiance volumes capture them with their material too.
 
     The color and depth targets are kept between frames and created again when the size, the
-    tier, the raster sample count or the device changes, so render() can be called every frame.
+    tier, the raster sample count or the device changes, so render() can be called every frame:
+    a scene rendered again as the frames before drew it is not drawn again, see render().
     releaseTargets() lets go of them for a scene that is not shown for a while.
 
     @see SceneComponent, SceneDrawList
@@ -120,6 +121,27 @@ public:
         Frames are not waited on, so a frame of this renderer the GPU failed to execute is only
         found by its next render, which restarts the accumulation, still renders, and reports the
         failure through getLastGpuFailure(); see also waitForGPU().
+
+        A scene rendered again as it was is not drawn again. Once two frames in a row drew its
+        image and that image is final (isConverged()), a render() that finds unchanged everything
+        the image is made of returns it and records nothing: the scene with its feature nodes, the
+        camera, the size, the RenderSettings and the sample count. Two frames, as a frame the GPU
+        failed to execute is only found by the render after it: the render() that follows a
+        change is drawn, and so is the one after it.
+
+        What the renderer cannot compare keeps a frame drawn, whatever the scene:
+        - while the frame stats are collected (setFrameStatsEnabled()), for each frame to have its own;
+        - while entities are outlined (setBoundsOverlay());
+        - a frame coloring meshes with a MaterialShader, and one with a reflection probe or an
+          irradiance volume left to bake;
+        - with temporal anti-aliasing, a frame the depth of field blurs or one showing a
+          RenderSettings::debugView, which both follow the jitter of each frame;
+        - without it (the raster tier, or RenderSettings::taaSamples of 1 or less), a frame drawing
+          a Texture that lives on the GPU only (Texture::isGpuOnly()): such a texture can be drawn
+          again where it is, which the renderer is only told by Texture::setGpuTexture().
+
+        After a change the renderer cannot see, restartAccumulation() has the next render() draw
+        the scene.
 
         @return The rendered texture, premultiplied by alpha and valid until the next render, or
                 nullptr on failure; see getLastError().
@@ -240,7 +262,8 @@ public:
     bool isConverged() const noexcept;
 
     /** Discards the accumulated history and the shadow maps, so the next renders start over from
-        the next frame alone and isConverged() is false.
+        the next frame alone and isConverged() is false. The next render() draws a frame whatever
+        it finds of the scene, see render().
 
         Call it after changes the renderer cannot see, such as a GpuTexture redrawn without calling
         Texture::setGpuTexture(). Also call it after a large change, such as a camera cut: changes
@@ -280,7 +303,9 @@ public:
 
         Off by default, so frames pay nothing for it: they neither measure their GPU time nor open
         GPU scopes. Once a frame of the device measured, though, the device's later frames pay a
-        GPU timestamp pair each when they complete, stats on or off. While on, each frame measures its GPU time (see GpuFrame::setTimingEnabled()) and
+        GPU timestamp pair each when they complete, stats on or off. While on, every render() draws
+        a frame, for each to have its stats: a scene rendered again as it was is not spared, see
+        render(). Each frame then measures its GPU time (see GpuFrame::setTimingEnabled()) and
         opens a scope (see GpuFrame::beginScope()) for each pass it records, in frame order:
         probeBake, shadows, lightCulling, gbuffer, ambientOcclusion, hiZ, screenSpaceReflections,
         lighting, indirectDiffuse, depthNormalPrepass, ambientOcclusion (on the raster tier, after
@@ -510,6 +535,11 @@ public:
     */
     int getNumTimingCallsForTesting() const noexcept;
 
+    /** @internal Test hook: how many render() calls drew a frame on the current device of this
+        renderer: one the image of the frames before stood for draws none, see render().
+    */
+    int getNumDrawnFramesForTesting() const noexcept;
+
     //==============================================================================
     /** Changes the number of MSAA samples per pixel of the raster tier.
 
@@ -526,6 +556,9 @@ public:
 
 private:
     struct Impl;
+
+    /** True while a test hook is set: a renderer one was used on draws every frame. */
+    bool usesTestHooks() const noexcept;
 
     std::unique_ptr<Impl> impl;
     std::function<void (RenderCapabilities::DeviceFacts&)> deviceFactsOverride;

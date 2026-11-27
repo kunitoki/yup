@@ -157,6 +157,9 @@ bool DepthNormalPrepass::render (GpuFrame& frame, const ViewData& view, const Sc
 
     for (const auto& item : drawList.getOpaqueItems())
     {
+        if (! item.inView)
+            continue;
+
         const auto& pipeline = pipelines[GeometryBindings::getRasterState (item)];
 
         if (pipeline.get() != currentPipeline)
