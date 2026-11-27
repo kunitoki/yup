@@ -70,53 +70,40 @@ public:
 
     //==============================================================================
     /**
-        Resolves the style for a specific component type.
+        Returns the style a component is painted with.
 
-        This template method returns the style for the specified component type. If a style is provided as an argument,
-        it will be returned; otherwise, the global style will be used.
+        This is the style set on the component with Component::setStyle(), or else the one the
+        global theme has for its class (see setComponentStyle), for the class it is asked as, or
+        for the closest class its type derives from, as its type info tells (see
+        Component::getTypeInfo): a subclass of Slider with no style of its own is painted as a
+        Slider. Component::paint() paints a component with it.
 
-        @param instanceStyle  An optional style to use instead of the global style.
+        @param component  The component to find the style of. The class it is asked as, the one of
+                          the reference, finds the style of a class that tells no type of its own.
 
-        @returns The resolved style for the component type.
+        @returns The style, or nullptr when the component has none and there is no global theme,
+                 or that theme has none for it.
     */
     template <class ComponentType>
     static auto findComponentStyle (ComponentType& component)
         -> std::enable_if_t<std::is_base_of_v<Component, ComponentType>, ComponentStyle::Ptr>
     {
-        auto& componentStyles = getGlobalThemeInstance()->componentStyles;
-
-        if (auto style = component.getStyle())
-            return style;
-
-        {
-            auto it = componentStyles.find (std::type_index (typeid (component)));
-            if (it != componentStyles.end())
-                return it->second;
-        }
-
-        {
-            auto it = componentStyles.find (std::type_index (typeid (ComponentType)));
-            if (it != componentStyles.end())
-                return it->second;
-        }
-
-        jassertfalse;
-        return nullptr;
+        return findComponentStyle (component, typeid (ComponentType));
     }
 
     //==============================================================================
     /**
-        Sets the style for a specific component type.
+        Sets the style this theme paints the components of a class with, in place of the one it had.
 
-        This template method allows setting the style for a specific type of component. The component type must be
-        part of the `componentStyles` tuple.
+        The components of the classes deriving from it are painted with it too, unless a style is
+        set for a closer one (see findComponentStyle).
 
-        @param instanceStyle  The style to set for the component type.
+        @param style  The style, or nullptr for the class to be painted as the one it derives from.
     */
     template <class ComponentType>
     void setComponentStyle (ComponentStyle::Ptr style)
     {
-        componentStyles.try_emplace (std::type_index (typeid (ComponentType)), std::move (style));
+        setComponentStyle (typeid (ComponentType), std::move (style));
     }
 
     //==============================================================================
@@ -280,7 +267,7 @@ public:
     const ThemePalette& getPalette (const Component& component) const;
 
     /** Returns a number that changes every time the theme does: its palette or its mapping, its
-        colors, its properties or its fonts.
+        colors, its properties, its fonts, its styles or the painters of its parts.
 
         No two themes share a value, so it also tells when another theme became the global one.
         Stylesheets compare it between frames to restyle the components whose computed values read
@@ -412,6 +399,8 @@ public:
 
 private:
     static ApplicationTheme::Ptr& getGlobalThemeInstance();
+    static ComponentStyle::Ptr findComponentStyle (const Component& component, std::type_index askedAs);
+    void setComponentStyle (std::type_index classType, ComponentStyle::Ptr style);
     std::optional<Color> findPaletteColor (const ThemePalette& componentPalette, const Identifier& colorId) const;
     static std::atomic<uint32>& getGenerationCounter() noexcept;
     static uint32 makeGeneration() noexcept;

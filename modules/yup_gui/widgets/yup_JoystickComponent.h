@@ -175,8 +175,6 @@ public:
 
     //==============================================================================
     /** @internal */
-    void paint (Graphics& g) override;
-    /** @internal */
     bool hitTest (float x, float y) override;
     /** @internal */
     void mouseDown (const MouseEvent& event) override;

@@ -376,10 +376,7 @@ void KMeterComponent::paint (Graphics& g)
     if (meterState != nullptr && ! frameAttachment.isActive() && ! restPoll.isTimerRunning())
         followLevels();
 
-    if (auto style = ApplicationTheme::findComponentStyle (*this))
-    {
-        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
-    }
+    Component::paint (g);
 }
 
 void KMeterComponent::visibilityChanged()

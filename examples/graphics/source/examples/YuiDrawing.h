@@ -453,7 +453,7 @@ private:
         else if (! problems.empty())
             lines.add (yup::DataTreeDiagnostic::join (problems, "\n"));
         else
-            lines.add ("Built with " + yup::String (view->getDocument().getBuilder().getBindings().getNumBindings()) + " bindings. Edit any tab"
+            lines.add ("Built with " + yup::String (view->getDocument().getBindings().getNumBindings()) + " bindings. Edit any tab"
                        + (view->getLoader().isWatching() ? " or file." : "."));
 
         status.setText (lines.joinIntoString ("\n"), yup::dontSendNotification);

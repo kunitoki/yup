@@ -161,14 +161,6 @@ void ProgressBar::progressChanged()
 }
 
 //==============================================================================
-void ProgressBar::paint (Graphics& g)
-{
-    if (auto style = ApplicationTheme::findComponentStyle (*this))
-    {
-        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
-    }
-}
-
 void ProgressBar::refreshDisplay (double lastFrameTimeSeconds)
 {
     // Animate in indeterminate mode

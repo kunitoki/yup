@@ -1213,7 +1213,7 @@ TEST_F (YuiDocumentTests, LoadingTheDocumentThatIsLoadedIsNoStepToUndo)
     ASSERT_TRUE (document.loadFromString (fixed).wasOk());
     ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
 
-    document.getBuilder().onDiagnostic ({ .message = "told since the load" });
+    document.reportDiagnostic ({ .message = "told since the load" });
     ASSERT_EQ (document.getDiagnostics().size(), 2u);
 
     // The text that is loaded is loaded again as any other: the listeners are told, and its problems are the ones
@@ -1269,7 +1269,7 @@ TEST_F (YuiDocumentTests, ARangeChangeKeepsTheProblemsTheBuilderDidNotTell)
                      .wasOk());
 
     // A component tells what it finds wrong later where the builder tells its own, as a scene does for a model it can't read
-    document.getBuilder().onDiagnostic ({ .message = "Model3D.source: can't read 'ship.glb'" });
+    document.reportDiagnostic ({ .message = "Model3D.source: can't read 'ship.glb'" });
 
     const auto countOf = [&document] (const String& start)
     {

@@ -1617,6 +1617,10 @@ public:
     /**
         Paint the component.
 
+        Unless overridden, the component is painted with its style: the one set on it with
+        setStyle(), or else the one the global theme has for its type (see
+        ApplicationTheme::findComponentStyle). A component with neither paints nothing.
+
         On platforms with a render thread this is called on that thread while it holds the message
         manager lock, so it never runs at the same time as the message thread: state shared with
         mouse handlers, timers and other message thread callbacks needs no extra locking.

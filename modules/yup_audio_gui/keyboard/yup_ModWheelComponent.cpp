@@ -77,12 +77,4 @@ ModWheelComponent::ModWheelComponent (MidiKeyboardState& stateToUse, StringRef c
     setState (&stateToUse);
 }
 
-//==============================================================================
-void ModWheelComponent::paint (Graphics& g)
-{
-    // Stays in the class: a subclass is painted with the style of the wheel type named here
-    if (auto style = ApplicationTheme::findComponentStyle (*this))
-        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
-}
-
 } // namespace yup

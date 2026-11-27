@@ -360,12 +360,6 @@ void ResizableDivider::setKeyboardStep (float newStep)
 }
 
 //==============================================================================
-void ResizableDivider::paint (Graphics& g)
-{
-    if (auto style = ApplicationTheme::findComponentStyle (*this))
-        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
-}
-
 void ResizableDivider::mouseEnter (const MouseEvent& event)
 {
     ignoreUnused (event);

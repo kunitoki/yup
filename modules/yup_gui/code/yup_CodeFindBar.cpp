@@ -328,8 +328,8 @@ void CodeFindBar::updateVisibleComponents()
 
 void CodeFindBar::paint (Graphics& g)
 {
-    // A style set on the bar paints it in place of the colors of the scheme, as it does for any component
-    if (auto style = getStyle())
+    // A style of the bar paints it in place of the colors of the scheme, as it does for any component
+    if (auto style = ApplicationTheme::findComponentStyle (*this))
     {
         if (auto theme = ApplicationTheme::getGlobalTheme())
             style->paint (g, *theme, *this);

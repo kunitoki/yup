@@ -368,14 +368,6 @@ void ComboBox::setEditableText (bool isEditable)
 
 //==============================================================================
 
-void ComboBox::paint (Graphics& g)
-{
-    if (auto style = ApplicationTheme::findComponentStyle (*this))
-        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
-}
-
-//==============================================================================
-
 void ComboBox::resized()
 {
     updateDisplayText();

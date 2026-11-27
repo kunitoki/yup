@@ -1702,7 +1702,7 @@ const NamedValueSet& Component::getProperties() const
 
 void Component::paint (Graphics& g)
 {
-    if (auto style = getStyle())
+    if (auto style = ApplicationTheme::findComponentStyle (*this))
     {
         if (auto theme = ApplicationTheme::getGlobalTheme())
             style->paint (g, *theme, *this);

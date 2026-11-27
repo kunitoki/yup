@@ -347,8 +347,8 @@ void SpectrumAnalyzerComponent::paint (Graphics& g)
     if (! frameAttachment.isActive() && ! restingTimer.isTimerRunning())
         updateRefreshing (true);
 
-    // A style set on the analyzer paints it from its levels, in place of what follows
-    if (auto style = getStyle())
+    // A style of the analyzer paints it from its levels, in place of what follows
+    if (auto style = ApplicationTheme::findComponentStyle (*this))
     {
         if (auto theme = ApplicationTheme::getGlobalTheme())
             style->paint (g, *theme, *this);

@@ -322,6 +322,9 @@ public:
     /** Returns the bindings keeping the built properties up to date. */
     BindingGraph& getBindings() noexcept { return bindings; }
 
+    /** Returns the bindings keeping the built properties up to date, to read them. */
+    const BindingGraph& getBindings() const noexcept { return bindings; }
+
     /** Gives the components whose `palette` names one with a dark and a light version the
         version for the mode of the application theme. Call it when that mode changes, as
         YuiDocument does.

@@ -1163,12 +1163,6 @@ Rectangle<float> ListBox::getRowBounds (int rowIndex) const
 }
 
 //==============================================================================
-void ListBox::paint (Graphics& g)
-{
-    if (auto style = ApplicationTheme::findComponentStyle (*this))
-        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
-}
-
 void ListBox::resized()
 {
     auto bounds = getLocalBounds();

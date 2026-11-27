@@ -86,7 +86,8 @@ public:
 
     /** Returns where the elements of the document were written, or nullptr when it is not known.
 
-        Each load gives the document another map, which also tells one load from the next.
+        Each load gives the document another map. What tells one load from the next is
+        @ref getLoadGeneration.
     */
     virtual std::shared_ptr<const DataTreeSourceMap> getSourceMap() const = 0;
 
@@ -102,6 +103,18 @@ public:
                            element is given the one the component was built from.
     */
     virtual void reportDiagnostic (DataTreeDiagnostic diagnostic, const Component* subject = nullptr) = 0;
+
+    /** Returns a number that changes each time the document forgets the problems it listed.
+
+        A load forgets them, and so does building the interface again for a change of what it was
+        loaded from: what the components told with @ref reportDiagnostic is listed no more. A
+        component with something wrong keeps the number it told it under, and compares it when it
+        next can, at each of its frames for one, to tell again what is still wrong.
+
+        The number is 0 until the document first loads. A load that fails, which keeps the
+        interface there was, leaves it as it is.
+    */
+    uint32 getLoadGeneration() const noexcept { return loadGeneration; }
 
     //==============================================================================
     /** Receives what happens to a document, for the components that were built from it. */
@@ -206,6 +219,13 @@ protected:
     /** Tells the listeners that the document was loaded. */
     void notifyDocumentLoaded();
 
+    /** Gives @ref getLoadGeneration another number.
+
+        Call it each time the problems listed so far are forgotten, once the interface is the one
+        of another load or was built again, and before the listeners are told.
+    */
+    void advanceLoadGeneration() noexcept { ++loadGeneration; }
+
     /** Tells the listeners that a file the document refers to changed. */
     void notifyDocumentAssetChanged (const String& path);
 
@@ -221,6 +241,7 @@ private:
     //==============================================================================
     ListenerList<Listener> documentListeners;
     WeakReference<Component> attachedRoot;
+    uint32 loadGeneration = 0;
 
     YUP_DECLARE_WEAK_REFERENCEABLE (ComponentDocument)
     YUP_DECLARE_NON_COPYABLE (ComponentDocument)

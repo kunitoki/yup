@@ -113,7 +113,7 @@ graph.bind (meter, "value", "gain.value * 2", ComponentProperty::Type::number, r
 ```
 
 `YuiBuilder` owns one graph for everything it builds, reachable with
-`YuiBuilder::getBindings()` (or `YuiDocument::getBuilder().getBindings()`),
+`YuiBuilder::getBindings()` (or `YuiDocument::getBindings()`),
 where bindings can be inspected, removed with `unbind`, or added to the built
 tree.
 

@@ -130,9 +130,6 @@ public:
 
     //==============================================================================
     /** @internal */
-    void paint (Graphics& g) override;
-
-    /** @internal */
     void refreshDisplay (double lastFrameTimeSeconds);
 
     /** @internal */

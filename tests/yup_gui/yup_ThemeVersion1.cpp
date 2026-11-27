@@ -383,3 +383,35 @@ TEST_F (ThemeVersion1GeometryTests, PaintsThePartsOfTheWidgetsUnderTheNamesTheyT
     EXPECT_TRUE (isPainted (tabButton, TabButton::Style::iconPartId, "icon"));
     EXPECT_TRUE (isPainted (tabButton, TabButton::Style::textPartId, "text"));
 }
+
+TEST_F (ThemeVersion1GeometryTests, PaintsEveryPartARegisteredTypeDeclares)
+{
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
+    auto renderer = context->makeRenderer (200, 100);
+    Graphics g (*context, *renderer);
+
+    registerBuiltInComponentTypes();
+
+    int numParts = 0;
+
+    for (const auto* type : ComponentTypeRegistry::getInstance().getRegisteredTypes())
+    {
+        const auto parts = type->getAllParts();
+
+        // A type that can't be made by its name, as the one of a tab, is painted by the test above
+        const auto component = parts.empty() ? nullptr : type->createInstance();
+        if (component == nullptr)
+            continue;
+
+        for (const auto* part : parts)
+        {
+            EXPECT_TRUE (theme->paintPart (g, *component, part->name, { 0.0f, 0.0f, 40.0f, 20.0f }))
+                << type->getTypeName().toString() << "." << part->name.toString();
+
+            ++numParts;
+        }
+    }
+
+    // Those of the buttons, the combo box, the label, the image, the editors and the rows
+    EXPECT_GE (numParts, 14);
+}

@@ -233,12 +233,6 @@ float ScrollBar::getScrollBarWidth() const noexcept
 }
 
 //==============================================================================
-void ScrollBar::paint (Graphics& g)
-{
-    if (auto style = ApplicationTheme::findComponentStyle (*this))
-        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
-}
-
 void ScrollBar::resized()
 {
     updateThumbBounds();

@@ -67,11 +67,46 @@ uint32 ApplicationTheme::getLastGeneration() noexcept
 
 //==============================================================================
 
+ComponentStyle::Ptr ApplicationTheme::findComponentStyle (const Component& component, std::type_index askedAs)
+{
+    if (auto style = component.getStyle())
+        return style;
+
+    const auto& theme = getGlobalThemeInstance();
+    if (theme == nullptr)
+        return nullptr;
+
+    const auto& styles = theme->componentStyles;
+
+    for (const auto classType : { std::type_index (typeid (component)), askedAs })
+        if (const auto found = styles.find (classType); found != styles.end())
+            return found->second;
+
+    for (const auto* type = std::addressof (component.getTypeInfo()); type != nullptr; type = type->getBaseTypeInfo())
+        if (const auto found = styles.find (type->getClassType()); found != styles.end())
+            return found->second;
+
+    return nullptr;
+}
+
+void ApplicationTheme::setComponentStyle (std::type_index classType, ComponentStyle::Ptr style)
+{
+    if (style != nullptr)
+        componentStyles.insert_or_assign (classType, std::move (style));
+    else
+        componentStyles.erase (classType);
+
+    paletteGeneration = makeGeneration();
+}
+
+//==============================================================================
+
 void ApplicationTheme::setComponentPart (const ComponentTypeInfo& type, const Identifier& partName, ComponentPartPainter painter)
 {
     jassert (type.hasPart (partName)); // The type has to declare the part: see ComponentTypeBuilder::part
 
     componentParts[std::addressof (type)][partName] = std::move (painter);
+    paletteGeneration = makeGeneration();
 }
 
 bool ApplicationTheme::paintComponentPart (Graphics& g, const Component& component, const Identifier& partName, const Rectangle<float>& area)

@@ -213,12 +213,4 @@ void ImageComponent::setImageOpacity (float newOpacity)
     repaint();
 }
 
-//==============================================================================
-
-void ImageComponent::paint (Graphics& g)
-{
-    if (auto style = ApplicationTheme::findComponentStyle (*this))
-        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
-}
-
 } // namespace yup

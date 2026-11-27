@@ -388,13 +388,6 @@ int MidiKeyboardComponent::getNoteAtPosition (Point<float> position) const
 }
 
 //==============================================================================
-void MidiKeyboardComponent::paint (Graphics& g)
-{
-    if (auto style = ApplicationTheme::findComponentStyle (*this))
-        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
-}
-
-//==============================================================================
 bool MidiKeyboardComponent::mouseDownOnKey (int, const MouseEvent&)
 {
     return true;

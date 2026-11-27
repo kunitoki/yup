@@ -795,6 +795,7 @@ Result YuiDocument::buildTree (const DataTree& document, const std::shared_ptr<c
     styleSource = style->source;
     sourceMap = map;
     lastLoadSucceeded = true;
+    advanceLoadGeneration();
 
     auto& root = *builder.getRoot();
     root.setStyleSheet (styleSheet);

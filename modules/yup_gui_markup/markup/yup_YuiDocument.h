@@ -272,8 +272,22 @@ public:
     */
     const std::vector<DataTreeDiagnostic>& getDiagnostics() const noexcept { return diagnostics; }
 
-    /** Returns the builder creating the components, to inspect its bindings. */
-    YuiBuilder& getBuilder() noexcept { return builder; }
+    /** Returns the builder that created the components, to read what it built: the element a
+        component came from, the component of an element and its bindings (see
+        YuiBuilder::findElementFor).
+
+        What changes the builder goes through the document: @ref setAction, @ref setModel,
+        @ref setInitializer, @ref reportDiagnostic and @ref getBindings.
+    */
+    const YuiBuilder& getBuilder() const noexcept { return builder; }
+
+    /** Returns the bindings keeping the properties of the interface up to date, where they can
+        be inspected, removed or added (see BindingGraph).
+
+        Each load makes them again, and so does each time the interface is built again: a
+        binding added here lasts until then.
+    */
+    BindingGraph& getBindings() noexcept { return builder.getBindings(); }
 
     /** Returns the source map of the document loaded last, or nullptr.
 

@@ -106,8 +106,8 @@ void DocumentWindow::setResizable (bool shouldBeResizable)
 
 void DocumentWindow::paint (Graphics& g)
 {
-    // A style set on the window paints it in place of its background, as it does for any component
-    if (auto style = getStyle())
+    // A style of the window paints it in place of its background, as it does for any component
+    if (auto style = ApplicationTheme::findComponentStyle (*this))
     {
         if (auto theme = ApplicationTheme::getGlobalTheme())
             style->paint (g, *theme, *this);

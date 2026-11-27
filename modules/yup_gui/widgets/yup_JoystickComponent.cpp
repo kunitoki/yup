@@ -257,12 +257,6 @@ Rectangle<float> JoystickComponent::getThumbBounds() const
 }
 
 //==============================================================================
-void JoystickComponent::paint (Graphics& g)
-{
-    if (auto style = ApplicationTheme::findComponentStyle (*this))
-        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
-}
-
 bool JoystickComponent::hitTest (float x, float y)
 {
     if (grabMode == GrabMode::anywhere)

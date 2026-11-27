@@ -79,12 +79,6 @@ float ResizableCorner::getCornerSize() const noexcept
 }
 
 //==============================================================================
-void ResizableCorner::paint (Graphics& g)
-{
-    if (auto style = ApplicationTheme::findComponentStyle (*this))
-        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
-}
-
 void ResizableCorner::mouseDown (const MouseEvent& event)
 {
     if (auto* parent = getParentComponent())

@@ -79,12 +79,4 @@ PitchWheelComponent::PitchWheelComponent (MidiKeyboardState& stateToUse, StringR
     setState (&stateToUse);
 }
 
-//==============================================================================
-void PitchWheelComponent::paint (Graphics& g)
-{
-    // Stays in the class: a subclass is painted with the style of the wheel type named here
-    if (auto style = ApplicationTheme::findComponentStyle (*this))
-        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
-}
-
 } // namespace yup

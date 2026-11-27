@@ -342,14 +342,12 @@ TEST_F (ApplicationThemeTest, SetComponentStyleRegistersStyle)
     EXPECT_EQ (style.get(), found.get());
 }
 
-#if ! YUP_DEBUG
 TEST_F (ApplicationThemeTest, FindComponentStyleReturnsNullWhenNotRegistered)
 {
     Slider slider (Slider::LinearHorizontal);
     auto found = ApplicationTheme::findComponentStyle (slider);
     EXPECT_EQ (nullptr, found.get());
 }
-#endif
 
 TEST_F (ApplicationThemeTest, FindComponentStylePrefersComponentInstanceStyle)
 {
@@ -366,6 +364,134 @@ TEST_F (ApplicationThemeTest, FindComponentStylePrefersComponentInstanceStyle)
 
     found = ApplicationTheme::findComponentStyle (label);
     EXPECT_EQ (instanceStyle.get(), found.get());
+}
+
+TEST_F (ApplicationThemeTest, AStyleSetAgainForAClassReplacesTheOneBefore)
+{
+    ComponentStyle::Ptr first = new MockComponentStyle();
+    ComponentStyle::Ptr second = new MockComponentStyle();
+
+    theme->setComponentStyle<ProgressBar> (first);
+    theme->setComponentStyle<ProgressBar> (second);
+
+    ProgressBar bar;
+    EXPECT_EQ (ApplicationTheme::findComponentStyle (bar).get(), second.get());
+
+    // Without one, the class is painted as what it derives from, which here has no style either
+    theme->setComponentStyle<ProgressBar> (nullptr);
+    EXPECT_EQ (ApplicationTheme::findComponentStyle (bar).get(), nullptr);
+}
+
+TEST_F (ApplicationThemeTest, AClassWithNoStyleIsPaintedAsTheClosestOneItsTypeDerivesFrom)
+{
+    struct Fader : Slider
+    {
+        Fader()
+            : Slider (Slider::LinearVertical)
+        {
+        }
+    };
+
+    ComponentStyle::Ptr sliderStyle = new MockComponentStyle();
+    theme->setComponentStyle<Slider> (sliderStyle);
+
+    // Asked as a Component, as Component::paint() asks: the type of the component leads to the class with a style
+    Fader fader;
+    Component& asComponent = fader;
+    EXPECT_EQ (ApplicationTheme::findComponentStyle (asComponent).get(), sliderStyle.get());
+
+    // A type given to one component describes no class of its own, and leads to the one it derives from
+    const ComponentTypeInfo knobType (Identifier ("Knob"), std::addressof (Slider::getClassTypeInfo()), {});
+    Slider knob (Slider::RotaryVerticalDrag);
+    knob.setTypeInfo (std::addressof (knobType));
+    EXPECT_EQ (ApplicationTheme::findComponentStyle (static_cast<Component&> (knob)).get(), sliderStyle.get());
+
+    // A style of its own class comes first, whether or not the class tells a type
+    ComponentStyle::Ptr faderStyle = new MockComponentStyle();
+    theme->setComponentStyle<Fader> (faderStyle);
+    EXPECT_EQ (ApplicationTheme::findComponentStyle (asComponent).get(), faderStyle.get());
+
+    // And what does not derive from the class is not painted as it
+    Label label ("test");
+    EXPECT_EQ (ApplicationTheme::findComponentStyle (label).get(), nullptr);
+}
+
+TEST_F (ApplicationThemeTest, AComponentIsPaintedWithTheStyleOfItsClassOrTheOneSetOnIt)
+{
+    struct Panel : Component
+    {
+    };
+
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    auto renderer = context->makeRenderer (32, 32);
+    Graphics g (*context, *renderer);
+
+    const Component* painted = nullptr;
+    int numPaints = 0;
+
+    theme->setComponentStyle<Slider> (ComponentStyle::createStyle<Slider> ([&] (Graphics&, const ApplicationTheme& paintingTheme, const Slider& slider)
+    {
+        EXPECT_EQ (std::addressof (paintingTheme), theme.get());
+
+        painted = std::addressof (slider);
+        ++numPaints;
+    }));
+
+    Slider slider (Slider::LinearHorizontal);
+    slider.paint (g);
+
+    EXPECT_EQ (painted, std::addressof (slider));
+    EXPECT_EQ (numPaints, 1);
+
+    // A component of a class with no style paints nothing
+    Panel panel;
+    panel.setOpaque (false);
+    panel.paint (g);
+    EXPECT_EQ (numPaints, 1);
+
+    // The style set on a component paints it in place of the one of its class
+    int numOwnPaints = 0;
+
+    slider.setStyle (ComponentStyle::createStyle<Slider> ([&numOwnPaints] (Graphics&, const ApplicationTheme&, const Slider&)
+    {
+        ++numOwnPaints;
+    }));
+
+    slider.paint (g);
+    EXPECT_EQ (numOwnPaints, 1);
+    EXPECT_EQ (numPaints, 1);
+}
+
+TEST_F (ApplicationThemeTest, NoStyleOfAClassIsFoundWithoutAGlobalTheme)
+{
+    ComponentStyle::Ptr classStyle = new MockComponentStyle();
+    theme->setComponentStyle<Label> (classStyle);
+
+    Label label ("test");
+    Label styled ("styled");
+
+    ComponentStyle::Ptr ownStyle = new MockComponentStyle();
+    styled.setStyle (ownStyle);
+
+    ApplicationTheme::setGlobalTheme (nullptr);
+
+    EXPECT_EQ (ApplicationTheme::findComponentStyle (label).get(), nullptr);
+    EXPECT_EQ (ApplicationTheme::findComponentStyle (styled).get(), ownStyle.get());
+
+    ApplicationTheme::setGlobalTheme (theme);
+}
+
+TEST_F (ApplicationThemeTest, SettingAStyleOrThePainterOfAPartChangesTheGeneration)
+{
+    auto generation = theme->getPaletteGeneration();
+
+    theme->setComponentStyle<Label> (new MockComponentStyle());
+    EXPECT_NE (theme->getPaletteGeneration(), generation);
+
+    generation = theme->getPaletteGeneration();
+
+    theme->setComponentPart<Label> (Identifier ("text"), [] (Graphics&, const ApplicationTheme&, const Label&, const Rectangle<float>&) {});
+    EXPECT_NE (theme->getPaletteGeneration(), generation);
 }
 
 TEST_F (ApplicationThemeTest, PaintsAPartOfAComponentTypeWithThePainterSetForIt)

@@ -125,10 +125,6 @@ public:
     /** @internal */
     const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
-    //==============================================================================
-    /** @internal */
-    void paint (Graphics& g) override;
-
 private:
     void reloadSource();
     void reportSourceProblem();

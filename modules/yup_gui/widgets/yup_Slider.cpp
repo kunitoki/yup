@@ -652,12 +652,6 @@ void Slider::resized()
     }
 }
 
-void Slider::paint (Graphics& g)
-{
-    if (auto style = ApplicationTheme::findComponentStyle (*this))
-        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
-}
-
 //==============================================================================
 
 void Slider::mouseEnter (const MouseEvent& event)

@@ -72,6 +72,8 @@ public:
         @param childAttacher   An optional way to add a child, inherited by the derived types.
         @param parts           The parts of what this type paints that a style can place.
         @param description     A human readable description of the type, surfaced by the schema and tooling.
+        @param classType       The class the type describes, as `typeid (Slider)`, or `typeid (void)` for a
+                               type describing no class of its own (see @ref getClassType).
     */
     ComponentTypeInfo (Identifier typeName,
                        const ComponentTypeInfo* baseTypeInfo,
@@ -80,7 +82,8 @@ public:
                        Factory factory = {},
                        ChildAttacher childAttacher = {},
                        std::vector<ComponentPart> parts = {},
-                       String description = {});
+                       String description = {},
+                       std::type_index classType = typeid (void));
 
     //==============================================================================
     /** Returns the type name, for example "Slider". */
@@ -91,6 +94,15 @@ public:
 
     /** Returns the base type's info, or nullptr for the root type. */
     const ComponentTypeInfo* getBaseTypeInfo() const noexcept { return baseTypeInfo; }
+
+    /** Returns the class the type describes, or `typeid (void)` for a type describing no class of its own.
+
+        A type made with ComponentTypeBuilder describes the class it was built for. One made for
+        single components, as the type of a `.yui` composite is, describes none: its components
+        are of the class of a type it derives from. A theme follows it to the style of a class
+        (see ApplicationTheme::findComponentStyle).
+    */
+    std::type_index getClassType() const noexcept { return classType; }
 
     //==============================================================================
     /** Returns the property descriptors declared directly on this type (not inherited). */
@@ -198,6 +210,7 @@ private:
     Factory factory;
     ChildAttacher childAttacher;
     String description;
+    std::type_index classType;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComponentTypeInfo)
 };
@@ -827,7 +840,8 @@ public:
             std::move (typeFactory),
             std::move (typeChildAttacher),
             std::move (parts),
-            std::move (typeDescription)
+            std::move (typeDescription),
+            typeid (T)
         };
     }
 

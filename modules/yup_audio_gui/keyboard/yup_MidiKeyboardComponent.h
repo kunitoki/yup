@@ -512,8 +512,6 @@ public:
 
     //==============================================================================
     /** @internal */
-    void paint (Graphics& g) override;
-    /** @internal */
     void mouseDown (const MouseEvent& e) override;
     /** @internal */
     void mouseDrag (const MouseEvent& e) override;

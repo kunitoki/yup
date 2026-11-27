@@ -210,8 +210,6 @@ public:
 
     //==============================================================================
     /** @internal */
-    void paint (Graphics& g) override;
-    /** @internal */
     void resized() override;
     /** @internal */
     void mouseDown (const MouseEvent& event) override;

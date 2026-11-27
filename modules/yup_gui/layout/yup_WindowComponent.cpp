@@ -56,7 +56,7 @@ WindowComponent::~WindowComponent() = default;
 
 void WindowComponent::paint (Graphics& g)
 {
-    if (auto style = getStyle())
+    if (auto style = ApplicationTheme::findComponentStyle (*this))
     {
         if (auto theme = ApplicationTheme::getGlobalTheme())
             style->paint (g, *theme, *this);

@@ -2306,8 +2306,7 @@ void CodeEditor::paint (Graphics& g)
 {
     updateStyledTextIfNeeded();
 
-    if (auto style = ApplicationTheme::findComponentStyle (*this))
-        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
+    Component::paint (g);
 }
 
 void CodeEditor::resized()

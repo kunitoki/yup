@@ -423,7 +423,24 @@ theme->setComponentStyle<TextButton> (customButtonStyle);
 ```
 
 This makes all `TextButton` instances use the custom style, unless a specific
-instance has called `comp.setStyle()` with its own override.
+instance has called `comp.setStyle()` with its own override. It replaces the
+style the theme had for `TextButton`, and `nullptr` removes it.
+
+A class with no style of its own is painted with the one of the closest class
+it derives from, so a `class Fader : public Slider` needs nothing to be painted
+as a `Slider`. That goes for your own components too: one that does not
+override `paint()` is painted with the style set for its class.
+
+```cpp
+class Badge : public Component {};
+
+theme->setComponentStyle<Badge> (ComponentStyle::createStyle<Badge> (
+    [] (Graphics& g, const ApplicationTheme&, const Badge& badge)
+    {
+        g.setFillColor (Colors::orange);
+        g.fillRoundedRect (badge.getLocalBounds(), 4.0f);
+    }));
+```
 
 A type-wide style leaves the opaque state of the components as it is: for a
 type that is opaque, it has to paint every pixel of the bounds with an opaque

@@ -34,17 +34,6 @@ using namespace yup;
 namespace
 {
 
-#if YUP_ENABLE_SHADER_TRANSPILER || YUP_MODULE_AVAILABLE_yup_renderer
-
-// Adds a problem the tool finds to those of a document, which tells where it is written
-void report (YuiDocument& document, const DataTreeDiagnostic& problem)
-{
-    if (const auto& tell = document.getBuilder().onDiagnostic; tell != nullptr)
-        tell (problem);
-}
-
-#endif
-
 #if YUP_ENABLE_SHADER_TRANSPILER
 
 // Compiles the source of a shader made from a `fragment` for every graphics API: the styles compile it for the one that
@@ -63,7 +52,7 @@ void checkFragmentShader (YuiDocument& document, const DataTree& block)
         return;
 
     if (const auto created = GpuImageShader::createFromData (source->getData(), source->getSize()); created.failed())
-        report (document, { .message = "shader " + block.getProperty ("name").toString().trim() + ": " + created.getErrorMessage(), .element = block, .property = "fragment" });
+        document.reportDiagnostic ({ .message = "shader " + block.getProperty ("name").toString().trim() + ": " + created.getErrorMessage(), .element = block, .property = "fragment" });
 }
 
 #endif
@@ -99,9 +88,9 @@ void checkMaterialShader (YuiDocument& document, const DataTree& block)
 
     if (! raster.has_value() && ! full.has_value() && ! source.has_value())
     {
-        report (document, { .message = "The shader '" + name + "' can't read '" + path + "' nor its compiled variants '" + path + ".raster.ysl' and '" + path + ".full.ysl'",
-                            .element = block,
-                            .property = "material" });
+        document.reportDiagnostic ({ .message = "The shader '" + name + "' can't read '" + path + "' nor its compiled variants '" + path + ".raster.ysl' and '" + path + ".full.ysl'",
+                                     .element = block,
+                                     .property = "material" });
         return;
     }
 
@@ -113,7 +102,7 @@ void checkMaterialShader (YuiDocument& document, const DataTree& block)
 
     if (created.failed())
     {
-        report (document, { .message = "shader " + name + ": " + created.getErrorMessage(), .element = block, .property = "material" });
+        document.reportDiagnostic ({ .message = "shader " + name + ": " + created.getErrorMessage(), .element = block, .property = "material" });
         return;
     }
 
@@ -122,7 +111,7 @@ void checkMaterialShader (YuiDocument& document, const DataTree& block)
 
     for (const auto& declared : ShaderProperty::readBlock (block, name, &uniforms))
         if (declared.problem.isNotEmpty())
-            report (document, { .message = declared.problem, .element = declared.element });
+            document.reportDiagnostic ({ .message = declared.problem, .element = declared.element });
 }
 
 #endif
@@ -224,9 +213,9 @@ ResultValue<Image> drawYuiToolImage (Component& component, const std::function<I
 
         if (auto* document = YuiDocument::findDocumentFor (scene))
         {
-            report (*document, { .message = "Scene3D: still changing after " + String (maximumSceneFrames) + " frames, the image shows it as it was at the last of them",
-                                 .element = document->getBuilder().findElementFor (scene),
-                                 .severity = DataTreeDiagnostic::Severity::warning });
+            document->reportDiagnostic ({ .message = "Scene3D: still changing after " + String (maximumSceneFrames) + " frames, the image shows it as it was at the last of them",
+                                          .severity = DataTreeDiagnostic::Severity::warning },
+                                        scene);
         }
     }
 

@@ -96,10 +96,6 @@ public:
         static const Identifier gripDownColorId;
     };
 
-    //==============================================================================
-    /** @internal */
-    void paint (Graphics& g) override;
-
 private:
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ModWheelComponent)
 };

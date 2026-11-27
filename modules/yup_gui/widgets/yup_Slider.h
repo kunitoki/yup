@@ -444,8 +444,6 @@ public:
     /** @internal */
     void resized() override;
     /** @internal */
-    void paint (Graphics& g) override;
-    /** @internal */
     void mouseEnter (const MouseEvent& event) override;
     /** @internal */
     void mouseExit (const MouseEvent& event) override;
