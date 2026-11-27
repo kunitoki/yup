@@ -20,6 +20,9 @@ through the components linked to it.
 
 pytestmark = pytest.mark.usefixtures("gui_app")
 
+# The tests where a provider is the model of a document need yup_gui_markup
+needs_markup = pytest.mark.skipif(not hasattr(yup, "YuiDocument"), reason="yup_gui_markup is not built in")
+
 NUMBER = yup.ComponentProperty.Type.number
 
 LINKED = """
@@ -200,6 +203,7 @@ def test_data_tree_provider_keeps_its_undo_manager_alive():
 # A DataTree as the model of a document
 # ==============================================================================
 
+@needs_markup
 def test_data_tree_model_drives_the_interface_both_ways():
     tree = make_params(cutoff=0.4)
     provider = yup.DataTreeBindingProvider(tree, yup.UndoManager())
@@ -223,6 +227,7 @@ def test_data_tree_model_drives_the_interface_both_ways():
     assert readout.getProperty("text").startswith("cutoff 0.2")
 
 
+@needs_markup
 def test_document_keeps_its_model_alive():
     document = yup.YuiDocument()
 
@@ -235,6 +240,7 @@ def test_document_keeps_its_model_alive():
     assert document.findById("knob").getProperty("value") == pytest.approx(0.4)
 
 
+@needs_markup
 def test_link_to_a_missing_model_is_reported():
     document = yup.YuiDocument()
     result = document.loadFromString("Slider { id: gain; value <=> model.gain; }")
@@ -246,6 +252,7 @@ def test_link_to_a_missing_model_is_reported():
     assert diagnostics[0].message == "Slider.value: unknown element 'model'"
 
 
+@needs_markup
 def test_removed_model_is_no_longer_found():
     text = "Slider { id: gain; value <=> model.gain; }"
     provider = yup.DataTreeBindingProvider(make_params(gain=0.4))
@@ -293,6 +300,7 @@ def test_python_provider_must_override_the_pure_virtuals():
         Incomplete().getProperties()
 
 
+@needs_markup
 def test_python_provider_is_the_model_of_a_document():
     provider = GainProvider()
 
@@ -314,6 +322,7 @@ def test_python_provider_is_the_model_of_a_document():
     assert other.getProperty("value") == pytest.approx(0.8)
 
 
+@needs_markup
 def test_python_provider_notifies_the_interface_of_its_own_changes():
     provider = GainProvider()
 
@@ -328,6 +337,7 @@ def test_python_provider_notifies_the_interface_of_its_own_changes():
     assert provider.gain == pytest.approx(0.2)
 
 
+@needs_markup
 def test_document_keeps_a_python_provider_alive():
     document = yup.YuiDocument()
     document.setModel("synth", GainProvider(0.3))
