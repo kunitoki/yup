@@ -464,7 +464,13 @@ Column {
   they are written in: a model asked to play backwards from its start plays
   from the end of its clip.
 - **`duration`** and **`clips`** are read: `maximum: lamp.duration`,
-  `ComboBox { items: lamp.clips; }`.
+  `ComboBox { items: lamp.clips; }`. A model has no clip while its file is
+  [being loaded](#assets-and-hot-reload): `clips` is empty and `duration` and
+  `time` are 0 until it is there, when the `time` it was given is where its
+  clip is. A value that is not a binding is given once, when the document
+  loads: what picks among the `clips` then, as the `selectedIndex` of a
+  `ComboBox`, is bound to the `loading` of the scene, which turns false once
+  the clips are there (`selectedIndex: view.loading ? -1 : 0`).
 - **`onClipEnded`** is raised once when a clip that does not loop stops:
   `onClipEnded: action ("opened");`.
 - One clip plays at a time on a model. A clip and a bound node driving the
@@ -878,7 +884,9 @@ Stack {
 A [`YuiLoader`](hot-reload.md) that watches its files watches these too: a
 model, a texture, an environment or a shader that is saved is read again,
 every element using it follows, and the document is loaded again, which keeps
-the interface and brings its diagnostics up to date.
+the interface and brings its diagnostics up to date. A model, a texture and an
+environment stay as they were until the saved file is loaded: nothing goes
+missing meanwhile, and a clip plays on from where it was.
 
 - A `.gltf` keeping its buffers and its images in other files reads them from
   its folder, which embedded resources do not have: embed a `.glb`. Those
@@ -986,7 +994,10 @@ all of these before the application runs.
 - **Files load in the background, one after the other** for a `Scene3D`: a
   model is parsed and an image decoded off the thread of the interface. Reading
   the file is not, nor is giving the GPU its textures and its buffers, the
-  first time the scene is drawn with them, nor loading a shader.
+  first time the scene is drawn with them, nor loading a shader. A WebP or a
+  TIFF image, a model naming a WebP one, and every file where no thread can be
+  started, as on a web page that is not cross-origin isolated, are loaded on
+  the thread of the interface.
 - **Skinned and morphed meshes are deformed on the CPU**, each time their
   joints or their weights change.
 - **Picking tests triangles**: fine for instrument panels and product models,

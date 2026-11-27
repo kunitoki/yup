@@ -225,6 +225,10 @@ String schemeIdFromDisplayName (const String& displayName)
 
 //==============================================================================
 
+const Identifier CodeEditor::Style::contentPartId { "content" };
+
+//==============================================================================
+
 const ComponentTypeInfo& CodeEditor::getClassTypeInfo()
 {
     static const auto info = ComponentTypeBuilder<CodeEditor> (Identifier ("CodeEditor"))
@@ -287,7 +291,7 @@ const ComponentTypeInfo& CodeEditor::getClassTypeInfo()
                                  .property (CodeEditorIds::minimapVisible, &CodeEditor::isMinimapVisible, &CodeEditor::setMinimapVisible, false, "Whether the minimap overview is visible.")
                                  .readOnly ("gutterWidth", &CodeEditor::getGutterWidth, 0.0, "The width of the gutter holding the line numbers and the markers.")
                                  .readOnly ("textBounds", &CodeEditor::getTextBounds, {}, "The area the lines of text are shown in.")
-                                 .fixedPart ("content", "The editor as the theme paints it, with the colors of its scheme: background, gutter, selection, markers, text and caret.")
+                                 .fixedPart (Style::contentPartId, "The editor as the theme paints it, with the colors of its scheme: background, gutter, selection, markers, text and caret.")
                                  .build();
 
     return info;

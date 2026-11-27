@@ -99,7 +99,14 @@ inline void drawFittedImage (Graphics& g, const Image& image, const Rectangle<fl
 namespace
 {
 
-const Image& resolveDrawingImage (std::map<String, Image>& cache, const String& source, const Component* component, const DrawingStyle::ImageResolver& resolver)
+/* Orders the sources of pictures. The source a paint reads is most often the string the paint before read: String::compare()
+   tells that without reading it, which a data URI or an inline SVG makes long. */
+struct SourceOrder
+{
+    bool operator() (const String& first, const String& second) const noexcept { return first.compare (second) < 0; }
+};
+
+const Image& resolveDrawingImage (std::map<String, Image, SourceOrder>& cache, const String& source, const Component* component, const DrawingStyle::ImageResolver& resolver)
 {
     if (const auto found = cache.find (source); found != cache.end())
         return found->second;
@@ -115,7 +122,7 @@ const Image& resolveDrawingImage (std::map<String, Image>& cache, const String& 
     return cache.emplace (source, std::move (image)).first->second;
 }
 
-std::shared_ptr<Drawable> resolveDrawingSvg (std::map<String, std::shared_ptr<Drawable>>& cache,
+std::shared_ptr<Drawable> resolveDrawingSvg (std::map<String, std::shared_ptr<Drawable>, SourceOrder>& cache,
                                              const String& source,
                                              bool inlineOnly,
                                              const Component* component)
@@ -384,8 +391,8 @@ struct DrawingStyle::Slot
     std::unique_ptr<ExpressionState> state;
     DrawingScope::BoundInputs inputs;
     ExpressionDrawing::Cache cache;
-    std::map<String, Image> imageCache;
-    std::map<String, std::shared_ptr<Drawable>> svgCache;
+    std::map<String, Image, SourceOrder> imageCache;
+    std::map<String, std::shared_ptr<Drawable>, SourceOrder> svgCache;
 
     // The revisions of the patterns the node paints with, added up, as they were when it was last prepared
     uint32 patternRevisions = 0;

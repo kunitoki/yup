@@ -33,6 +33,7 @@ style {
 }
 
 Scene3D {
+    id: view;
     background: #101116; ambient: #2a3040; toneMapping: aces;
 
     Camera3D { class: camera; position: [3.6, 3.3, 5.9]; lookAt: [-0.4, 0.2, 0]; }
@@ -95,7 +96,7 @@ Scene3D {
             Label        { class: caption; text: "Lamp"; preferredWidth: 62; }
             ToggleButton { id: lampPlay; text: "Play"; preferredWidth: 52; }
             ToggleButton { id: lampLoop; text: "Loop"; checked: true; preferredWidth: 66; }
-            ComboBox     { id: picker; items: lamp.clips; selectedIndex: 0; preferredWidth: 110; }
+            ComboBox     { id: picker; items: lamp.clips; selectedIndex: view.loading ? -1 : 0; preferredWidth: 110; }
             Slider       { maximum: lamp.duration; value <=> lamp.time; flexGrow: 1; }
             Label        { text: format ("%.2f / %.2f s", lamp.time, lamp.duration); preferredWidth: 96; justification: centerRight; }
         }

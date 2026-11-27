@@ -81,15 +81,6 @@ struct CuratedGeometry
     }
 };
 
-// The parts widgets declare (see ComponentPart): each has one painter here, called by the painter of its widget
-// and by whoever places the part, as a drawing does. A widget names its parts in its Style: these are the parts
-// of the two widgets that don't
-struct ThemeParts
-{
-    static inline const Identifier image { "image" };
-    static inline const Identifier content { "content" };
-};
-
 //==============================================================================
 
 struct SliderColors
@@ -2673,11 +2664,11 @@ ApplicationTheme::Ptr createThemeVersion1 (const ThemePalette& palette)
     theme->setComponentPart<ComboBox> (ComboBox::Style::textPartId, paintComboBoxText);
     theme->setComponentPart<Label> (Label::Style::textPartId, paintLabelText);
     theme->setComponentPart<Label> (Label::Style::textOutlinePartId, paintLabelTextOutline);
-    theme->setComponentPart<ImageComponent> (ThemeParts::image, paintImageComponentImage);
+    theme->setComponentPart<ImageComponent> (ImageComponent::Style::imagePartId, paintImageComponentImage);
     theme->setComponentPart<TextEditor> (TextEditor::Style::selectionPartId, paintTextEditorSelection);
     theme->setComponentPart<TextEditor> (TextEditor::Style::textPartId, paintTextEditorText);
     theme->setComponentPart<TextEditor> (TextEditor::Style::caretPartId, paintTextEditorCaret);
-    theme->setComponentPart<CodeEditor> (ThemeParts::content, paintCodeEditorContent);
+    theme->setComponentPart<CodeEditor> (CodeEditor::Style::contentPartId, paintCodeEditorContent);
     theme->setComponentPart<ListBoxItem> (ListBoxItem::Style::iconPartId, paintListBoxItemIcon);
     theme->setComponentPart<TreeViewRow> (TreeViewRow::Style::iconPartId, paintTreeViewRowIcon);
     theme->setComponentPart<TabButton> (TabButton::Style::iconPartId, paintTabButtonIcon);

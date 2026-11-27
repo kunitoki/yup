@@ -217,7 +217,7 @@ void SceneModelComponent::setTime (double newTime)
     if (animation != nullptr)
         newTime = jlimit (0.0, animation->getDuration(), newTime);
 
-    if (getTime() == newTime)
+    if ((animation != nullptr ? animation->getTime() : time) == newTime)
         return;
 
     time = newTime;
@@ -234,7 +234,9 @@ void SceneModelComponent::setTime (double newTime)
 double SceneModelComponent::getTime() const noexcept
 {
     const auto* animation = findAnimation();
-    return animation != nullptr ? animation->getTime() : time;
+
+    // Nowhere while the file is being loaded: a slider limited to the duration, 0 by then, has no time to bring back
+    return animation != nullptr ? animation->getTime() : isModelLoading ? 0.0 : time;
 }
 
 double SceneModelComponent::getDuration() const noexcept
@@ -472,6 +474,7 @@ void SceneModelComponent::instantiate()
         instance.destroy();
 
     instance = {};
+    isModelLoading = false;
 
     if (view == nullptr || ! entity.isValid())
         return;
@@ -485,7 +488,9 @@ void SceneModelComponent::instantiate()
     const auto model = view->loadModel (source);
 
     // Being loaded: the scene tells when the model is there
-    if (! model.has_value())
+    isModelLoading = ! model.has_value();
+
+    if (isModelLoading)
         return;
 
     if (model->failed())

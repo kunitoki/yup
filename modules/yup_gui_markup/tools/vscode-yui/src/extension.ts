@@ -4,7 +4,7 @@ import * as vscode from "vscode";
 import { YuiAgentBackend } from "./agentBackend";
 import { YuiAgentTools } from "./agentSetup";
 import { SharedDiagnostics } from "./diagnostics";
-import { collectDocumentFiles, isNamedBy, realPathOf, runUntilFilesAreGiven, setReadableFolders, setUnsavedTexts, toolPathOf } from "./documentFiles";
+import { collectDocumentFiles, isNamedBy, realPathOf, runUntilFilesAreGiven, setReadableAnywhere, setReadableFolders, setUnsavedTexts, toolPathOf } from "./documentFiles";
 import { characterIn, registerLanguageFeatures } from "./language";
 import { YuiPreview } from "./preview";
 import { errorMessage, findToolScript, YuiTool, YuiToolAsking, YuiToolFile, YuiToolResult } from "./tool";
@@ -153,7 +153,7 @@ class YuiSession {
         if (event.affectsConfiguration ("yui.lint.models"))
             this.reportedModels.clear ();
 
-        if (event.affectsConfiguration ("yui.lint.enabled") || event.affectsConfiguration ("yui.lint.models"))
+        if (event.affectsConfiguration ("yui.lint.enabled") || event.affectsConfiguration ("yui.lint.models") || event.affectsConfiguration ("yui.files"))
             this.lintOpenDocuments ();
     }
 
@@ -460,6 +460,9 @@ export function activate (context: vscode.ExtensionContext): void {
 
     // A document reads the files it names in the workspace and in its own folder, and no other
     setReadableFolders (() => (vscode.workspace.workspaceFolders ?? []).map (folder => folder.uri.fsPath));
+
+    // Unless the user lifted that, which a workspace that is not trusted can't do for them
+    setReadableAnywhere (() => vscode.workspace.isTrusted && vscode.workspace.getConfiguration ("yui.files").get<boolean> ("readOutsideWorkspace") === true);
 
     // The models of a document and the files it names change outside the editor too: a model exported again, a shader built
     const filesWatcher = vscode.workspace.createFileSystemWatcher ("**/*");

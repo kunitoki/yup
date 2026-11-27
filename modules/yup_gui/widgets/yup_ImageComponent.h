@@ -113,6 +113,12 @@ public:
     float getImageOpacity() const noexcept { return imageOpacity; }
 
     //==============================================================================
+    struct Style
+    {
+        static const Identifier imagePartId; /**< Name of the part that is the image: `part image { }` in a drawing */
+    };
+
+    //==============================================================================
     /** Returns the static type info describing the Image type. */
     static const ComponentTypeInfo& getClassTypeInfo();
 

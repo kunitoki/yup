@@ -777,6 +777,12 @@ public:
     void setMinimapVisible (bool shouldBeVisible);
 
     //==============================================================================
+    struct Style
+    {
+        static const Identifier contentPartId; /**< Name of the part that is the editor as the theme paints it: `part content { }` in a drawing */
+    };
+
+    //==============================================================================
     /** Returns the static type info describing the CodeEditor type. */
     static const ComponentTypeInfo& getClassTypeInfo();
 

@@ -90,10 +90,11 @@ class SceneNodeComponent;
     The files of the scene, its models, its textures and its environment, are read through the
     document on the message thread, and what is slow of loading them, parsing a model or decoding
     an image, runs on a thread of the component: the scene is shown without a file until it is
-    there, and painted again once it is. A file that changed is shown as it was until it is
-    loaded again. isLoading(), the `loading` state of a `Scene3D`, tells whether a file is still
-    being loaded. What shows a scene with no message loop running, as a tool rendering it to an
-    image does, calls finishLoading() first.
+    there, and painted again once it is. A model or a texture whose file changed is shown as it
+    was until it is loaded again, and a load of the document waits for it, to list what is wrong
+    with the file as it then is. isLoading(), the `loading` state of a `Scene3D`, tells whether a
+    file is still being loaded. What shows a scene with no message loop running, as a tool
+    rendering it to an image does, calls finishLoading() first.
 
     The nodes take the pointer where they are shown, see findNodeAt(): a mouse event goes to the
     node under it, and to the component only where no node is. A component that moves its camera
@@ -502,6 +503,7 @@ private:
     std::optional<ResultValue<Value>> loadImage (std::map<Key, std::optional<ResultValue<Value>>>& kept, const Key& key, const String& path, Make make);
     void keepLoaded();
     void tellLoading();
+    void documentLoaded();
     void contentLoaded();
     void forgetUnusedAssets();
     void updateEnvironment();
@@ -521,7 +523,7 @@ private:
     bool rendered = false; // A paint rendered the scene since its last display frame
     Entity activeCamera;
     SignalConnection entityDestroyed;
-    std::map<String, std::optional<ResultValue<GltfModel>>> models; // Without a result while the file is being loaded, as the two that follow
+    std::map<String, std::optional<ResultValue<GltfModel>>> models; // Without a result while the file is first being loaded, as the two that follow
     std::map<std::pair<String, bool>, std::optional<ResultValue<Texture::Ptr>>> textures;
     std::map<String, std::optional<ResultValue<EnvironmentMap::Ptr>>> environments;
     std::map<String, ResultValue<MaterialShader::Ptr>> materialShaders;
@@ -538,7 +540,7 @@ private:
     bool isFrameRequested = false; // Something asked for a display frame since the last one started
     bool hasSurfaces = false;      // A node showed components on its mesh when the nodes were last looked at
     std::unique_ptr<DocumentLink> documentLink;
-    std::unique_ptr<Loader> loader; // Made by the first file that is loaded
+    std::unique_ptr<Loader> loader; // Made for the first file its thread loads
     FrameAttachment frameAttachment { *this, bindFront (&SceneComponent::takeFrame, this) };
 
     template <class T>

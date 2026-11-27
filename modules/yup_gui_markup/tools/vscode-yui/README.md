@@ -103,6 +103,7 @@ comments, so a formatter would drop them.
 |---|---|---|
 | `yui.lint.enabled` | `true` | Report problems while editing. |
 | `yui.lint.models` | empty | Path to a JSON file declaring the application models, absolute or relative to the workspace folder of the linted document. When empty, a document uses `<document>.models.json` next to it. Documents are linted again when their models file is created, edited or deleted. Each folder of a workspace can set its own. |
+| `yui.files.readOutsideWorkspace` | `false` | **Unsafe.** Read the files a document names wherever they are, instead of only in the folders of the workspace and of the document. See [Preview](#preview). |
 | `yui.preview.size` | `auto` | The size of the preview: `auto`, `panel` or `<width>x<height>` in logical pixels, such as `640x400`. See [Preview](#preview). |
 | `yui.preview.theme` | `auto` | The theme the preview is shown with: `auto` follows the VSCode color theme, `light` and `dark` set it. |
 | `yui.mcp.enabled` | `false` | Serve the [tools for agents](#tools-for-agents) on this machine. **YUI: Set Up Agent Tools** turns it on for a workspace. |
@@ -111,7 +112,8 @@ comments, so a formatter would drop them.
 In a workspace that is not trusted (Restricted Mode) the extension checks,
 completes and previews documents as usual, but does not serve the tools for
 agents, and ignores what the workspace sets for `yui.mcp.enabled`,
-`yui.mcp.port` and `yui.lint.models`.
+`yui.mcp.port`, `yui.lint.models` and `yui.files.readOutsideWorkspace`, which
+is then off whoever set it.
 
 A document that binds to a model (`value <=> params.cutoff;`) reads something
 that only exists inside the application, so without a models file those
@@ -221,7 +223,10 @@ preview alike:
 - A file is read when it is in a folder of the workspace or in the folder of
   the document, where it really is. One that is elsewhere, or that a link
   leads elsewhere to, is left out the same way: open the folder holding both
-  to have it read.
+  to have it read. `yui.files.readOutsideWorkspace` lifts that, for a font or
+  an image kept above the workspace: a document then reads any file it names,
+  so it is unsafe with documents that are not yours, and is off by default.
+  The tools for agents stay held to the workspace.
 
 The preview draws a `Scene3D` with the raster tier of the YUP renderer, as any
 OpenGL device does: forward shading, antialiased by multisampling. An

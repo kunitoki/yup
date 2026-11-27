@@ -31,10 +31,13 @@ struct ImageComponentIds
     static inline const Identifier fitting { "fitting" };
     static inline const Identifier justification { "justification" };
     static inline const Identifier imageOpacity { "imageOpacity" };
-    static inline const Identifier imagePart { "image" };
 };
 
 } // namespace
+
+//==============================================================================
+
+const Identifier ImageComponent::Style::imagePartId { "image" };
 
 //==============================================================================
 
@@ -75,7 +78,7 @@ const ComponentTypeInfo& ImageComponent::getClassTypeInfo()
                                      [] (ImageComponent& c, Justification::Flags f) { c.setJustification (f); },
                                      "How the fitted image is aligned within the component bounds.")
                                  .property (ImageComponentIds::imageOpacity, &ImageComponent::getImageOpacity, &ImageComponent::setImageOpacity, 1.0, "The opacity applied when painting the image.")
-                                 .part (ImageComponentIds::imagePart, "The image, fitted and aligned as the component is set to in the area it is given.")
+                                 .part (Style::imagePartId, "The image, fitted and aligned as the component is set to in the area it is given.")
                                  .build();
 
     return info;

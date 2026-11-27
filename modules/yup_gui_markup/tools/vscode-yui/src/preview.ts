@@ -141,7 +141,7 @@ export class YuiPreview {
                     this.postCaret (event.textEditor);
             }),
             vscode.workspace.onDidChangeConfiguration (event => {
-                if (event.affectsConfiguration ("yui.preview") || event.affectsConfiguration ("yui.lint.models"))
+                if (event.affectsConfiguration ("yui.preview") || event.affectsConfiguration ("yui.lint.models") || event.affectsConfiguration ("yui.files"))
                     void this.render ();
             }),
             vscode.window.onDidChangeActiveColorTheme (() => void this.render ())

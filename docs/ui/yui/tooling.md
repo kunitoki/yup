@@ -747,8 +747,8 @@ just vscode_yui
 builds the tool for the web, which needs the Emscripten SDK activated, packages
 it with the extension and installs it. The extension holds no native binary, so
 the same package works on every platform. The settings are `yui.lint.enabled`, `yui.lint.models`, the path of
-the [models](#models) file of the workspace, `yui.preview.size`,
-`yui.preview.theme`, `yui.mcp.enabled` and `yui.mcp.port`.
+the [models](#models) file of the workspace, `yui.files.readOutsideWorkspace`,
+`yui.preview.size`, `yui.preview.theme`, `yui.mcp.enabled` and `yui.mcp.port`.
 
 Documents are checked and shown as they are in their editors, so what is typed
 counts before it is saved. The preview is live: the interface answers the mouse
@@ -771,6 +771,10 @@ and again when they change in the workspace. A file over 16 MB, and what a
 document reads beyond 64 MB together, is left out with a warning and counts
 as missing. So does a file that is neither in the workspace nor in the folder
 of the document, where it really is: a link leading elsewhere is not followed.
+The `yui.files.readOutsideWorkspace` setting lifts that, for a font or an image
+kept above the workspace. It is off by default and unsafe, as a document then
+reads any file it names: it is ignored in a workspace that is not trusted, and
+the tools for agents stay held to the workspace.
 
 The preview draws a [`Scene3D`](scenes.md) with the
 [raster tier](../../3d/platform-tiers.md) of the renderer, on WebGL 2: without

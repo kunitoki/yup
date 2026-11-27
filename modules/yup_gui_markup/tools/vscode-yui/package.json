@@ -31,9 +31,10 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "In Restricted Mode the tools for coding agents are not served, and the yui.mcp and yui.lint.models settings of the workspace are ignored.",
+      "description": "In Restricted Mode the tools for coding agents are not served, documents only read the files of the workspace and of their own folder, and the yui.mcp, yui.lint.models and yui.files.readOutsideWorkspace settings of the workspace are ignored.",
       "restrictedConfigurations": [
         "yui.lint.models",
+        "yui.files.readOutsideWorkspace",
         "yui.mcp.enabled",
         "yui.mcp.port"
       ]
@@ -53,6 +54,11 @@
           "default": "",
           "scope": "resource",
           "description": "Path to a JSON file declaring the application models bound by the documents, absolute or relative to the workspace folder of the linted file. Without it, bindings such as 'value <=> params.cutoff' are reported as unknown elements."
+        },
+        "yui.files.readOutsideWorkspace": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "**Unsafe.** Read the files a document names wherever they are, such as a font in a folder above the workspace, instead of only in the folders of the workspace and of the document. A document can then have any file you can read loaded to be checked and previewed, so turn it on only for documents you trust. It is ignored in a workspace that is not trusted, and the tools for coding agents stay held to the workspace."
         },
         "yui.preview.size": {
           "type": "string",

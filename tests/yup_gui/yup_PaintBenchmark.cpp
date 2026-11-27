@@ -568,6 +568,113 @@ TEST_F (PaintBenchmarkTests, DISABLED_ManyShapesPaintTimes)
     timeRows ({ { "200 shapes 320x160", [&] (int) { paintFrame (component, *canvas); } } });
 }
 
+/** A drawing of 20 pictures of one data URI as long as the one of an icon, painted again and again with nothing
+    changed: what finding the picture kept for a source costs. */
+TEST_F (PaintBenchmarkTests, DISABLED_PicturesPaintTimes)
+{
+    if (gpuContext == nullptr)
+        GTEST_SKIP() << "No Metal GPU context available";
+
+    // A 1x1 PNG behind a name that makes its source 4096 characters long
+    const String pixel ("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+    const String prefix ("data:image/png;name=");
+    const String suffix (";base64,");
+    const auto source = prefix + String::repeatedString ("x", 4096 - prefix.length() - suffix.length() - pixel.length()) + suffix + pixel;
+
+    String text ("drawing Pictures {\n");
+
+    for (int i = 0; i < 20; ++i)
+        text << "    image { source: \"" << source << "\"; bounds: rect (" << (i % 10) * 32 + 4 << ", " << (i / 10) * 80 + 4 << ", 24, 24); }\n";
+
+    text << "}\n";
+
+    Drawn component (320.0f, 160.0f);
+    ASSERT_NO_FATAL_FAILURE (setDrawing (component, text));
+
+    const auto canvas = makeCanvas (component);
+    ASSERT_NE (canvas, nullptr);
+
+    timeRows ({ { "20 pictures of a 4096 character data URI 320x160", [&] (int) { paintFrame (component, *canvas); } } });
+}
+
+/** The widgets that show a text for each of their rows or tabs, painted again and again with nothing changed, and
+    a tab bar laid out again: what the texts of a list, of a tree and of tabs cost at each paint and each layout. */
+TEST_F (PaintBenchmarkTests, DISABLED_WidgetTextPaintTimes)
+{
+    if (gpuContext == nullptr)
+        GTEST_SKIP() << "No Metal GPU context available";
+
+    // The theme that paints the widgets, which the fixture leaves out
+    theme = createThemeVersion1();
+    ApplicationTheme::setGlobalTheme (theme);
+
+    /** An item of a tree showing a text. */
+    struct TextItem final : TreeViewItem
+    {
+        explicit TextItem (String textToShow)
+            : text (std::move (textToShow))
+        {
+        }
+
+        String getItemText() const override { return text; }
+
+        String text;
+    };
+
+    StringArray rows;
+
+    for (int row = 0; row < 20; ++row)
+        rows.add ("List row number " + String (row + 1));
+
+    ListBox list;
+    list.setBounds (0.0f, 0.0f, 240.0f, 480.0f);
+    list.setVisible (true);
+    list.setItems (rows);
+
+    // 4 open folders of 4 items
+    TreeView tree;
+    auto root = std::make_unique<TextItem> (String());
+    TreeViewItem* folder = root.get();
+
+    for (int row = 0; row < 20; ++row)
+    {
+        auto item = std::make_unique<TextItem> (row % 5 == 0 ? "Folder " + String (row / 5 + 1) : "Tree item " + String (row));
+
+        if (row % 5 != 0)
+        {
+            folder->addSubItem (std::move (item));
+            continue;
+        }
+
+        item->setOpen (true);
+        folder = &root->addSubItem (std::move (item));
+    }
+
+    tree.setRootItem (std::move (root));
+    tree.setRootItemVisible (false);
+    tree.setBounds (0.0f, 0.0f, 240.0f, 480.0f);
+    tree.setVisible (true);
+
+    TabBar tabs;
+    int numTabs = 0;
+
+    for (const auto* name : { "Overview", "Mixer", "Effects", "Routing", "Presets", "Settings", "Devices", "About" })
+        tabs.addTab (Identifier ("tab" + String (numTabs++)), name);
+
+    tabs.setBounds (0.0f, 0.0f, 800.0f, 36.0f);
+    tabs.setVisible (true);
+
+    const auto listCanvas = makeCanvas (list);
+    const auto tabsCanvas = makeCanvas (tabs);
+    ASSERT_NE (listCanvas, nullptr);
+    ASSERT_NE (tabsCanvas, nullptr);
+
+    timeRows ({ { "list of 20 rows 240x480", [&] (int) { paintFrame (list, *listCanvas); } },
+                { "tree of 20 rows 240x480", [&] (int) { paintFrame (tree, *listCanvas); } },
+                { "tab bar of 8 tabs 800x36", [&] (int) { paintFrame (tabs, *tabsCanvas); } },
+                { "tab bar of 8 tabs laid out", [&] (int iteration) { tabs.setBounds (0.0f, 0.0f, 800.0f, iteration % 2 == 0 ? 37.0f : 36.0f); } } });
+}
+
 #if YUP_ENABLE_SHADER_TRANSPILER
 
 /** A fragment shader made from its source, as the `shader` block of a stylesheet is when it is loaded and each

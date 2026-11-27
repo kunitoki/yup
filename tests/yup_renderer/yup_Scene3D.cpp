@@ -727,7 +727,7 @@ TEST_F (Scene3DTests, AnEnvironmentLightsTheSceneFromTheNodeOfItsRoot)
     // They read back what they were given, and what the scene resolves to
     EXPECT_EQ (view->getEnvironment(), "sky.png");
     EXPECT_EQ (view->getProperty (Identifier ("environment")).toString(), "sky.png");
-    EXPECT_FLOAT_EQ (static_cast<float> (view->getProperty (Identifier ("environmentIntensity"))), 2.0f);
+    EXPECT_DOUBLE_EQ (static_cast<double> (view->getProperty (Identifier ("environmentIntensity"))), 2.0);
     EXPECT_TRUE (static_cast<bool> (view->getProperty (Identifier ("environmentVisible"))));
 
     // A value taken out of the document goes back to its default: the scene has no environment left

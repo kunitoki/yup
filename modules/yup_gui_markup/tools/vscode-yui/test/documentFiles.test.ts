@@ -6,7 +6,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { after, afterEach, before, test } from "node:test";
-import { collectDocumentFiles, DocumentFiles, EditedDocument, isNamedBy, leftOutProblem, noteMissingFiles, runUntilFilesAreGiven, setReadableFolders, setUnsavedTexts } from "../src/documentFiles";
+import { collectDocumentFiles, DocumentFiles, EditedDocument, isNamedBy, leftOutProblem, noteMissingFiles, runUntilFilesAreGiven, setReadableAnywhere, setReadableFolders, setUnsavedTexts } from "../src/documentFiles";
 
 let root: string;
 
@@ -21,6 +21,7 @@ after (() => fs.rmSync (root, { recursive: true, force: true }));
 afterEach (() => {
     setUnsavedTexts (() => undefined);
     setReadableFolders (() => [root]);
+    setReadableAnywhere (() => false);
 });
 
 // Writes the files of a project in a folder of its own, and returns where they are
@@ -278,6 +279,38 @@ test ("a document reads what it names in the workspace and in its own folder, an
 
     assert.deepEqual (names (inWorkspace), ["shared/logo.png", "ui/main.yui", "ui/part.yui"]);
     assert.deepEqual (inWorkspace.problems, []);
+});
+
+test ("a document reads what it names anywhere once that is asked for, unless who collects it says where", async () => {
+    const folder = write ("unconfined", {
+        "ui/main.yui": 'Label { font: font ("../../fonts/text.ttf", 12); }\nImage { source: "../shared/absent.png"; }\n'
+    });
+
+    write ("fonts", { "text.ttf": "above the folder of the document, and in no workspace" });
+
+    const document = edited (path.join (folder, "ui", "main.yui"));
+
+    setReadableFolders (() => []);
+
+    const confined = await collectDocumentFiles (document, undefined);
+
+    assert.deepEqual (names (confined), ["main.yui"]);
+    assert.equal (confined.problems.length, 1);
+    assert.match (confined.problems[0], /^'[.][.][/\\][.][.][/\\]fonts[/\\]text[.]ttf' is outside/);
+
+    // Asked for while collecting, as the setting is: the file is read where it is, with no problem to tell
+    setReadableAnywhere (() => true);
+
+    const anywhere = await collectDocumentFiles (document, undefined);
+
+    assert.deepEqual (names (anywhere), ["fonts/text.ttf", "unconfined/ui/main.yui"]);
+    assert.deepEqual (anywhere.problems, []);
+
+    // Who says where a document reads, as the tools for agents do, is still the one to say
+    const held = await collectDocumentFiles (document, undefined, () => false);
+
+    assert.deepEqual (names (held), ["main.yui"]);
+    assert.equal (held.problems.length, 1);
 });
 
 test ("a link leading out of where a document reads is not followed", async () => {

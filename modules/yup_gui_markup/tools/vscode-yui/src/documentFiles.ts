@@ -44,6 +44,7 @@ const named = new Map<string, Set<string>> ();
 
 let unsavedText: (file: string) => string | undefined = () => undefined;
 let readableFolders: () => string[] = () => [];
+let readsAnywhere: () => boolean = () => false;
 
 /** Sets who tells the text a file has in an editor while its changes are not saved, which is read in place of the file. */
 export function setUnsavedTexts (find: (file: string) => string | undefined): void {
@@ -53,6 +54,15 @@ export function setUnsavedTexts (find: (file: string) => string | undefined): vo
 /** Sets who tells the folders a document may read the files it names from, beside its own: those of the workspace. */
 export function setReadableFolders (find: () => string[]): void {
     readableFolders = find;
+}
+
+/**
+    Sets who tells whether a document may read the files it names wherever they are, rather than in the folders of
+    the workspace and its own only. It is unsafe: a document can then have any file its user can read given to the
+    tool, so nobody tells it unless the user asked for it.
+*/
+export function setReadableAnywhere (find: () => boolean): void {
+    readsAnywhere = find;
 }
 
 function folderName (folder: string): string {
@@ -160,11 +170,12 @@ function isInside (folder: string, file: string): boolean {
 }
 
 // What a document may read of what it names, unless who collects it says otherwise: the files of the workspace and
-// those of its own folder, where they really are. A document that is no file has no folder
+// those of its own folder, where they really are, or any file when the user lifted that (see setReadableAnywhere).
+// A document that is no file has no folder
 function readableBy (main: string): (file: string) => boolean {
     const readable = path.isAbsolute (main) ? [...readableFolders (), path.dirname (main)] : readableFolders ();
 
-    return file => isInsideFolders (file, readable);
+    return file => readsAnywhere () || isInsideFolders (file, readable);
 }
 
 function commonFolder (files: string[]): string {
@@ -188,7 +199,8 @@ function commonFolder (files: string[]): string {
 
     @param isAllowed Tells whether a file a document names may be read. Unless given, those of the folders
                      of the workspace (see setReadableFolders) and of the folder of the document are,
-                     where they really are: a link leading out of them is not followed.
+                     where they really are: a link leading out of them is not followed. Any file is
+                     when the user lifted that (see setReadableAnywhere).
 */
 export async function collectDocumentFiles (document: EditedDocument, modelsPath: string | undefined, isAllowed: (file: string) => boolean = readableBy (document.uri.fsPath)): Promise<DocumentFiles> {
     const main = document.uri.fsPath;

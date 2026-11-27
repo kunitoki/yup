@@ -44,8 +44,9 @@ namespace yup
 
     The models of one file share their meshes, their materials and their textures, in every
     `Model3D` of the same `Scene3D`. When the document tells that the file changed, the model is
-    loaded and instantiated again. The file is parsed on a thread of the scene: the node shows
-    nothing, and has no instance, until its model is there (see SceneComponent::isLoading).
+    loaded and instantiated again, and stays as it was until then. The file is parsed on a thread
+    of the scene: the node shows nothing until its model is first there, with no instance, no
+    clips, and a `duration` and a `time` of 0 (see SceneComponent::isLoading).
 
     A `Node3D` with a `node` written inside the model is bound to an entity of its instance, to
     move it or hide it (see SceneNodeComponent), and is bound again each time the model is
@@ -201,11 +202,14 @@ public:
         `Model3D`.
 
         @param newTime The time in seconds, limited to the clip once the model has one. A time
-                       that is not a number is ignored.
+                       that is not a number is ignored. One given while the file of the model
+                       is being loaded is where its clip is once the model is there.
     */
     void setTime (double newTime);
 
-    /** Returns where the clip is, in seconds. */
+    /** Returns where the clip is, in seconds: 0 while the file of the model is being loaded,
+        as its clip lasts nothing by then.
+    */
     double getTime() const noexcept;
 
     /** Returns the length of the clip the model plays in seconds, 0 without one: the `duration`
@@ -263,6 +267,7 @@ private:
     String source;
     int sceneIndex = -1;
     Entity instance;
+    bool isModelLoading = false; // The file is being loaded: the model has no instance yet
     String clip;
     double time = 0.0;
     float speed = 1.0f; // As an AnimationNode starts: at the speed of the clip, without looping

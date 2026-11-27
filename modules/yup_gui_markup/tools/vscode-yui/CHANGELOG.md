@@ -71,6 +71,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   there, both inside the workspace only.
 - Workspace trust: in Restricted Mode the tools for agents are not served, and
   the `yui.mcp` and `yui.lint.models` settings of the workspace are ignored.
+- `yui.files.readOutsideWorkspace`, off by default and unsafe, lets a document
+  read the files it names outside the workspace and its own folder, such as a
+  font kept above them, instead of leaving them out with a warning. It is
+  ignored in Restricted Mode, and the tools for agents stay held to the
+  workspace.
 - The extension is bundled with esbuild, and needs VS Code 1.90 or later.
 - Shaders and 3D scenes: the `shader` blocks of a document are compiled from
   their GLSL and the errors of the compiler reported at the block, the

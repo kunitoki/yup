@@ -222,12 +222,7 @@ struct SceneComponent::DocumentLink final : ComponentDocument::Listener
 
     void documentLoaded (ComponentDocument&) override
     {
-        const BailOutChecker checker (&owner);
-        owner.contentLoaded();
-
-        // Once the materials have looked for their shader in the stylesheet of the load
-        if (! checker.shouldBailOut())
-            owner.forgetUnusedAssets();
+        owner.documentLoaded();
     }
 
     void documentAssetChanged (ComponentDocument&, const String& path) override
@@ -248,11 +243,11 @@ struct SceneComponent::Loader final
     /* What is slow of a load, which returns what keeps its result: the message thread calls that. */
     using Task = std::packaged_task<std::function<void()>()>;
 
-    /* A file being loaded. */
     struct Load
     {
         String path;                             // The one its users are told
         std::future<std::function<void()>> kept; // Ready once the thread has run its task
+        bool isOfChangedFile = false;            // Loaded again: what was kept of the file as it was is still shown
     };
 
     explicit Loader (SceneComponent& ownerToTell)
@@ -656,9 +651,12 @@ void SceneComponent::reloadAsset (std::map<Key, std::optional<ResultValue<Value>
 {
     auto previous = kept.extract (key);
 
+    if (previous.empty() || load().has_value())
+        return;
+
     // Read again at once, and shown as it was until the thread has loaded it: nothing goes missing meanwhile
-    if (! previous.empty() && ! load().has_value())
-        kept.insert_or_assign (key, std::move (previous.mapped()));
+    loader->loads.back().isOfChangedFile = previous.mapped().has_value();
+    kept.insert_or_assign (key, std::move (previous.mapped()));
 }
 
 template <class Key, class Value, class Make>
@@ -869,8 +867,7 @@ void SceneComponent::keepLoaded()
         load = loader->loads.erase (load);
     }
 
-    // As when a file changes: a node on its way to another parent comes back with entities made again, from the
-    // files that are there by then
+    // As when a file changes: a node on its way to another parent comes back with entities made from the files as they are
     if (! paths.isEmpty())
         releaseLeavingNodes();
 
@@ -888,16 +885,34 @@ void SceneComponent::keepLoaded()
 
 void SceneComponent::tellLoading()
 {
-    // Told last: who hears about it may destroy the scene
     if (std::exchange (isLoadingTold, isLoading()) != isLoading())
         notifyPropertyChanged (SceneComponentIds::loading);
 }
 
+void SceneComponent::documentLoaded()
+{
+    const BailOutChecker checker (this);
+
+    // A file that changed is waited for: what the load lists as wrong is what its users find in the file as it is now
+    const auto isChanged = loader != nullptr && std::any_of (loader->loads.begin(), loader->loads.end(), [] (const Loader::Load& load)
+    {
+        return load.isOfChangedFile;
+    });
+
+    if (isChanged)
+        finishLoading();
+    else
+        contentLoaded();
+
+    // Once the materials have looked for their shader in the stylesheet of the load
+    if (! checker.shouldBailOut())
+        forgetUnusedAssets();
+}
+
 void SceneComponent::contentLoaded()
 {
-    // The values of a load are in, or the files it named: the meshes they describe are built, the nodes find the one
-    // that shows the components inside them, and what is wrong is told with the rest. Who hears about a problem may
-    // destroy the scene
+    // The values of a load are in, or the files it named: the meshes they describe are built, the nodes find the one that shows
+    // the components inside them, and what is wrong is told with the rest. Who hears about a problem may destroy the scene
     const BailOutChecker checker (this);
 
     lastPick.reset();

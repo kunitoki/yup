@@ -1984,8 +1984,8 @@ void registerYupGuiBindings (py::module_& m)
         .def ("isSelected", &ListBoxItem::isSelected)
         .def ("setHovered", &ListBoxItem::setHovered, "shouldBeHovered"_a)
         .def ("isHovered", &ListBoxItem::isHovered)
-        .def ("getTextBoundsForRendering", &ListBoxItem::getTextBounds)
-        .def ("getIconBoundsForRendering", &ListBoxItem::getIconBounds);
+        .def ("getTextBounds", &ListBoxItem::getTextBounds)
+        .def ("getIconBounds", &ListBoxItem::getIconBounds);
 
     py::class_<ListBoxItem::Style> listBoxItemStyle (classListBoxItem, "Style");
     listBoxItemStyle.attr ("textColorId") = ListBoxItem::Style::textColorId;

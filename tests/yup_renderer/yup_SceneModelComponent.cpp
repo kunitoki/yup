@@ -700,11 +700,35 @@ TEST_F (SceneModelComponentTests, AModelIsParsedAwayFromTheSceneAndShownOnceItIs
     ASSERT_NE (state, nullptr);
     EXPECT_TRUE (state->isState);
 
+    // What hears the state reads it as it is told
+    struct Recorder final : ComponentListener
+    {
+        explicit Recorder (Component& componentToHear)
+            : component (componentToHear)
+        {
+            component.addComponentListener (this);
+        }
+
+        ~Recorder() override
+        {
+            component.removeComponentListener (this);
+        }
+
+        void componentPropertyChanged (Component&, const Identifier& name) override
+        {
+            if (name == Identifier ("loading"))
+                told.push_back (static_cast<bool> (component.getProperty (name)));
+        }
+
+        Component& component;
+        std::vector<bool> told;
+    };
+
     YuiDocument document;
     serve (document);
     load (document, "Scene3D { id: view; Model3D { id: model; Node3D { id: knob; node: \"Knob\"; } } }");
 
-    auto* view = document.findById<SceneComponent> ("view");
+    auto* view = showSceneOf (document);
     auto* model = document.findById<SceneModelComponent> ("model");
     auto* knob = document.findById<SceneNodeComponent> ("knob");
 
@@ -713,8 +737,7 @@ TEST_F (SceneModelComponentTests, AModelIsParsedAwayFromTheSceneAndShownOnceItIs
     ASSERT_NE (knob, nullptr);
     EXPECT_FALSE (view->isLoading());
 
-    ChangeCounter loadingChanges (*view, "loading");
-    Internals::takeRepaintRequest (*view);
+    Recorder recorder (*view);
 
     // The file is read by the call, and parsed elsewhere: the model is not there when the call returns, and nothing
     // is wrong with it
@@ -734,7 +757,7 @@ TEST_F (SceneModelComponentTests, AModelIsParsedAwayFromTheSceneAndShownOnceItIs
 
     EXPECT_FALSE (view->isLoading());
     EXPECT_FALSE (static_cast<bool> (view->getProperty (Identifier ("loading"))));
-    EXPECT_EQ (loadingChanges.count, 2);
+    EXPECT_EQ (recorder.told, std::vector<bool> ({ true, false }));
     EXPECT_TRUE (Internals::takeRepaintRequest (*view));
 
     ASSERT_TRUE (model->getInstance().isValid());
@@ -747,7 +770,124 @@ TEST_F (SceneModelComponentTests, AModelIsParsedAwayFromTheSceneAndShownOnceItIs
 
     // With nothing left to load there is nothing to wait for, nor to tell
     view->finishLoading();
-    EXPECT_EQ (loadingChanges.count, 2);
+    EXPECT_EQ (recorder.told.size(), 2u);
+}
+
+TEST_F (SceneModelComponentTests, AModelStaysAsItWasWhileItsFileIsLoadedAgain)
+{
+    YuiDocument document;
+    serve (document);
+    load (document, "Scene3D { id: view; Model3D { id: model; source: \"device.gltf\"; } }");
+
+    auto* view = document.findById<SceneComponent> ("view");
+    auto* model = document.findById<SceneModelComponent> ("model");
+
+    ASSERT_NE (view, nullptr);
+    ASSERT_NE (model, nullptr);
+
+    const auto instance = model->getInstance();
+    ASSERT_TRUE (instance.isValid());
+
+    ChangeCounter clipChanges (*model, "clips");
+
+    // The file is read again at once. Its model is shown as it was meanwhile: nothing goes missing, and nothing is told
+    files["device.gltf"] = modelFile ("4, 5, 6");
+    document.notifyAssetChanged ("device.gltf");
+
+    EXPECT_EQ (reads["device.gltf"], 2);
+    EXPECT_TRUE (view->isLoading());
+    EXPECT_TRUE (instance.isValid());
+    EXPECT_EQ (model->getInstance(), instance);
+    EXPECT_EQ (clipChanges.count, 0);
+
+    view->finishLoading();
+
+    // Instantiated again once, from the file as it then is
+    EXPECT_FALSE (view->isLoading());
+    EXPECT_FALSE (instance.isValid());
+    EXPECT_EQ (clipChanges.count, 1);
+    EXPECT_EQ (model->getEntity().getNumChildren(), 1);
+
+    const auto knob = entityAt (*model, { "Body", "Knob" });
+    ASSERT_TRUE (knob.isValid());
+    expectVector (knob.get<TransformNode>()->getPosition(), 4.0f, 5.0f, 6.0f);
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+}
+
+TEST_F (SceneModelComponentTests, ALoadOfTheDocumentWaitsForAFileThatChangedAndListsWhatItThenHasWrong)
+{
+    const String text ("Scene3D {\n"
+                       "    id: view;\n"
+                       "    Model3D { id: model; source: \"device.gltf\"; }\n"
+                       "}");
+
+    YuiDocument document;
+    serve (document);
+    load (document, text);
+
+    auto* view = document.findById<SceneComponent> ("view");
+    auto* model = document.findById<SceneModelComponent> ("model");
+
+    ASSERT_NE (view, nullptr);
+    ASSERT_NE (model, nullptr);
+    ASSERT_TRUE (model->getInstance().isValid());
+
+    // What a loader watching its files does when one is saved: the file is told, then the document is loaded again
+    files["device.gltf"] = bytesOf ("this is not a model");
+    document.notifyAssetChanged ("device.gltf");
+    ASSERT_TRUE (document.loadFromString (text).wasOk());
+    ASSERT_EQ (document.findById<SceneModelComponent> ("model"), model);
+
+    // The file was waited for, and the load lists what is wrong with it as it is
+    EXPECT_FALSE (view->isLoading());
+    EXPECT_FALSE (model->getInstance().isValid());
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().front().message.startsWith ("Model3D.source: ")) << document.getDiagnostics().front().message;
+    EXPECT_EQ (document.getDiagnostics().front().line, 3);
+
+    // And no longer once the file is a model again
+    files["device.gltf"] = modelFile();
+    document.notifyAssetChanged ("device.gltf");
+    ASSERT_TRUE (document.loadFromString (text).wasOk());
+    ASSERT_EQ (document.findById<SceneModelComponent> ("model"), model);
+
+    EXPECT_FALSE (view->isLoading());
+    EXPECT_TRUE (model->getInstance().isValid());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (reads["device.gltf"], 3);
+}
+
+TEST_F (SceneModelComponentTests, ATimeGivenWhileTheFileIsLoadedIsKeptFromASliderLimitedToTheDuration)
+{
+    YuiDocument document;
+    serve (document);
+
+    ASSERT_TRUE (document.loadFromString (robotWith ("clip: \"Smile\"; time: 1.5;", "Slider { id: scrub; maximum: robot.duration; value <=> robot.time; }")).wasOk());
+
+    auto* view = document.findById<SceneComponent> ("view");
+    auto* model = document.findById<SceneModelComponent> ("robot");
+    auto* scrub = document.findById<Slider> ("scrub");
+
+    ASSERT_NE (view, nullptr);
+    ASSERT_NE (model, nullptr);
+    ASSERT_NE (scrub, nullptr);
+
+    // A model has no clip yet: it is nowhere and lasts nothing, so the slider has no time to limit and give back
+    EXPECT_TRUE (view->isLoading());
+    EXPECT_DOUBLE_EQ (model->getDuration(), 0.0);
+    EXPECT_DOUBLE_EQ (model->getTime(), 0.0);
+    EXPECT_DOUBLE_EQ (scrub->getValue(), 0.0);
+    EXPECT_TRUE (model->getClipNames().isEmpty());
+
+    view->finishLoading();
+
+    // The clip is where the document put it, and the slider with it
+    EXPECT_DOUBLE_EQ (model->getDuration(), 2.0);
+    EXPECT_DOUBLE_EQ (model->getTime(), 1.5);
+    EXPECT_DOUBLE_EQ (scrub->getValue(), 1.5);
+    EXPECT_DOUBLE_EQ (scrub->getRange().end, 2.0);
+    expectWeights (*model, { 0.75f, 0.375f });
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 }
 
 TEST_F (SceneModelComponentTests, ASourceSetAgainBeforeItsModelIsThereShowsTheLastOneOnly)
@@ -2007,3 +2147,132 @@ TEST_F (SceneModelComponentTests, AClipAnimatingTheWeightsAndANodeSettingThemTak
     robot.view->refreshDisplay (0.25);
     expectWeights (*robot.model, { 0.875f, 0.4375f });
 }
+
+// TEMPORARY-PERF-AB begin
+
+TEST_F (SceneModelComponentTests, DISABLED_TimesWhatTheMessageThreadSpendsOnAModelAndOnAMaterialSource)
+{
+    const auto tell = [] (const String& what, std::vector<double> milliseconds)
+    {
+        std::sort (milliseconds.begin(), milliseconds.end());
+
+        const auto line = what + " = " + String (milliseconds[milliseconds.size() / 2], 3);
+
+        File ("/tmp/w6b-async.txt").appendText (line + "\n", false, false, "\n");
+        std::cout << line << std::endl;
+    };
+
+    const auto file = File (__FILE__).getParentDirectory().getParentDirectory().getParentDirectory().getChildFile ("examples/graphics/data/gltf/mpc.glb");
+
+    if (! file.loadFileAsData (files["mpc.glb"]))
+        GTEST_SKIP() << "mpc.glb is missing";
+
+    std::vector<double> times;
+
+    // The call that names the file of a model, in a scene that has loaded nothing yet
+    for (int pass = 0; pass < 31; ++pass)
+    {
+        YuiDocument document;
+        serve (document);
+        load (document, "Scene3D { id: view; Model3D { id: model; } }");
+
+        auto* model = document.findById<SceneModelComponent> ("model");
+        ASSERT_NE (model, nullptr);
+
+        const auto start = Time::getMillisecondCounterHiRes();
+        model->setSource ("mpc.glb");
+        times.push_back (Time::getMillisecondCounterHiRes() - start);
+    }
+
+    tell ("Model3D.source set to mpc.glb", times);
+
+    // A texture as large as the ones of an application: what decoding it takes, and what the message thread spends on a
+    // document naming it, with the frame that follows
+    {
+        Image big (2048, 2048, PixelFormat::RGBA);
+
+        for (int y = 0; y < big.getHeight(); ++y)
+            for (int x = 0; x < big.getWidth(); ++x)
+                big.setPixelColor (x, y, Color (0xff000000u | (static_cast<uint32> ((x ^ y) & 0xff) << 16) | (static_cast<uint32> ((x * 7 + y * 3) & 0xff) << 8) | static_cast<uint32> (((x * y) >> 4) & 0xff)));
+
+        {
+            PngImageFormatWriter writer (new MemoryOutputStream (files["big.png"], false), big.getPixelFormat());
+            ASSERT_TRUE (writer.writeImage (big));
+        }
+
+        times.clear();
+
+        for (int pass = 0; pass < 9; ++pass)
+        {
+            const auto start = Time::getMillisecondCounterHiRes();
+            const auto decoded = Image::loadFromData (files["big.png"].asBytes());
+            times.push_back (Time::getMillisecondCounterHiRes() - start);
+
+            ASSERT_TRUE (decoded.wasOk());
+        }
+
+        tell ("a 2048x2048 PNG of " + String (static_cast<int> (files["big.png"].getSize() / 1024)) + " KB decoded, alone", times);
+
+        times.clear();
+
+        for (int pass = 0; pass < 9; ++pass)
+        {
+            YuiDocument document;
+            serve (document);
+
+            const auto start = Time::getMillisecondCounterHiRes();
+
+            const auto result = document.loadFromString ("Scene3D { id: view; Mesh3D { vertices: [0, 0, 0,  1, 0, 0,  0, 1, 0]; Material3D { baseColorTexture: \"big.png\"; } } }");
+
+            if (auto* view = showSceneOf (document))
+                view->refreshDisplay (0.0);
+
+            times.push_back (Time::getMillisecondCounterHiRes() - start);
+
+            ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+        }
+
+        tell ("document with a Material3D naming that texture loaded, with its frame", times);
+    }
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+    files["fx/hologram.glsl"] = bytesOf (R"(YUP_MATERIAL_PARAMS
+{
+    vec4 rim;
+    float strength;
+} params;
+
+vec4 yupMaterial (YupSurface surface)
+{
+    return vec4 (surface.baseColor.rgb + params.rim.rgb * params.strength, surface.baseColor.a);
+}
+)");
+
+    times.clear();
+
+    // The load of a document whose material is compiled from its source, with the frame that follows it
+    for (int pass = 0; pass < 15; ++pass)
+    {
+        YuiDocument document;
+        serve (document);
+
+        const auto start = Time::getMillisecondCounterHiRes();
+
+        const auto result = document.loadFromString ("shader Hologram { material: \"fx/hologram.glsl\"; property strength: number = 2; }\n"
+                                                     "Scene3D { id: view; Mesh3D { vertices: [0, 0, 0,  1, 0, 0,  0, 1, 0]; Material3D { shader: Hologram; } } }");
+
+        if (auto* view = showSceneOf (document))
+            view->refreshDisplay (0.0);
+
+        times.push_back (Time::getMillisecondCounterHiRes() - start);
+
+        ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+        ASSERT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+        ASSERT_EQ (reads["fx/hologram.glsl"], pass + 1);
+    }
+
+    tell ("document with a Material3D shader source loaded", times);
+#endif
+}
+
+// TEMPORARY-PERF-AB end

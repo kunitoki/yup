@@ -180,8 +180,8 @@ def test_list_box_item_rendering_bounds_are_empty_without_a_size():
     # Only construction and the two getters run here, so nothing has laid the item out yet.
     item = yup.ListBoxItem()
 
-    assert item.getTextBoundsForRendering().isEmpty() is True
-    assert item.getIconBoundsForRendering().isEmpty() is True
+    assert item.getTextBounds().isEmpty() is True
+    assert item.getIconBounds().isEmpty() is True
 
 
 # ==============================================================================
