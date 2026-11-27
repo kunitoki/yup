@@ -737,6 +737,18 @@ uint64_t VulkanDevice::getSafeFrameNumber (uint64_t currentGeneration) const
     return lastSafeFrameNumber;
 }
 
+bool VulkanDevice::isIdle() const
+{
+    const ScopedLock sl (lock);
+
+    reclaimCompletedSlots();
+
+    return std::none_of (commandSlots.begin(), commandSlots.end(), [] (const auto& slot)
+    {
+        return slot->state != CommandSlot::State::idle;
+    });
+}
+
 void VulkanDevice::waitIdle()
 {
     const ScopedLock sl (lock);

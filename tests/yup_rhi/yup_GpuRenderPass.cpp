@@ -460,6 +460,72 @@ void main() { color = texture (sampler2D (source, sourceSampler), uv); })";
     EXPECT_GE (pixels[1], 250);
 }
 
+TEST_P (GpuPipelineSharedModuleTests, ReleasedShaderCachesKeepCompiledPipelinesDrawing)
+{
+    auto pipeline = compile (solidFragment, false);
+    ASSERT_NE (pipeline, nullptr);
+    ASSERT_GT (device->getShaderModuleCountForTesting(), 0);
+
+    device->releaseUnusedResources (withBitValueCleared (GpuUnusedResources::all, GpuUnusedResources::shaderCaches));
+    EXPECT_GT (device->getShaderModuleCountForTesting(), 0);
+
+    device->releaseUnusedResources (GpuUnusedResources::shaderCaches);
+    EXPECT_EQ (device->getShaderModuleCountForTesting(), 0);
+
+    auto target = GpuTarget::create (device, 1, 1);
+    ASSERT_NE (target, nullptr);
+
+    auto frame = GpuFrame::begin (device);
+    auto pass = target->beginRenderPass (frame, { true, GpuColor::transparentBlack() });
+    pass.setPipeline (pipeline);
+    EXPECT_TRUE (pass.draw (3));
+    pass.finish();
+    EXPECT_TRUE (frame.submit());
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
+
+    std::vector<uint8_t> pixels (4);
+    if (! readbackCompleted (target->readPixels (pixels.data(), pixels.size())))
+        return;
+
+    EXPECT_NEAR (pixels[0], 64, 1);
+    EXPECT_NEAR (pixels[1], 128, 1);
+    EXPECT_NEAR (pixels[2], 191, 1);
+}
+
+TEST_P (GpuPipelineSharedModuleTests, ReleasedFrameResourcesLetGoOfWhatFinishedFramesHeld)
+{
+    auto pipeline = compile (solidFragment, false);
+    ASSERT_NE (pipeline, nullptr);
+
+    auto target = GpuTarget::create (device, 1, 1);
+    ASSERT_NE (target, nullptr);
+
+    const auto held = pipeline->getReferenceCount();
+
+    {
+        auto frame = GpuFrame::begin (device);
+        auto pass = target->beginRenderPass (frame, { true, GpuColor::transparentBlack() });
+        pass.setPipeline (pipeline);
+        EXPECT_TRUE (pass.draw (3));
+        pass.finish();
+        EXPECT_TRUE (frame.submit());
+    }
+
+    // A frame that was not waited for keeps what it drew with for the frames that follow
+    EXPECT_GT (pipeline->getReferenceCount(), held);
+
+    device->releaseUnusedResources (GpuUnusedResources::shaderCaches);
+    EXPECT_GT (pipeline->getReferenceCount(), held);
+
+    // Reading back waits for the GPU: a backend keeps what the GPU may still be using
+    std::vector<uint8_t> pixels (4);
+    if (! readbackCompleted (target->readPixels (pixels.data(), pixels.size())))
+        return;
+
+    device->releaseUnusedResources (GpuUnusedResources::frameResources);
+    EXPECT_EQ (pipeline->getReferenceCount(), held);
+}
+
 INSTANTIATE_TEST_SUITE_P (GpuPipeline,
                           GpuPipelineSharedModuleTests,
                           ::testing::ValuesIn (GpuComputePassBackendTests::getCompiledPlatforms()),

@@ -797,6 +797,35 @@ void GpuDevice::clearShaderBundleCache()
     embeddedBundles.clear();
 }
 
+void GpuDevice::releaseUnusedResources (GpuUnusedResources resources)
+{
+    if (hasBitValueSet (resources, GpuUnusedResources::shaderCaches))
+        clearShaderBundleCache();
+
+    runOnGraphicsContext ([&]
+    {
+        if (hasBitValueSet (resources, GpuUnusedResources::frameResources))
+        {
+            releaseRetiredFrames (getReleasableFrameGeneration());
+            uniformBufferPool.clear();
+
+            const ScopedLock sl (ownerPipelinesLock);
+            std::erase_if (ownerPipelines, [] (const OwnerPipeline& entry)
+            {
+                return entry.owner.expired();
+            });
+        }
+
+        if (hasBitValueSet (resources, GpuUnusedResources::shaderCaches))
+            shaderModuleCache.clear();
+
+        if (auto* renderContext = getRenderContext(); renderContext != nullptr && hasBitValueSet (resources, GpuUnusedResources::renderBuffers))
+            renderContext->releaseResources();
+
+        releaseUnusedOffscreenContexts (resources);
+    });
+}
+
 ResultValue<GpuPipeline::Ptr> GpuDevice::getOrCompilePipelineFor (const std::shared_ptr<void>& owner,
                                                                   GpuTextureFormat format,
                                                                   const std::function<ResultValue<GpuPipeline::Ptr> (GpuTextureFormat)>& compile)

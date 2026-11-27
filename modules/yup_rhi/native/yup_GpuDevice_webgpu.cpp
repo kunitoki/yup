@@ -493,6 +493,14 @@ private:
         return target;
     }
 
+    void releaseUnusedOffscreenContexts (GpuUnusedResources resources) override
+    {
+        releaseIdleOffscreenContexts (offscreenContextPool, resources, [] (const auto& slot)
+        {
+            return ! slot->leased;
+        });
+    }
+
     OffscreenContextSlot* acquireOffscreenContext()
     {
         for (const auto& slot : offscreenContextPool)

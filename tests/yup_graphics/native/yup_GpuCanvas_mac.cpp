@@ -81,3 +81,28 @@ TEST_F (GpuCanvasMetalTests, BeginDrawWithScaleSetsContextScaleAndLogicalDrawing
     EXPECT_FLOAT_EQ (2.0f, g.getContextScale());
     EXPECT_EQ (Rectangle<float> (0.0f, 0.0f, 64.0f, 48.0f), g.getDrawingArea());
 }
+
+TEST_F (GpuCanvasMetalTests, DrawsAgainAfterTheDeviceReleasedItsUnusedResources)
+{
+    auto canvas = GpuCanvas::create (*gpuContext, 8, 8);
+    ASSERT_NE (canvas, nullptr);
+
+    const auto draw = [&canvas]
+    {
+        auto& g = canvas->beginDraw();
+        g.setFillColor (Color (0xff204080));
+        g.fillAll();
+
+        std::vector<uint8> pixels (8 * 8 * 4);
+        EXPECT_TRUE (canvas->commit());
+        EXPECT_TRUE (canvas->readPixels (pixels.data(), pixels.size()));
+        return pixels;
+    };
+
+    const auto before = draw();
+    EXPECT_EQ (before[3], 255);
+
+    gpuContext->getGpuDevice()->releaseUnusedResources();
+
+    EXPECT_EQ (draw(), before);
+}

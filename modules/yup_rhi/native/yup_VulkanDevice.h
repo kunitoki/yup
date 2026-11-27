@@ -189,6 +189,9 @@ public:
     */
     uint64_t getSafeFrameNumber (uint64_t currentGeneration) const;
 
+    /** True when the GPU finished every command buffer handed out: none is recording or executing. */
+    bool isIdle() const;
+
     /** Waits for the queue to drain and runs every pending completion handler. */
     void waitIdle();
 

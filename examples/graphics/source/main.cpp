@@ -865,6 +865,8 @@ public:
             }
         }
 
+        releaseUnusedGpuResources();
+
         currentDemo = index;
 
         // Whichever of the list and the tabs is hidden follows the one that was used
@@ -881,6 +883,17 @@ public:
     }
 
 private:
+    /** Gives back what the device still keeps of the demo that went away: its finished frames, the
+        shader caches and the buffers 2D drawing grew to, which the next demo allocates again as it needs. */
+    void releaseUnusedGpuResources()
+    {
+        auto* nativeComponent = getNativeComponent();
+        auto* context = nativeComponent != nullptr ? nativeComponent->getGraphicsContext() : nullptr;
+
+        if (auto device = context != nullptr ? context->getGpuDevice() : nullptr; device != nullptr)
+            device->releaseUnusedResources();
+    }
+
     int findDemoIndex (const yup::String& name) const
     {
         if (name.isEmpty())

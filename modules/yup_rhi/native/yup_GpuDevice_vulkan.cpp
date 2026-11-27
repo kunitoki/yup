@@ -484,6 +484,11 @@ protected:
         return vulkanDevice->getSafeFrameNumber (getCurrentFrameGeneration());
     }
 
+    uint64_t getReleasableFrameGeneration() const noexcept override
+    {
+        return vulkanDevice->isIdle() ? getCurrentFrameGeneration() : getSafeFrameGeneration();
+    }
+
     void* beginFrameCommands (uint64_t generation) override
     {
         const ScopedLock sl (vulkanDevice->getLock());
@@ -1021,6 +1026,17 @@ private:
                 return nullptr;
 
             return target;
+        });
+    }
+
+    void releaseUnusedOffscreenContexts (GpuUnusedResources resources) override
+    {
+        if (! vulkanDevice->isIdle())
+            resources = withBitValueCleared (resources, GpuUnusedResources::offscreenContexts);
+
+        releaseIdleOffscreenContexts (offscreenContextPool, resources, [] (const auto& slot)
+        {
+            return ! slot->leased;
         });
     }
 

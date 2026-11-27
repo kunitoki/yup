@@ -389,6 +389,25 @@ public:
     */
     void clearShaderBundleCache();
 
+    /** Releases what the device keeps to make its next frames cheaper.
+
+        A device keeps the resources of the frames it finished, its shader caches and the
+        buffers and contexts 2D drawing uses, so that steady rendering stops allocating. Once
+        a heavy scene is gone they are memory nothing uses: this releases the ones selected
+        by @p resources, see GpuUnusedResources for what each costs to get back. Whatever is
+        still referenced elsewhere stays valid, and whatever is needed again is created
+        again on its next use.
+
+        Call it between frames, from the thread that draws with the device: for the device
+        of a window that is the message thread, outside Component::paint(). It never waits
+        for the GPU: what the GPU may still be using is kept, for a later call to release.
+
+        @param resources  What to release, everything by default.
+
+        @see GpuUnusedResources, clearShaderBundleCache
+    */
+    void releaseUnusedResources (GpuUnusedResources resources = GpuUnusedResources::all);
+
     //==============================================================================
     /** Returns true if textures of the given format can be created and sampled.
 
@@ -703,6 +722,24 @@ protected:
 
     /** Returns the latest generation handed out by beginFrameGeneration(). */
     uint64_t getCurrentFrameGeneration() const noexcept { return frameGeneration; }
+
+    /** Returns the latest generation whose resources releaseUnusedResources() may release.
+
+        The default is the latest one: submitted commands keep what they use alive on most
+        backends. A backend whose resources are destroyed at once returns the latest
+        generation the GPU finished.
+    */
+    virtual uint64_t getReleasableFrameGeneration() const noexcept { return frameGeneration; }
+
+    /** Releases the offscreen render contexts no frame is using, for releaseUnusedResources().
+
+        Called with the rendering context current (see runOnGraphicsContext()). A backend
+        releases the buffers of its idle contexts for GpuUnusedResources::renderBuffers,
+        and the contexts themselves for GpuUnusedResources::offscreenContexts.
+
+        @param resources  What releaseUnusedResources() was asked to release.
+    */
+    virtual void releaseUnusedOffscreenContexts (GpuUnusedResources resources) { ignoreUnused (resources); }
 
     //==============================================================================
     /** Provides the command buffer a GpuFrame records into, on backends where the

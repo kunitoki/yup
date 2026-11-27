@@ -87,6 +87,24 @@ rive::gpu::RenderContext::FrameDescriptor toRiveFrameDescriptor (const GpuFrameD
     return frameDesc;
 }
 
+/** Releases what GpuDevice::releaseUnusedResources() selected from the offscreen render contexts
+    of @p pool that @p isIdle accepts: the contexts themselves, or only their buffers. */
+template <class Pool, class IsIdle>
+void releaseIdleOffscreenContexts (Pool& pool, GpuUnusedResources resources, IsIdle&& isIdle)
+{
+    if (hasBitValueSet (resources, GpuUnusedResources::offscreenContexts))
+        std::erase_if (pool, isIdle);
+
+    if (! hasBitValueSet (resources, GpuUnusedResources::renderBuffers))
+        return;
+
+    for (const auto& slot : pool)
+    {
+        if (isIdle (slot))
+            slot->renderContext->releaseResources();
+    }
+}
+
 } // namespace
 
 } // namespace yup

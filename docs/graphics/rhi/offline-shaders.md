@@ -195,7 +195,8 @@ if (bundleResult.wasOk())
 The device keeps the parsed `ShaderBundle::Ptr` and returns it again for the same
 bytes; bytes that changed at the same address are parsed again. Call
 `clearShaderBundleCache()` to drop the kept bundles, for example after compiling
-bundles at runtime.
+bundles at runtime. [`releaseUnusedResources()`](concepts.md#releasing-memory)
+drops them too, with the other caches of the device.
 
 For repeated compilation across frames or many pipelines, cache the results with
 [`GpuPipelineCache`](pipelines.md#gpupipelinecache), which also accepts a
