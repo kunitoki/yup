@@ -316,6 +316,13 @@ g.setFillColor (label.findColor (Label::Style::textFillColorId).value_or (Colors
 label.paintPart (g, Label::Style::textPartId);
 ```
 
+The rows of a list and of a tree and the tabs of a bar tell their text the same
+way, as `ListBoxItem::Style::textPartId`, `TreeViewRow::Style::textPartId` and
+`TabButton::Style::textPartId`. The theme lays that text out for the area the
+part is given, which is where `getTextBounds()` tells unless a drawing gives it
+`bounds`. The `icon` part of a tab is its image or its glyph, the glyph filled
+with the fill color.
+
 [Widgets in drawings](yui/widgets.md) lists the series and the parts of the
 built-in widgets.
 
@@ -348,6 +355,50 @@ auto customButtonStyle = ComponentStyle::createStyle<TextButton> (
 The callback receives the `Graphics` context, the current `ApplicationTheme`,
 and a typed reference to the component. It is called whenever the component
 needs to repaint.
+
+### Keeping a laid out text between paints
+
+Laying a text out costs far more than filling it, and the text of a widget
+seldom changes between two paints. The widgets whose text the theme lays out
+hold a `TextLayoutCache` for whoever paints them: `ListBoxItem`, `TreeViewRow`,
+`TabButton` and `Slider` (the value of a stepper) return it from
+`getTextLayoutCache()`, and each item of a `PopupMenu` has one for its text and
+one for its shortcut. The widget never looks into it. A painter keeps there the
+text it laid out and what it laid it out from, and lays it out again only when
+one of them is no longer the same:
+
+```cpp
+auto rowStyle = ComponentStyle::createStyle<ListBoxItem> (
+    [] (Graphics& g, const ApplicationTheme& theme, const ListBoxItem& item)
+    {
+        const auto text = item.getText();
+        const auto font = theme.getDefaultFont().withHeight (12.0f);
+        const auto area = item.getTextBounds();
+
+        auto& kept = item.getTextLayoutCache();
+
+        if (kept.text != text || kept.font != font || kept.styledText.getMaxSize() != area.getSize())
+        {
+            auto modifier = kept.styledText.startUpdate();
+            modifier.clear();
+            modifier.setMaxSize (area.getSize());
+            modifier.setVerticalAlign (StyledText::middle);
+            modifier.appendText (text, font);
+
+            kept.text = text;
+            kept.font = font;
+        }
+
+        g.setFillColor (Colors::white);
+        g.fillFittedText (kept.styledText, area);
+    });
+```
+
+The comparison is all it takes: nothing has to tell the painter that the text,
+the bounds or the font of the theme changed. Two fonts are the same when they
+are one font at one height, so a font made at each paint, as
+`Font::withAxisValue` makes one, is another font every time: keep such a font
+as well.
 
 ### Attaching a style to a component
 

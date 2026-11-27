@@ -1603,3 +1603,77 @@ TEST_F (PopupMenuTest, QualifiedDeclarationsAndLiveRestylePropagateToPopupAndSub
 
     PopupMenu::dismissAllPopups();
 }
+
+TEST_F (PopupMenuTest, ThePainterLaysTheTextsOfTheItemsOutAgainOnlyForOtherTextsOrOtherBounds)
+{
+    auto oldTheme = ApplicationTheme::getGlobalTheme();
+    ApplicationTheme::setGlobalTheme (createThemeVersion1());
+    const ScopeGuard restoreTheme { [&]
+    {
+        ApplicationTheme::setGlobalTheme (oldTheme.get());
+    } };
+
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    auto renderer = context->makeRenderer (400, 300);
+    Graphics g (*context, *renderer);
+
+    auto menu = PopupMenu::create (PopupMenu::Options().withParentComponent (parentComponent.get()).withPosition (Point<int> (10, 10)));
+    menu->addItem (kPopupTestText1, kPopupTestId1, true, false, kShortcutText);
+    menu->addSeparator();
+    menu->addItem (kPopupTestText2, kPopupTestId2);
+    menu->show();
+
+    const auto itemAt = [&menu] (int itemIndex) -> PopupMenu::Item&
+    {
+        return **(menu->begin() + itemIndex);
+    };
+
+    // The menu lays nothing out: whoever paints it does
+    auto& kept = itemAt (0).textLayoutCache;
+    auto& keptShortcut = itemAt (0).shortcutKeyTextLayoutCache;
+    EXPECT_TRUE (kept.styledText.isEmpty());
+    EXPECT_TRUE (keptShortcut.styledText.isEmpty());
+
+    menu->paint (g);
+
+    EXPECT_EQ (kept.text, kPopupTestText1);
+    EXPECT_FALSE (kept.styledText.isEmpty());
+    EXPECT_EQ (kept.styledText.getMaxSize(), menu->getItemTextBounds (0).getSize());
+
+    EXPECT_EQ (keptShortcut.text, kShortcutText);
+    EXPECT_FALSE (keptShortcut.styledText.isEmpty());
+    EXPECT_EQ (keptShortcut.styledText.getMaxSize(), menu->getItemShortcutBounds (0).getSize());
+    EXPECT_EQ (keptShortcut.styledText.getHorizontalAlign(), StyledText::right);
+
+    // A separator has no text, and the last item no shortcut
+    EXPECT_TRUE (itemAt (1).textLayoutCache.styledText.isEmpty());
+    EXPECT_EQ (itemAt (2).textLayoutCache.text, kPopupTestText2);
+    EXPECT_TRUE (itemAt (2).shortcutKeyTextLayoutCache.styledText.isEmpty());
+
+    // What is kept is what is painted again: emptied here, it stays empty until the painter has to lay it out
+    const auto isLaidOutAgain = [&] (const std::function<void()>& change)
+    {
+        kept.styledText.startUpdate().clear();
+        change();
+        menu->paint (g);
+        return ! kept.styledText.isEmpty();
+    };
+
+    // An item the keyboard moves to is hovered: the menu is painted again with the texts it has
+    EXPECT_FALSE (isLaidOutAgain ([&menu] { menu->keyDown (KeyPress (KeyPress::downKey), {}); }));
+    EXPECT_TRUE (itemAt (0).isHovered);
+
+    // Another text, written into the item with nothing telling the menu
+    EXPECT_TRUE (isLaidOutAgain ([&itemAt] { itemAt (0).text = "Another option"; }));
+    EXPECT_EQ (kept.text, "Another option");
+
+    // Other bounds: a tick moves the texts of all the items, higher items make them higher
+    EXPECT_TRUE (isLaidOutAgain ([&itemAt] { itemAt (2).isTicked = true; }));
+    EXPECT_EQ (kept.styledText.getMaxSize(), menu->getItemTextBounds (0).getSize());
+
+    EXPECT_TRUE (isLaidOutAgain ([&menu] { menu->setProperty ("itemHeight", 30.0); }));
+    EXPECT_EQ (kept.styledText.getMaxSize(), menu->getItemTextBounds (0).getSize());
+    EXPECT_FLOAT_EQ (kept.styledText.getMaxSize().getHeight(), 26.0f);
+
+    menu->dismiss();
+}

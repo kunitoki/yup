@@ -433,6 +433,14 @@ public:
     const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
     //==============================================================================
+    /** Returns where whoever paints the slider keeps the value it laid out as a text, to lay it out again only when
+        it has to: the value of a slider of type IncDecButtons, shown in getTextBounds().
+
+        The slider holds it and never looks into it: see TextLayoutCache.
+    */
+    TextLayoutCache& getTextLayoutCache() const noexcept { return textLayoutCache; }
+
+    //==============================================================================
     /** @internal */
     void resized() override;
     /** @internal */
@@ -543,6 +551,7 @@ private:
 
     int pressedStep = 0;
     TimedCallback stepRepeater;
+    mutable TextLayoutCache textLayoutCache;
 
     std::unique_ptr<Component> popupBubbleComponent;
     std::unique_ptr<TextEditor> textEditor;

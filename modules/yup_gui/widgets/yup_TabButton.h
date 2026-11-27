@@ -186,7 +186,8 @@ public:
         static const Identifier closeButtonColorId;       /**< The color of the close button. */
         static const Identifier cornerRadiusId;           /**< The corner radius of the hovered background. */
 
-        static const Identifier iconPartId;               /**< The name of the part that is the icon image: `part icon { }` in a drawing. */
+        static const Identifier iconPartId;               /**< The name of the part that is the icon, an image or a glyph: `part icon { }` in a drawing. */
+        static const Identifier textPartId;               /**< The name of the part that is the text: `part text { }` in a drawing. */
     };
 
     //==============================================================================
@@ -195,6 +196,13 @@ public:
 
     /** @internal */
     const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
+
+    //==============================================================================
+    /** Returns where whoever paints the tab keeps the text it laid out, to lay it out again only when it has to.
+
+        The tab holds it and never looks into it: see TextLayoutCache.
+    */
+    TextLayoutCache& getTextLayoutCache() const noexcept { return textLayoutCache; }
 
     //==============================================================================
     /** @internal */
@@ -218,6 +226,13 @@ public:
 private:
     friend class TabBar;
 
+    struct TextMeasure
+    {
+        String text;
+        Font font;
+        float width = 0.0f;
+    };
+
     void setSelected (bool shouldBeSelected);
     void contentChanged();
     void updateLayout();
@@ -239,6 +254,11 @@ private:
     Rectangle<float> textBounds;
     Rectangle<float> closeButtonBounds;
     Rectangle<float> arrowBounds;
+
+    // The heavier font of the selected tab with the font of the theme it was made from, and what the text measures in it
+    mutable Font selectedFontSource, selectedFont;
+    mutable std::optional<TextMeasure> textMeasure;
+    mutable TextLayoutCache textLayoutCache;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TabButton)
 };

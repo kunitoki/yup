@@ -251,6 +251,10 @@ public:
         std::optional<Color> textColor;
         Rectangle<float> area;
 
+        /** Where whoever paints the menu keeps the text and the shortcut it laid out, to lay them out again only
+            when it has to. The item holds them and never looks into them: see TextLayoutCache. */
+        mutable TextLayoutCache textLayoutCache, shortcutKeyTextLayoutCache;
+
     private:
         YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Item)
     };

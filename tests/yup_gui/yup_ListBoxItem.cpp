@@ -423,3 +423,81 @@ TEST_F (ListBoxItemTests, StateChangesWithTextAndIcon)
     EXPECT_FALSE (item->isSelected());
     EXPECT_FALSE (item->isHovered());
 }
+
+//==============================================================================
+// Kept Text Layout Tests
+//==============================================================================
+
+TEST_F (ListBoxItemTests, ThePainterLaysTheTextOutAgainOnlyForAnotherTextOrOtherBounds)
+{
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    auto renderer = context->makeRenderer (200, 40);
+    Graphics g (*context, *renderer);
+
+    auto& kept = item->getTextLayoutCache();
+
+    // The item lays nothing out: whoever paints it does
+    item->setText ("One");
+    EXPECT_TRUE (kept.styledText.isEmpty());
+
+    item->paint (g);
+    EXPECT_EQ (kept.text, "One");
+    EXPECT_FALSE (kept.styledText.isEmpty());
+    EXPECT_EQ (kept.styledText.getMaxSize(), item->getTextBounds().getSize());
+    EXPECT_EQ (kept.styledText.getOverflow(), StyledText::ellipsis);
+    EXPECT_EQ (kept.styledText.getWrap(), StyledText::noWrap);
+
+    // What is kept is what is painted again: emptied here, it stays empty until the painter has to lay it out
+    const auto isLaidOutAgain = [&] (const std::function<void()>& change)
+    {
+        kept.styledText.startUpdate().clear();
+        change();
+        item->paint (g);
+        return ! kept.styledText.isEmpty();
+    };
+
+    EXPECT_FALSE (isLaidOutAgain ([] {}));
+    EXPECT_FALSE (isLaidOutAgain ([this] { item->setSelected (true); }));
+    EXPECT_FALSE (isLaidOutAgain ([this] { item->setBounds (10.0f, 20.0f, 200.0f, 40.0f); }));
+
+    EXPECT_TRUE (isLaidOutAgain ([this] { item->setText ("Two"); }));
+    EXPECT_EQ (kept.text, "Two");
+
+    // Other bounds of the text: a lower item, whose text is smaller, then an icon taking some of its width
+    const auto fontHeight = kept.font.getHeight();
+    EXPECT_TRUE (isLaidOutAgain ([this] { item->setBounds (0.0f, 0.0f, 200.0f, 16.0f); }));
+    EXPECT_EQ (kept.styledText.getMaxSize(), item->getTextBounds().getSize());
+    EXPECT_LT (kept.font.getHeight(), fontHeight);
+
+    EXPECT_TRUE (isLaidOutAgain ([this] { item->setIcon (Image (32, 32, PixelFormat::RGBA)); }));
+    EXPECT_EQ (kept.styledText.getMaxSize(), item->getTextBounds().getSize());
+
+    // The text is a part as well, laid out for the area the part is given
+    EXPECT_TRUE (ApplicationTheme::paintComponentPart (g, *item, ListBoxItem::Style::textPartId, { 0.0f, 0.0f, 50.0f, 10.0f }));
+    EXPECT_EQ (kept.styledText.getMaxSize(), Size<float> (50.0f, 10.0f));
+}
+
+TEST_F (ListBoxItemTests, ThePainterLaysTheTextOutAgainInAnotherFontOfTheTheme)
+{
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    auto renderer = context->makeRenderer (200, 40);
+    Graphics g (*context, *renderer);
+
+    // A theme of its own, to change its font
+    auto oldTheme = ApplicationTheme::getGlobalTheme();
+    auto theme = createThemeVersion1();
+    ApplicationTheme::setGlobalTheme (theme);
+
+    item->setText ("One");
+    item->paint (g);
+
+    const auto& kept = item->getTextLayoutCache();
+    EXPECT_FLOAT_EQ (kept.font.getHeight(), theme->getDefaultFont().getHeight());
+
+    // Nothing tells the item that the font of the theme changed
+    theme->setDefaultFont (theme->getDefaultFont().withHeight (9.0f));
+    item->paint (g);
+    EXPECT_FLOAT_EQ (kept.font.getHeight(), 9.0f);
+
+    ApplicationTheme::setGlobalTheme (oldTheme.get());
+}

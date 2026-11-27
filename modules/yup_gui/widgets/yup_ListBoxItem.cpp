@@ -45,6 +45,7 @@ const Identifier ListBoxItem::Style::backgroundColorId { "listBoxItemBackground"
 const Identifier ListBoxItem::Style::backgroundColorSelectedId { "listBoxItemBackgroundSelected" };
 const Identifier ListBoxItem::Style::backgroundColorHoveredId { "listBoxItemBackgroundHovered" };
 const Identifier ListBoxItem::Style::iconPartId { "icon" };
+const Identifier ListBoxItem::Style::textPartId { "text" };
 
 //==============================================================================
 const ComponentTypeInfo& ListBoxItem::getClassTypeInfo()
@@ -63,6 +64,7 @@ const ComponentTypeInfo& ListBoxItem::getClassTypeInfo()
                                  .readOnly (ListBoxItemIds::iconBounds, &ListBoxItem::getIconBounds, {}, "The area of the icon, empty for an item without one.")
                                  .readOnly (ListBoxItemIds::textBounds, &ListBoxItem::getTextBounds, {}, "The area of the text.")
                                  .part (Style::iconPartId, &ListBoxItem::getIconBounds, "The drawable or the image the item was given as its icon.")
+                                 .part (Style::textPartId, &ListBoxItem::getTextBounds, "The text, laid out by the theme for the area it is given and filled with the fill color.")
                                  .build();
 
     return info;

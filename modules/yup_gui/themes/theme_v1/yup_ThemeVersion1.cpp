@@ -83,6 +83,41 @@ struct CuratedGeometry
 
 //==============================================================================
 
+/** Lays a text out in what its widget keeps for whoever paints it, and returns it laid out.
+
+    The text is laid out again only when the text, the font, the size or the way it is laid out are not the ones of
+    what is kept. That comparison is all there is to tell that a text changed: the widget tells nothing.
+*/
+const StyledText& layoutKeptText (TextLayoutCache& kept,
+                                  const String& text,
+                                  const Font& font,
+                                  const Size<float>& size,
+                                  StyledText::HorizontalAlign horizontalAlign,
+                                  StyledText::VerticalAlign verticalAlign,
+                                  StyledText::TextOverflow overflow,
+                                  StyledText::TextWrap wrap)
+{
+    auto modifier = kept.styledText.startUpdate();
+    modifier.setHorizontalAlign (horizontalAlign);
+    modifier.setVerticalAlign (verticalAlign);
+    modifier.setOverflow (overflow);
+    modifier.setWrap (wrap);
+
+    if (kept.text != text || kept.font != font || kept.styledText.getMaxSize() != size)
+    {
+        modifier.clear();
+        modifier.setMaxSize (size);
+        modifier.appendText (text, font);
+
+        kept.text = text;
+        kept.font = font;
+    }
+
+    return kept.styledText;
+}
+
+//==============================================================================
+
 struct SliderColors
 {
     Color background;
@@ -300,9 +335,10 @@ void paintStepperSlider (Graphics& g, const ApplicationTheme& theme, const Slide
     const auto interval = slider.getInterval();
     const auto isWhole = interval > 0.0 && approximatelyEqual (interval, std::round (interval));
     const auto text = isWhole ? String (roundToInt (slider.getValue())) : String (slider.getValue(), jlimit (0, 3, slider.getNumDecimalPlacesToDisplay()));
+    const auto font = theme.getDefaultFont().withHeight (jmin (14.0f, valueBounds.getHeight() * 0.6f));
 
     g.setFillColor (colors.text);
-    g.fillFittedText (text, theme.getDefaultFont().withHeight (jmin (14.0f, valueBounds.getHeight() * 0.6f)), valueBounds, Justification::center);
+    g.fillFittedText (layoutKeptText (slider.getTextLayoutCache(), text, font, valueBounds.getSize(), StyledText::center, StyledText::middle, StyledText::visible, StyledText::wrap), valueBounds);
 }
 
 void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
@@ -999,19 +1035,7 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
             g.setFillColor (textColor);
 
             const auto textRect = p.getItemTextBounds (itemIndex);
-
-            {
-                auto styledText = yup::StyledText();
-                {
-                    auto modifier = styledText.startUpdate();
-                    modifier.setMaxSize (textRect.getSize());
-                    modifier.setOverflow (yup::StyledText::ellipsis);
-                    modifier.setWrap (yup::StyledText::noWrap);
-                    modifier.appendText (item->text, itemFont);
-                }
-
-                g.fillFittedText (styledText, textRect);
-            }
+            g.fillFittedText (layoutKeptText (item->textLayoutCache, item->text, itemFont, textRect.getSize(), StyledText::left, StyledText::top, StyledText::ellipsis, StyledText::noWrap), textRect);
 
             // Draw checkmark if ticked
             if (item->isTicked)
@@ -1027,20 +1051,11 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
             if (item->shortcutKeyText.isNotEmpty())
             {
                 const auto shortcutRect = p.getItemShortcutBounds (itemIndex);
-
-                auto styledText = yup::StyledText();
-                {
-                    auto modifier = styledText.startUpdate();
-                    modifier.setMaxSize (shortcutRect.getSize());
-                    modifier.setOverflow (yup::StyledText::ellipsis);
-                    modifier.setWrap (yup::StyledText::noWrap);
-                    modifier.setHorizontalAlign (yup::StyledText::right);
-                    modifier.appendText (item->shortcutKeyText, itemFont.withHeight (itemFont.getHeight() - 1.0f));
-                }
+                const auto shortcutFont = itemFont.withHeight (itemFont.getHeight() - 1.0f);
 
                 g.setOpacity (0.7f);
                 g.setFillColor (textColor);
-                g.fillFittedText (styledText, shortcutRect);
+                g.fillFittedText (layoutKeptText (item->shortcutKeyTextLayoutCache, item->shortcutKeyText, shortcutFont, shortcutRect.getSize(), StyledText::right, StyledText::top, StyledText::ellipsis, StyledText::noWrap), shortcutRect);
                 g.setOpacity (1.0f);
             }
 
@@ -1391,6 +1406,19 @@ void paintListBoxItemIcon (Graphics& g, const ApplicationTheme&, const ListBoxIt
         g.drawImage (image, area);
 }
 
+void paintListBoxItemText (Graphics& g, const ApplicationTheme& theme, const ListBoxItem& item, const Rectangle<float>& area)
+{
+    const auto text = item.getText();
+
+    if (text.isEmpty() || area.isEmpty())
+        return;
+
+    const auto font = theme.getDefaultFont();
+    const auto fontSize = jmin (area.getHeight() * 0.6f, font.getHeight());
+
+    g.fillFittedText (layoutKeptText (item.getTextLayoutCache(), text, font.withHeight (fontSize), area.getSize(), StyledText::left, StyledText::middle, StyledText::ellipsis, StyledText::noWrap), area);
+}
+
 void paintListBoxItem (Graphics& g, const ApplicationTheme& theme, const ListBoxItem& item)
 {
     const auto& palette = theme.getPalette (item);
@@ -1428,22 +1456,7 @@ void paintListBoxItem (Graphics& g, const ApplicationTheme& theme, const ListBox
             textColor = theme.findColor (item, ListBoxItem::Style::textColorId).value_or (palette.getColor (PaletteRole::text));
 
         g.setFillColor (textColor);
-
-        auto font = theme.getDefaultFont();
-        auto fontSize = jmin (textBounds.getHeight() * 0.6f, font.getHeight());
-
-        auto styledText = yup::StyledText();
-        {
-            auto modifier = styledText.startUpdate();
-            modifier.setMaxSize (textBounds.getSize());
-            modifier.setHorizontalAlign (StyledText::left);
-            modifier.setVerticalAlign (StyledText::middle);
-            modifier.setOverflow (StyledText::ellipsis);
-            modifier.setWrap (StyledText::noWrap);
-            modifier.appendText (text, font.withHeight (fontSize));
-        }
-
-        g.fillFittedText (styledText, textBounds);
+        paintListBoxItemText (g, theme, item, textBounds);
     }
 }
 
@@ -1453,6 +1466,18 @@ void paintTreeViewRowIcon (Graphics& g, const ApplicationTheme&, const TreeViewR
 {
     if (row.getItem() != nullptr && row.hasItemIcon() && ! area.isEmpty())
         row.getItem()->paintItemIcon (g, area, row.isItemSelected());
+}
+
+void paintTreeViewRowText (Graphics& g, const ApplicationTheme& theme, const TreeViewRow& row, const Rectangle<float>& area)
+{
+    const auto& text = row.getItemText();
+
+    if (text.isEmpty() || area.isEmpty())
+        return;
+
+    const auto font = theme.getDefaultFont().withHeight (jmin (area.getHeight() * 0.6f, 16.0f));
+
+    g.fillFittedText (layoutKeptText (row.getTextLayoutCache(), text, font, area.getSize(), StyledText::left, StyledText::middle, StyledText::ellipsis, StyledText::noWrap), area);
 }
 
 void paintTreeViewRow (Graphics& g, const ApplicationTheme& theme, const TreeViewRow& row)
@@ -1522,19 +1547,8 @@ void paintTreeViewRow (Graphics& g, const ApplicationTheme& theme, const TreeVie
                              ? theme.findColor (row, TreeView::Style::itemTextSelectedColorId).value_or (palette.getColor (PaletteRole::onAccent))
                              : theme.findColor (row, TreeView::Style::itemTextColorId).value_or (palette.getColor (PaletteRole::text));
 
-    auto styledText = StyledText();
-    {
-        auto modifier = styledText.startUpdate();
-        modifier.setMaxSize (textBounds.getSize());
-        modifier.setHorizontalAlign (StyledText::left);
-        modifier.setVerticalAlign (StyledText::middle);
-        modifier.setOverflow (StyledText::ellipsis);
-        modifier.setWrap (StyledText::noWrap);
-        modifier.appendText (text, theme.getDefaultFont().withHeight (jmin (textBounds.getHeight() * 0.6f, 16.0f)));
-    }
-
     g.setFillColor (textColor);
-    g.fillFittedText (styledText, textBounds);
+    paintTreeViewRowText (g, theme, row, textBounds);
 }
 
 //==============================================================================
@@ -1602,10 +1616,27 @@ void paintTabBar (Graphics& g, const ApplicationTheme& theme, const TabBar& bar)
     }
 }
 
-void paintTabButtonIcon (Graphics& g, const ApplicationTheme&, const TabButton& button, const Rectangle<float>& area)
+void paintTabButtonIcon (Graphics& g, const ApplicationTheme& theme, const TabButton& button, const Rectangle<float>& area)
 {
-    if (button.getIconImage().isValid() && ! area.isEmpty())
+    if (area.isEmpty())
+        return;
+
+    if (button.getIconImage().isValid())
+    {
         g.drawImage (button.getIconImage(), area);
+        return;
+    }
+
+    // Never shortened: a glyph wider than its box would become an ellipsis the icon font doesn't have.
+    g.fillFittedText (button.getIconGlyph(), theme.getDefaultIconFont().withHeight (area.getHeight() * 0.85f), area, Justification::center);
+}
+
+void paintTabButtonText (Graphics& g, const ApplicationTheme&, const TabButton& button, const Rectangle<float>& area)
+{
+    if (area.isEmpty())
+        return;
+
+    g.fillFittedText (layoutKeptText (button.getTextLayoutCache(), button.getText(), button.getFont (button.isSelected()), area.getSize(), StyledText::left, StyledText::middle, StyledText::ellipsis, StyledText::noWrap), area);
 }
 
 void paintTabButton (Graphics& g, const ApplicationTheme& theme, const TabButton& button)
@@ -1628,33 +1659,14 @@ void paintTabButton (Graphics& g, const ApplicationTheme& theme, const TabButton
 
     if (const auto iconBounds = button.getIconBounds(); ! iconBounds.isEmpty())
     {
-        if (button.getIconImage().isValid())
-        {
-            paintTabButtonIcon (g, theme, button, iconBounds);
-        }
-        else
-        {
-            // Never shortened: a glyph wider than its box would become an ellipsis the icon font doesn't have.
-            g.setFillColor (textColor);
-            g.fillFittedText (button.getIconGlyph(), theme.getDefaultIconFont().withHeight (iconBounds.getHeight() * 0.85f), iconBounds, Justification::center);
-        }
+        g.setFillColor (textColor);
+        paintTabButtonIcon (g, theme, button, iconBounds);
     }
 
     if (const auto textBounds = button.getTextBounds(); ! textBounds.isEmpty())
     {
-        auto styledText = StyledText();
-        {
-            auto modifier = styledText.startUpdate();
-            modifier.setMaxSize (textBounds.getSize());
-            modifier.setHorizontalAlign (StyledText::left);
-            modifier.setVerticalAlign (StyledText::middle);
-            modifier.setOverflow (StyledText::ellipsis);
-            modifier.setWrap (StyledText::noWrap);
-            modifier.appendText (button.getText(), button.getFont (selected));
-        }
-
         g.setFillColor (textColor);
-        g.fillFittedText (styledText, textBounds);
+        paintTabButtonText (g, theme, button, textBounds);
     }
 
     if (const auto closeBounds = button.getCloseBounds(); ! closeBounds.isEmpty())
@@ -2670,8 +2682,11 @@ ApplicationTheme::Ptr createThemeVersion1 (const ThemePalette& palette)
     theme->setComponentPart<TextEditor> (TextEditor::Style::caretPartId, paintTextEditorCaret);
     theme->setComponentPart<CodeEditor> (CodeEditor::Style::contentPartId, paintCodeEditorContent);
     theme->setComponentPart<ListBoxItem> (ListBoxItem::Style::iconPartId, paintListBoxItemIcon);
+    theme->setComponentPart<ListBoxItem> (ListBoxItem::Style::textPartId, paintListBoxItemText);
     theme->setComponentPart<TreeViewRow> (TreeViewRow::Style::iconPartId, paintTreeViewRowIcon);
+    theme->setComponentPart<TreeViewRow> (TreeViewRow::Style::textPartId, paintTreeViewRowText);
     theme->setComponentPart<TabButton> (TabButton::Style::iconPartId, paintTabButtonIcon);
+    theme->setComponentPart<TabButton> (TabButton::Style::textPartId, paintTabButtonText);
 
 #if YUP_MODULE_AVAILABLE_yup_audio_gui
     theme->setComponentStyle<MidiKeyboardComponent> (ComponentStyle::createStyle<MidiKeyboardComponent> (paintMidiKeyboard));

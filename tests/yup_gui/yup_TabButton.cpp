@@ -46,6 +46,15 @@ protected:
         oldTheme = nullptr;
     }
 
+    /** Gives the theme a font with a weight axis, which the font of a selected tab is another font of. */
+    void useVariableFont()
+    {
+        const auto font = Font::loadFontFromFile (File (__FILE__).getParentDirectory().getParentDirectory().getChildFile ("data/fonts/Linefont-VariableFont_wdth,wght.ttf"));
+        ASSERT_TRUE (font.wasOk()) << font.getErrorMessage();
+
+        ApplicationTheme::getGlobalTheme()->setDefaultFont (font.getValue().withHeight (14.0f));
+    }
+
     ApplicationTheme::Ptr oldTheme;
     std::unique_ptr<TabBar> bar;
 };
@@ -183,4 +192,168 @@ TEST_F (TabButtonTests, VerticalTabsUseARowLength)
     auto& longTab = bar->addTab ("b", "A much longer tab text");
 
     EXPECT_FLOAT_EQ (shortTab.getPreferredLength(), longTab.getPreferredLength());
+}
+
+TEST_F (TabButtonTests, PreferredLengthFollowsTheTextAndTheFontOfTheTheme)
+{
+    ASSERT_NO_FATAL_FAILURE (useVariableFont());
+
+    auto& button = bar->addTab ("table", "Table");
+    const auto length = button.getPreferredLength();
+
+    button.setText ("A much longer table");
+    EXPECT_GT (button.getPreferredLength(), length);
+
+    button.setText ("Table");
+    EXPECT_FLOAT_EQ (button.getPreferredLength(), length);
+
+    // A larger font of the theme, which nothing tells the tab about
+    auto theme = ApplicationTheme::getGlobalTheme();
+    theme->setDefaultFont (theme->getDefaultFont().withHeight (28.0f));
+    EXPECT_GT (button.getPreferredLength(), length);
+}
+
+TEST_F (TabButtonTests, TheHeavierFontOfASelectedTabIsMadeOnceForAFontOfTheTheme)
+{
+    ASSERT_NO_FATAL_FAILURE (useVariableFont());
+
+    auto& button = bar->addTab ("table", "Table");
+    const auto selectedFont = button.getFont (true);
+
+    // Another font than the one of the theme, and the same one each time it is asked for
+    EXPECT_NE (selectedFont, button.getFont (false));
+    EXPECT_EQ (selectedFont, button.getFont (true));
+
+    // Another font of the theme has a heavier font of its own
+    auto theme = ApplicationTheme::getGlobalTheme();
+    theme->setDefaultFont (theme->getDefaultFont().withHeight (20.0f));
+
+    EXPECT_NE (selectedFont, button.getFont (true));
+    EXPECT_NE (button.getFont (true), button.getFont (false));
+    EXPECT_FLOAT_EQ (button.getFont (true).getHeight(), 20.0f);
+}
+
+TEST_F (TabButtonTests, ThePainterLaysTheTextOutAgainOnlyForAnotherTextOtherBoundsOrAnotherSelectedState)
+{
+    ASSERT_NO_FATAL_FAILURE (useVariableFont());
+
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    auto renderer = context->makeRenderer (600, 48);
+    Graphics g (*context, *renderer);
+
+    auto& first = bar->addTab ("first", "First");
+    bar->addTab ("second", "Second");
+    ASSERT_TRUE (first.isSelected());
+
+    // The tab lays nothing out: whoever paints it does
+    auto& kept = first.getTextLayoutCache();
+    EXPECT_TRUE (kept.styledText.isEmpty());
+
+    first.paint (g);
+    EXPECT_EQ (kept.text, "First");
+    EXPECT_EQ (kept.font, first.getFont (true));
+    EXPECT_FALSE (kept.styledText.isEmpty());
+    EXPECT_EQ (kept.styledText.getMaxSize(), first.getTextBounds().getSize());
+
+    // What is kept is what is painted again: emptied here, it stays empty until the painter has to lay it out
+    const auto isLaidOutAgain = [&] (const std::function<void()>& change)
+    {
+        kept.styledText.startUpdate().clear();
+        change();
+        first.paint (g);
+        return ! kept.styledText.isEmpty();
+    };
+
+    // The tab painted as it is, then moved behind a tab added before it
+    EXPECT_FALSE (isLaidOutAgain ([] {}));
+    EXPECT_FALSE (isLaidOutAgain ([this] { bar->addTab ("board", "Board", 0); }));
+    EXPECT_GT (first.getX(), bar->getTabButton ("board")->getX());
+
+    // The lighter font of a tab that is no longer the selected one
+    EXPECT_TRUE (isLaidOutAgain ([this] { bar->setSelectedTab ("second"); }));
+    EXPECT_EQ (kept.font, first.getFont (false));
+
+    EXPECT_TRUE (isLaidOutAgain ([&first] { first.setText ("A longer first"); }));
+    EXPECT_EQ (kept.text, "A longer first");
+
+    // Other bounds of the text: another height of the bar
+    EXPECT_TRUE (isLaidOutAgain ([this] { bar->setBounds (0.0f, 0.0f, 600.0f, 48.0f); }));
+    EXPECT_EQ (kept.styledText.getMaxSize(), first.getTextBounds().getSize());
+}
+
+TEST_F (TabButtonTests, HasIconTellsAGlyphAsItTellsAnImage)
+{
+    auto& button = bar->addTab ("table", "Table");
+
+    const auto hasIcon = [&button]
+    {
+        return static_cast<bool> (button.getProperty (Identifier ("hasIcon")));
+    };
+
+    EXPECT_FALSE (hasIcon());
+
+    button.setIconGlyph (YUP_ICON_TABLE);
+    EXPECT_TRUE (hasIcon());
+
+    button.setIconImage (Image (16, 16, PixelFormat::RGBA));
+    EXPECT_TRUE (hasIcon());
+
+    button.setIconGlyph (String());
+    EXPECT_FALSE (hasIcon());
+}
+
+//==============================================================================
+class TabButtonGpuTests : public TabButtonTests
+{
+protected:
+    static void SetUpTestSuite()
+    {
+        gpuContext = GraphicsContext::createContext (GpuPlatform::Metal, {});
+
+        if (gpuContext != nullptr && GpuCanvas::create (*gpuContext, 64, 64) == nullptr)
+            gpuContext.reset();
+    }
+
+    static void TearDownTestSuite()
+    {
+        gpuContext.reset();
+    }
+
+    void SetUp() override
+    {
+        TabButtonTests::SetUp();
+
+        if (gpuContext == nullptr)
+            GTEST_SKIP() << "No Metal GPU context available";
+    }
+
+    static inline std::unique_ptr<GraphicsContext> gpuContext;
+};
+
+TEST_F (TabButtonGpuTests, TheIconPartPaintsAGlyphAsItPaintsAnImage)
+{
+    auto& button = bar->addTab ("table", {});
+    button.setIconGlyph (YUP_ICON_TABLE);
+    ASSERT_FALSE (button.getIconBounds().isEmpty());
+
+    // A style painting the icon and nothing else, so that what is painted is the part
+    button.setStyle (ComponentStyle::createStyle<TabButton> ([] (Graphics& g, const ApplicationTheme&, const TabButton& tab)
+    {
+        g.setFillColor (Colors::red);
+        tab.paintPart (g, TabButton::Style::iconPartId);
+    }));
+
+    const auto image = button.snapshotToImage (*gpuContext);
+    ASSERT_TRUE (image.isValid());
+
+    int numPainted = 0;
+
+    for (int y = 0; y < image.getHeight(); ++y)
+        for (int x = 0; x < image.getWidth(); ++x)
+            if (image.getPixelColor (x, y) != image.getPixelColor (0, 0))
+                ++numPainted;
+
+    EXPECT_GT (numPainted, 0);
+
+    button.setStyle (nullptr);
 }

@@ -46,6 +46,7 @@ struct TreeViewRowIds
 
 //==============================================================================
 const Identifier TreeViewRow::Style::iconPartId { "icon" };
+const Identifier TreeViewRow::Style::textPartId { "text" };
 
 //==============================================================================
 const ComponentTypeInfo& TreeViewRow::getClassTypeInfo()
@@ -65,6 +66,7 @@ const ComponentTypeInfo& TreeViewRow::getClassTypeInfo()
                                  .readOnly (TreeViewRowIds::indentSize, [] (const TreeViewRow& r) { return r.getOwnerView() != nullptr ? r.getOwnerView()->getIndentSize() : 0.0f; }, 0.0, "How far the tree indents each level of depth.")
                                  .readOnly (TreeViewRowIds::indentGuidesVisible, [] (const TreeViewRow& r) { return r.getOwnerView() != nullptr && r.getOwnerView()->areIndentGuidesVisible(); }, false, "Whether the tree shows a guide for each level of depth.")
                                  .part (Style::iconPartId, &TreeViewRow::getIconBounds, "The icon of the row's item, as the item paints it.")
+                                 .part (Style::textPartId, &TreeViewRow::getTextBounds, "The text of the row's item, laid out by the theme for the area it is given and filled with the fill color.")
                                  .build();
 
     return info;

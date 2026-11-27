@@ -23,6 +23,8 @@
 
 #include <yup_renderer/yup_renderer.h>
 
+#include <sys/resource.h>
+
 using namespace yup;
 
 class SceneRendererFrameStatsTests : public SceneRendererMetalTests
@@ -814,7 +816,8 @@ protected:
         ones when it is above 0. @p samples receives the stats of the timed frames, read after every
         render() and every wait: only the latest finished frame is kept, so a wait finishing two frames
         leaves the first one out. A still show renders on after the warm-up until its image converged,
-        and fails when it does not within 256 frames. */
+        and fails when it does not within 256 frames. The CPU time of the process per timed frame is
+        left in processCpu. */
     double timeFrames (LightShow& show, int width, int height, int& shadowRedraws, int* casterDraws = nullptr,
                        bool frameStats = false, int maxFramesInFlight = 0, FrameSamples* samples = nullptr)
     {
@@ -892,10 +895,12 @@ protected:
         lastFrame = renderer.getLastFrameStats().frameIndex;
         const auto redrawsBefore = shadows (renderer).getNumRenderedFrames();
         const auto drawsBefore = shadows (renderer).getNumCasterDraws();
+        const auto processCpuBefore = getProcessCpuMilliseconds();
         const auto start = Time::getMillisecondCounterHiRes();
         if (! renderFrames (120))
             return -1.0;
 
+        processCpu = (getProcessCpuMilliseconds() - processCpuBefore) / 120.0;
         shadowRedraws = shadows (renderer).getNumRenderedFrames() - redrawsBefore;
         if (casterDraws != nullptr)
             *casterDraws = shadows (renderer).getNumCasterDraws() - drawsBefore;
@@ -942,6 +947,25 @@ protected:
         return current > *baseline * 1.03 && current - *baseline > spread ? Verdict::regressed : Verdict::pass;
     }
 
+    /** The CPU time the process used so far, in milliseconds, in user and kernel mode on every thread:
+        the render() calls, and what the calling thread never sees, the driver's own threads handing
+        the command buffers to the kernel. */
+    static double getProcessCpuMilliseconds()
+    {
+        rusage usage {};
+        getrusage (RUSAGE_SELF, &usage);
+
+        const auto milliseconds = [] (const timeval& time)
+        {
+            return static_cast<double> (time.tv_sec) * 1000.0 + static_cast<double> (time.tv_usec) / 1000.0;
+        };
+
+        return milliseconds (usage.ru_utime) + milliseconds (usage.ru_stime);
+    }
+
+    /** The CPU milliseconds of the process per frame, over the frames the last timeFrames() timed. */
+    double processCpu = 0.0;
+
     /** The value below which @p fraction of @p values lie, 0.5 for the median; 0 without values. */
     static double percentile (std::vector<double> values, double fraction)
     {
@@ -965,6 +989,7 @@ protected:
         int shadowRedraws = 0;
         int casterDraws = 0;
         double shadowsMean = 0.0; // the shadows scope over every sampled frame, those that kept the maps reading 0
+        double processCpu = 0.0;  // the CPU milliseconds of the process per frame, on every thread
         double load = 0.0;
     };
 
@@ -991,6 +1016,7 @@ protected:
         getloadavg (load, 3);
         round.load = load[0];
         round.wallMilliseconds = timeFrames (show, width, height, round.shadowRedraws, &round.casterDraws, false, 1, &round.samples);
+        round.processCpu = processCpu;
         ASSERT_GT (round.wallMilliseconds, 0.0) << row.name;
         ASSERT_FALSE (round.samples.gpu.empty()) << row.name;
 
@@ -1046,7 +1072,7 @@ protected:
                                             row.name.toRawUTF8(), gpuMedians.back(), a, b, spreads.back() / gpuMedians.back() * 100.0, cpuMedians.back(),
                                             rounds[0].samples.internalWidth, rounds[0].samples.internalHeight)
                       << "\n"
-                      << String::formatted ("  %5s %8s %8s %8s %8s %8s %10s %13s %6s %6s", "round", "samples", "gpu med", "gpu p95", "wall", "cpu med", "draw items", "casters/frame", "load", "tier")
+                      << String::formatted ("  %5s %8s %8s %8s %8s %8s %8s %10s %13s %6s %6s", "round", "samples", "gpu med", "gpu p95", "wall", "cpu med", "proc cpu", "draw items", "casters/frame", "load", "tier")
                       << std::endl;
 
             Array<var> roundsJson;
@@ -1058,9 +1084,9 @@ protected:
                 const auto gpuMedian = percentile (samples.gpu, 0.5);
                 const auto casterDraws = round.casterDraws / 120.0;
 
-                std::cout << String::formatted ("  %5d %4d/120 %8.3f %8.3f %8.3f %8.3f %10d %13.1f %6.2f %6s",
+                std::cout << String::formatted ("  %5d %4d/120 %8.3f %8.3f %8.3f %8.3f %8.3f %10d %13.1f %6.2f %6s",
                                                 static_cast<int> (r + 1), static_cast<int> (samples.gpu.size()), gpuMedian, percentile (samples.gpu, 0.95),
-                                                round.wallMilliseconds, percentile (samples.cpu, 0.5), samples.drawItems, casterDraws, round.load, getTierName (samples.tier))
+                                                round.wallMilliseconds, percentile (samples.cpu, 0.5), round.processCpu, samples.drawItems, casterDraws, round.load, getTierName (samples.tier))
                           << std::endl;
 
                 var scopesJson (new DynamicObject());
@@ -1078,6 +1104,7 @@ protected:
                 properties.setProperty ("frames", 120);
                 properties.setProperty ("wallMilliseconds", round.wallMilliseconds);
                 properties.setProperty ("cpuMedian", percentile (samples.cpu, 0.5));
+                properties.setProperty ("processCpu", round.processCpu);
                 properties.setProperty ("shadowsMean", round.shadowsMean);
                 properties.setProperty ("shadowRedraws", round.shadowRedraws);
                 properties.setProperty ("casterDrawsPerFrame", casterDraws);
@@ -1482,6 +1509,7 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
                 const auto label = String (config.name) + ", key radius " + String (keyRadius, 2) + ", " + String (width) + "x" + String (height);
                 RecordProperty (label.toStdString(), String (milliseconds, 3).toStdString());
                 std::cout << label.toStdString() << ": " << String (milliseconds, 3).toStdString() << " ms, "
+                          << String (processCpu, 3).toStdString() << " ms of CPU in the process, "
                           << shadowRedraws << " of 120 frames drew shadow maps" << std::endl;
             }
         }

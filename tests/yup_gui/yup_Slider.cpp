@@ -1344,3 +1344,56 @@ TEST_F (SliderGpuTest, TheValueOfAStepperIsPaintedInItsTextBounds)
     EXPECT_GT (numChangedInside, 0);
     EXPECT_EQ (numChangedOutside, 0);
 }
+
+//==============================================================================
+TEST_F (SliderStepperTest, ThePainterLaysTheValueOutAgainOnlyForAnotherValueOrOtherBounds)
+{
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    auto renderer = context->makeRenderer (200, 120);
+    Graphics g (*context, *renderer);
+
+    // The stepper lays nothing out: whoever paints it does
+    auto& kept = stepper.getTextLayoutCache();
+    EXPECT_TRUE (kept.styledText.isEmpty());
+
+    stepper.paint (g);
+    EXPECT_EQ (kept.text, "5");
+    EXPECT_FALSE (kept.styledText.isEmpty());
+    EXPECT_EQ (kept.styledText.getMaxSize(), stepper.getTextBounds().getSize());
+
+    // What is kept is what is painted again: emptied here, it stays empty until the painter has to lay it out
+    const auto isLaidOutAgain = [&] (const std::function<void()>& change)
+    {
+        kept.styledText.startUpdate().clear();
+        change();
+        stepper.paint (g);
+        return ! kept.styledText.isEmpty();
+    };
+
+    EXPECT_FALSE (isLaidOutAgain ([] {}));
+    EXPECT_FALSE (isLaidOutAgain ([this] { stepper.setValue (5.0); }));
+
+    // Another value, however it is set
+    EXPECT_TRUE (isLaidOutAgain ([this] { stepper.setValue (6.0, dontSendNotification); }));
+    EXPECT_EQ (kept.text, "6");
+
+    EXPECT_TRUE (isLaidOutAgain ([this] { pointer.click (stepper.getIncrementBounds().getCenter()); }));
+    EXPECT_EQ (kept.text, "7");
+
+    // What the value is written with: whole numbers for whole steps, decimal places for the others
+    EXPECT_TRUE (isLaidOutAgain ([this] { stepper.setRange (0.0, 10.0, 0.5); }));
+    EXPECT_EQ (kept.text, "7.000");
+
+    EXPECT_TRUE (isLaidOutAgain ([this] { stepper.setNumDecimalPlacesToDisplay (1); }));
+    EXPECT_EQ (kept.text, "7.0");
+
+    // The stepper moved, then other bounds of its value: a taller stepper, and a thumb size its parent sets without
+    // the stepper being told
+    EXPECT_FALSE (isLaidOutAgain ([this] { stepper.setBounds (10.0f, 0.0f, 200.0f, 30.0f); }));
+
+    EXPECT_TRUE (isLaidOutAgain ([this] { stepper.setBounds (0.0f, 0.0f, 200.0f, 120.0f); }));
+    EXPECT_EQ (kept.styledText.getMaxSize(), stepper.getTextBounds().getSize());
+
+    EXPECT_TRUE (isLaidOutAgain ([this] { panel.setProperty (Slider::Style::thumbSizeId, 32.0); }));
+    EXPECT_EQ (kept.styledText.getMaxSize(), stepper.getTextBounds().getSize());
+}

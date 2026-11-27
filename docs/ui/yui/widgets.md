@@ -124,13 +124,13 @@ style {
 | Widget | Properties a drawing reads | Parts |
 | --- | --- | --- |
 | `ListBox` | `orientation`, `scrollPosition`, `refreshing`, `refreshProgress`, `refreshIndicatorSize` | - |
-| `ListBoxItem` | `text`, `selected`, `hovered`, `iconPosition`, `hasIcon`, `iconBounds`, `textBounds` | `icon` (takes `bounds`) |
-| `TreeViewRow` | `text`, `depth`, `selected`, `hovered`, `openFraction`, `hasIcon`, `hasCustomContent`, `disclosureBounds`, `iconBounds`, `textBounds`, `indentSize`, `indentGuidesVisible` | `icon` (takes `bounds`) |
+| `ListBoxItem` | `text`, `selected`, `hovered`, `iconPosition`, `hasIcon`, `iconBounds`, `textBounds` | `icon`, `text` (take `bounds`) |
+| `TreeViewRow` | `text`, `depth`, `selected`, `hovered`, `openFraction`, `hasIcon`, `hasCustomContent`, `disclosureBounds`, `iconBounds`, `textBounds`, `indentSize`, `indentGuidesVisible` | `icon`, `text` (take `bounds`) |
 | `TabBar` | `orientation`, `variant`, `flipped`, `selectedTab`, `indicatorBounds` (it slides to the selected tab), `focusIndicatorVisible` | - |
-| `TabButton` | `text`, `iconGlyph`, `selected`, `closable`, `closeButtonOver`, `hasIcon`, `iconBounds`, `textBounds`, `closeBounds`, `arrowBounds` | `icon` (takes `bounds`) |
+| `TabButton` | `text`, `iconGlyph`, `selected`, `closable`, `closeButtonOver`, `hasIcon`, `iconBounds`, `textBounds`, `closeBounds`, `arrowBounds` | `icon`, `text` (take `bounds`) |
 
-- An icon given as a glyph is a text: draw it with
-  `text { bounds: iconBounds; text: iconGlyph; font: theme.iconFont; }`.
+- The `icon` part of a `TabButton` paints its image or its glyph, the glyph
+  filled with the fill color; `hasIcon` is true for either.
 - The rows of a `ListBox` made with a custom model are whatever components the
   model returns, painted by their own style.
 

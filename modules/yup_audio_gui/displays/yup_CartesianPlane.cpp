@@ -129,6 +129,7 @@ void CartesianPlane::setYScaleType (AxisScaleType scaleType)
 void CartesianPlane::setMargins (int top, int left, int bottom, int right)
 {
     margins = { jmax (0, left), jmax (0, top), jmax (0, right), jmax (0, bottom) };
+    layoutAxisLabels();
     repaint();
 }
 
@@ -138,6 +139,7 @@ void CartesianPlane::setMargins (const EdgeSpacing<int>& newMargins)
                 jmax (0, newMargins.getTop()),
                 jmax (0, newMargins.getRight()),
                 jmax (0, newMargins.getBottom()) };
+    layoutAxisLabels();
     repaint();
 }
 
@@ -230,18 +232,21 @@ void CartesianPlane::setHorizontalGridLines (const std::vector<double>& values, 
 void CartesianPlane::clearXAxisLabels()
 {
     xAxisLabels.clear();
+    xAxisLabelTexts.clear();
     repaint();
 }
 
 void CartesianPlane::addXAxisLabel (double value, const String& text, const Color& color, float fontSize)
 {
     xAxisLabels.emplace_back (value, text, color, fontSize);
+    layoutAxisLabels();
     repaint();
 }
 
 void CartesianPlane::setXAxisLabels (const std::vector<double>& values, const Color& color, float fontSize)
 {
     xAxisLabels.clear();
+    xAxisLabelTexts.clear();
     if (! values.empty())
     {
         int precision = determineAxisPrecision (values, getXScaleType());
@@ -251,24 +256,28 @@ void CartesianPlane::setXAxisLabels (const std::vector<double>& values, const Co
             xAxisLabels.emplace_back (value, text, color, fontSize);
         }
     }
+    layoutAxisLabels();
     repaint();
 }
 
 void CartesianPlane::clearYAxisLabels()
 {
     yAxisLabels.clear();
+    yAxisLabelTexts.clear();
     repaint();
 }
 
 void CartesianPlane::addYAxisLabel (double value, const String& text, const Color& color, float fontSize)
 {
     yAxisLabels.emplace_back (value, text, color, fontSize);
+    layoutAxisLabels();
     repaint();
 }
 
 void CartesianPlane::setYAxisLabels (const std::vector<double>& values, const Color& color, float fontSize)
 {
     yAxisLabels.clear();
+    yAxisLabelTexts.clear();
     if (! values.empty())
     {
         int precision = determineAxisPrecision (values, getYScaleType());
@@ -278,6 +287,7 @@ void CartesianPlane::setYAxisLabels (const std::vector<double>& values, const Co
             yAxisLabels.emplace_back (value, text, color, fontSize);
         }
     }
+    layoutAxisLabels();
     repaint();
 }
 
@@ -655,14 +665,17 @@ Path CartesianPlane::createSignalPath (const PlotSignal& signal, const SignalMap
 
 void CartesianPlane::drawAxisLabels (Graphics& g, const Rectangle<float>& bounds)
 {
+    // The font of the theme can change without the plane being told
+    layoutAxisLabels();
+
     // Draw X axis labels
-    for (const auto& label : xAxisLabels)
+    for (size_t i = 0; i < xAxisLabels.size(); ++i)
     {
+        const auto& label = xAxisLabels[i];
         float x = valueToX (label.value);
         if (x >= bounds.getX() && x <= bounds.getRight())
         {
             g.setFillColor (label.color);
-            auto font = ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (label.fontSize);
 
             Rectangle<int> labelBounds (
                 static_cast<int> (x - 30),
@@ -670,18 +683,18 @@ void CartesianPlane::drawAxisLabels (Graphics& g, const Rectangle<float>& bounds
                 60,
                 margins.getBottom() - 2);
 
-            g.fillFittedText (label.text, font, labelBounds, Justification::center);
+            g.fillFittedText (*xAxisLabelTexts[i], labelBounds);
         }
     }
 
     // Draw Y axis labels
-    for (const auto& label : yAxisLabels)
+    for (size_t i = 0; i < yAxisLabels.size(); ++i)
     {
+        const auto& label = yAxisLabels[i];
         float y = valueToY (label.value);
         if (y >= bounds.getY() && y <= bounds.getBottom())
         {
             g.setFillColor (label.color);
-            auto font = ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (label.fontSize);
 
             Rectangle<int> labelBounds (
                 2,
@@ -689,9 +702,45 @@ void CartesianPlane::drawAxisLabels (Graphics& g, const Rectangle<float>& bounds
                 margins.getLeft() - 4,
                 16);
 
-            g.fillFittedText (label.text, font, labelBounds, Justification::right);
+            g.fillFittedText (*yAxisLabelTexts[i], labelBounds);
         }
     }
+}
+
+void CartesianPlane::layoutAxisLabels()
+{
+    const auto font = ApplicationTheme::getGlobalTheme()->getDefaultFont();
+
+    if (axisLabelFont != font)
+    {
+        xAxisLabelTexts.clear();
+        yAxisLabelTexts.clear();
+        axisLabelFont = font;
+    }
+
+    const auto layout = [&font] (const std::vector<AxisLabel>& labels, std::vector<std::unique_ptr<StyledText>>& texts, const Size<float>& size, StyledText::HorizontalAlign align)
+    {
+        // The texts are made again for another margin, then for the labels that have none
+        if (! texts.empty() && texts.front()->getMaxSize() != size)
+            texts.clear();
+
+        while (texts.size() < labels.size())
+        {
+            const auto& label = labels[texts.size()];
+
+            auto modifier = texts.emplace_back (std::make_unique<StyledText>())->startUpdate();
+            modifier.setMaxSize (size);
+            modifier.setHorizontalAlign (align);
+            modifier.setVerticalAlign (StyledText::middle);
+
+            if (label.text.isNotEmpty())
+                modifier.appendText (label.text, font.withHeight (label.fontSize));
+        }
+    };
+
+    // In the areas drawAxisLabels() writes them in
+    layout (xAxisLabels, xAxisLabelTexts, Size<float> (60.0f, static_cast<float> (margins.getBottom() - 2)), StyledText::center);
+    layout (yAxisLabels, yAxisLabelTexts, Size<float> (static_cast<float> (margins.getLeft() - 4), 16.0f), StyledText::right);
 }
 
 void CartesianPlane::drawTitle (Graphics& g)

@@ -377,6 +377,9 @@ TEST_F (ThemeVersion1GeometryTests, PaintsThePartsOfTheWidgetsUnderTheNamesTheyT
     EXPECT_TRUE (isPainted (textEditor, TextEditor::Style::textPartId, "text"));
     EXPECT_TRUE (isPainted (textEditor, TextEditor::Style::caretPartId, "caret"));
     EXPECT_TRUE (isPainted (listBoxItem, ListBoxItem::Style::iconPartId, "icon"));
+    EXPECT_TRUE (isPainted (listBoxItem, ListBoxItem::Style::textPartId, "text"));
     EXPECT_TRUE (isPainted (treeViewRow, TreeViewRow::Style::iconPartId, "icon"));
+    EXPECT_TRUE (isPainted (treeViewRow, TreeViewRow::Style::textPartId, "text"));
     EXPECT_TRUE (isPainted (tabButton, TabButton::Style::iconPartId, "icon"));
+    EXPECT_TRUE (isPainted (tabButton, TabButton::Style::textPartId, "text"));
 }

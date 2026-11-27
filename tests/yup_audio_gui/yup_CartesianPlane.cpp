@@ -1216,6 +1216,20 @@ protected:
         return pixels[(static_cast<size_t> (y) * static_cast<size_t> (width) + static_cast<size_t> (x)) * 4u] > 128;
     }
 
+    /** The smallest area holding the pixels of an area of the canvas that the signal, or a label of its color, covers
+        as it was last painted. Empty when it covers none. */
+    Rectangle<int> getSignalExtent (Rectangle<int> area) const
+    {
+        Rectangle<int> extent;
+
+        for (int y = area.getY(); y < area.getBottom(); ++y)
+            for (int x = area.getX(); x < area.getRight(); ++x)
+                if (isSignalAt (x, y))
+                    extent = extent.unionWith ({ x, y, 1, 1 });
+
+        return extent;
+    }
+
     /** A level line of two points, from 5% to 95% of the default range of x. */
     static std::vector<Point<double>> makeLine (double level)
     {
@@ -1411,333 +1425,93 @@ TEST_F (CartesianPlaneGpuTests, ADenseSignalIsPaintedForThePixelsOfTheScaleItIsP
     EXPECT_FALSE (isSignalAt (300, 150));
 }
 
-// TEMPORARY-PERF-AB begin
-//
-// What the findings P4 and P6 of the widgets cost today in yup_audio_gui, before anything is written for them (see the
-// block of the same name in tests/yup_gui/yup_PaintBenchmark.cpp). Each test appends its lines to build/w6b-measure.txt
-// in the repository and prints them, as "<finding>: <what> = <median ms> (<n> iterations)": the median of 200
-// iterations timed after 30 warm-ups. A paint is into a canvas at 2 pixels a unit and is told twice, the paint call
-// alone and with the frame around it up to its commit. What is too short to time once is run a number of times over
-// and told for one of them.
-
-#include <yup_gui_markup/yup_gui_markup.h>
-
-/** P4: what laying out their texts at every paint costs the labels of a plot and the channel labels of an audio view.
-    Each is painted with its texts and without, beside the layout of the texts alone. */
-TEST_F (CartesianPlaneGpuTests, DISABLED_TemporaryMeasurePlotAndChannelLabels)
+TEST_F (CartesianPlaneGpuTests, AnAxisLabelIsPaintedWithItsTextWhereItsAxisPlacesIt)
 {
-    const auto tell = [] (const String& what, std::vector<double> milliseconds)
-    {
-        std::sort (milliseconds.begin(), milliseconds.end());
+    const Color red (0xffff0000);
 
-        const auto file = File (__FILE__).getParentDirectory().getParentDirectory().getParentDirectory().getChildFile ("build/w6b-measure.txt");
-        const auto line = what + " = " + String (milliseconds[milliseconds.size() / 2], 6) + " (" + String (static_cast<int> (milliseconds.size())) + " iterations)\n";
+    // A plot of 300 by 240 from 80, 20: the label of the middle of the x axis is written in an area of 60 under it
+    plane->setMargins (20, 80, 40, 20);
+    plane->addXAxisLabel (0.5, "8", red, 20.0f);
+    ASSERT_TRUE (paintPlane());
 
-        EXPECT_TRUE (file.getParentDirectory().createDirectory().wasOk() && file.appendText (line, false, false, "\n")) << "Could not append to " << file.getFullPathName();
-        std::cout << line << std::flush;
-    };
+    const auto one = getSignalExtent ({ 200, 262, 60, 38 });
+    EXPECT_FALSE (one.isEmpty());
 
-    const auto timeRun = [&tell] (const String& what, int timesOver, const std::function<void()>& run)
-    {
-        std::vector<double> milliseconds;
+    // A longer text is a wider one
+    plane->clearXAxisLabels();
+    plane->addXAxisLabel (0.5, "888", red, 20.0f);
+    ASSERT_TRUE (paintPlane());
+    EXPECT_GT (getSignalExtent ({ 200, 262, 60, 38 }).getWidth(), one.getWidth());
 
-        for (int iteration = 0; iteration < 230; ++iteration)
-        {
-            const auto start = Time::getMillisecondCounterHiRes();
+    // A quarter of the way along twice the range
+    plane->setXRange (0.0, 2.0);
+    ASSERT_TRUE (paintPlane());
+    EXPECT_FALSE (getSignalExtent ({ 125, 262, 60, 38 }).isEmpty());
+    EXPECT_TRUE (getSignalExtent ({ 200, 262, 60, 38 }).isEmpty());
 
-            for (int i = 0; i < timesOver; ++i)
-                run();
+    // And along a plot half as wide
+    plane->setBounds (0.0f, 0.0f, 250.0f, static_cast<float> (height));
+    ASSERT_TRUE (paintPlane());
+    EXPECT_FALSE (getSignalExtent ({ 87, 262, 60, 38 }).isEmpty());
+    EXPECT_TRUE (getSignalExtent ({ 150, 262, 60, 38 }).isEmpty());
 
-            if (iteration >= 30)
-                milliseconds.push_back ((Time::getMillisecondCounterHiRes() - start) / timesOver);
-        }
-
-        tell (what, milliseconds);
-    };
-
-    const auto timePaint = [&] (const String& what, Component& component, GpuCanvas& target)
-    {
-        std::vector<double> paints, frames;
-
-        for (int iteration = 0; iteration < 230; ++iteration)
-        {
-            const auto frameStart = Time::getMillisecondCounterHiRes();
-            auto& g = target.beginDraw ({}, 2.0f);
-
-            const auto paintStart = Time::getMillisecondCounterHiRes();
-            component.paint (g);
-            const auto paintEnd = Time::getMillisecondCounterHiRes();
-
-            target.commit();
-            const auto frameEnd = Time::getMillisecondCounterHiRes();
-
-            pixels.resize (static_cast<size_t> (target.getWidth()) * static_cast<size_t> (target.getHeight()) * 4u);
-            EXPECT_TRUE (target.readPixels (pixels.data(), pixels.size()));
-
-            if (iteration < 30)
-                continue;
-
-            paints.push_back (paintEnd - paintStart);
-            frames.push_back (frameEnd - frameStart);
-        }
-
-        tell (what + ", paint call", paints);
-        tell (what + ", paint call and commit", frames);
-    };
-
-    ASSERT_NE (ApplicationTheme::getGlobalTheme(), nullptr);
-
-    // Makes and lays out a text as Graphics::fillFittedText does for a String, without drawing it
-    const auto layOut = [] (const String& text, const Font& font, Size<float> area, StyledText::HorizontalAlign align)
-    {
-        StyledText styledText;
-        {
-            auto modifier = styledText.startUpdate();
-            modifier.setMaxSize (area);
-            modifier.appendText (text, font);
-            modifier.setHorizontalAlign (align);
-            modifier.setVerticalAlign (StyledText::middle);
-        }
-
-        return styledText.isEmpty() ? 0 : 1;
-    };
-
-    // CartesianPlane: a curve, a grid and 20 axis labels, with no title and no legend
-    {
-        StringArray texts;
-
-        for (int i = 0; i < 10; ++i)
-        {
-            texts.add (String ((i + 1) * 2000) + " Hz");
-            texts.add (String ((i + 1) * 6 - 66) + " dB");
-        }
-
-        std::vector<Point<double>> curve;
-
-        for (int i = 0; i < 512; ++i)
-            curve.push_back ({ i / 511.0, 0.5 + 0.4 * std::sin (i * 0.05) });
-
-        CartesianPlane withTexts, withoutTexts;
-
-        for (auto* each : { &withTexts, &withoutTexts })
-        {
-            each->setBounds (0.0f, 0.0f, 400.0f, 300.0f);
-            each->setProperty ("legendVisible", false);
-            each->updateSignalData (each->addSignal ("Curve"), curve);
-
-            for (int i = 0; i < 10; ++i)
-            {
-                const auto value = (i + 0.5) / 10.0;
-
-                each->addVerticalGridLine (value);
-                each->addHorizontalGridLine (value);
-                each->addXAxisLabel (value, each == &withTexts ? texts[2 * i] : String());
-                each->addYAxisLabel (value, each == &withTexts ? texts[2 * i + 1] : String());
-            }
-        }
-
-        if (const auto target = GpuCanvas::create (*gpuContext, 800, 600); target != nullptr)
-        {
-            timePaint ("P4: CartesianPlane of a curve, a grid and 20 axis labels", withTexts, *target);
-            timePaint ("P4: the same CartesianPlane with empty labels", withoutTexts, *target);
-
-            int numLaidOut = 0;
-
-            timeRun ("P4: the texts of those 20 axis labels made and laid out as the plane does, alone", 10, [&]
-            {
-                for (int i = 0; i < texts.size(); ++i)
-                {
-                    const auto font = ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (10.0f);
-
-                    numLaidOut += i % 2 == 0 ? layOut (texts[i], font, Size<float> (60.0f, 23.0f), StyledText::center)
-                                             : layOut (texts[i], font, Size<float> (56.0f, 16.0f), StyledText::right);
-                }
-            });
-
-            EXPECT_GT (numLaidOut, 0);
-        }
-        else
-        {
-            ADD_FAILURE() << "No canvas to paint the CartesianPlane in";
-        }
-    }
-
-    // AudioView: 8 channels, and the same view telling no label for them
-    {
-        struct Unlabelled final : AudioViewComponent
-        {
-            using AudioViewComponent::AudioViewComponent;
-
-            String getChannelLabel (int) const override { return {}; }
-        };
-
-        AudioBuffer<float> buffer (8, 10000);
-
-        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
-        {
-            auto* samples = buffer.getWritePointer (channel);
-
-            for (int i = 0; i < buffer.getNumSamples(); ++i)
-                samples[i] = std::sin (0.002f * static_cast<float> ((channel + 1) * i));
-        }
-
-        AudioThumbnail thumbnail;
-        thumbnail.setSource (&buffer, 44100.0);
-
-        AudioViewComponent labelled (thumbnail);
-        Unlabelled unlabelled (thumbnail);
-        labelled.setBounds (0.0f, 0.0f, 400.0f, 300.0f);
-        unlabelled.setBounds (0.0f, 0.0f, 400.0f, 300.0f);
-
-        const auto profile = thumbnail.getPeakProfile();
-        const auto target = GpuCanvas::create (*gpuContext, 800, 600);
-
-        if (target != nullptr && profile != nullptr && profile->isValid())
-        {
-            timePaint ("P4: AudioView of 8 channels with their labels", labelled, *target);
-            timePaint ("P4: the same AudioView telling no channel label", unlabelled, *target);
-
-            int numLaidOut = 0;
-
-            timeRun ("P4: the texts of those 8 channel labels made and laid out as the view does, alone", 10, [&]
-            {
-                const auto font = ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
-
-                for (int channel = 0; channel < 8; ++channel)
-                    numLaidOut += layOut ("Ch " + String (channel + 1), font, Size<float> (48.0f, 35.0f), StyledText::center);
-            });
-
-            EXPECT_GT (numLaidOut, 0);
-        }
-        else
-        {
-            ADD_FAILURE() << "No AudioView of 8 channels to measure";
-        }
-    }
+    // No text leaves nothing
+    plane->clearXAxisLabels();
+    plane->addXAxisLabel (0.5, String(), red, 20.0f);
+    ASSERT_TRUE (paintPlane());
+    EXPECT_TRUE (getSignalExtent ({ 0, 262, 250, 38 }).isEmpty());
 }
 
-/** P6: what filling the series of the keyboard again at every read costs a drawing reading them. A keyboard painted by
-    the Keys drawing of docs/ui/yui/widgets.md, beside the reads a paint of it makes alone. */
-TEST_F (CartesianPlaneGpuTests, DISABLED_TemporaryMeasureKeyboardSeries)
+TEST_F (CartesianPlaneGpuTests, AnAxisLabelIsLaidOutAgainForTheMarginItIsWrittenIn)
 {
-    const auto tell = [] (const String& what, std::vector<double> milliseconds)
-    {
-        std::sort (milliseconds.begin(), milliseconds.end());
+    const Color red (0xffff0000);
 
-        const auto file = File (__FILE__).getParentDirectory().getParentDirectory().getParentDirectory().getChildFile ("build/w6b-measure.txt");
-        const auto line = what + " = " + String (milliseconds[milliseconds.size() / 2], 6) + " (" + String (static_cast<int> (milliseconds.size())) + " iterations)\n";
+    // Too long for a margin of 80, the label of the y axis takes more than a line of it
+    plane->setMargins (20, 80, 40, 20);
+    plane->addYAxisLabel (0.5, "88 88 88 88 88", red, 16.0f);
+    ASSERT_TRUE (paintPlane());
 
-        EXPECT_TRUE (file.getParentDirectory().createDirectory().wasOk() && file.appendText (line, false, false, "\n")) << "Could not append to " << file.getFullPathName();
-        std::cout << line << std::flush;
-    };
+    const auto wrapped = getSignalExtent ({ 0, 60, 80, 160 });
+    ASSERT_FALSE (wrapped.isEmpty());
 
-    const auto timeRun = [&tell] (const String& what, int timesOver, const std::function<void()>& run)
-    {
-        std::vector<double> milliseconds;
+    // And one line of a margin of 200
+    plane->setMargins (20, 200, 40, 20);
+    ASSERT_TRUE (paintPlane());
 
-        for (int iteration = 0; iteration < 230; ++iteration)
-        {
-            const auto start = Time::getMillisecondCounterHiRes();
+    const auto oneLine = getSignalExtent ({ 0, 60, 200, 160 });
+    ASSERT_FALSE (oneLine.isEmpty());
+    EXPECT_LT (oneLine.getHeight(), wrapped.getHeight());
+    EXPECT_GT (oneLine.getWidth(), wrapped.getWidth());
 
-            for (int i = 0; i < timesOver; ++i)
-                run();
-
-            if (iteration >= 30)
-                milliseconds.push_back ((Time::getMillisecondCounterHiRes() - start) / timesOver);
-        }
-
-        tell (what, milliseconds);
-    };
-
-    const auto timePaint = [&] (const String& what, Component& component, GpuCanvas& target)
-    {
-        std::vector<double> paints, frames;
-
-        for (int iteration = 0; iteration < 230; ++iteration)
-        {
-            const auto frameStart = Time::getMillisecondCounterHiRes();
-            auto& g = target.beginDraw ({}, 2.0f);
-
-            const auto paintStart = Time::getMillisecondCounterHiRes();
-            component.paint (g);
-            const auto paintEnd = Time::getMillisecondCounterHiRes();
-
-            target.commit();
-            const auto frameEnd = Time::getMillisecondCounterHiRes();
-
-            pixels.resize (static_cast<size_t> (target.getWidth()) * static_cast<size_t> (target.getHeight()) * 4u);
-            EXPECT_TRUE (target.readPixels (pixels.data(), pixels.size()));
-
-            if (iteration < 30)
-                continue;
-
-            paints.push_back (paintEnd - paintStart);
-            frames.push_back (frameEnd - frameStart);
-        }
-
-        tell (what + ", paint call", paints);
-        tell (what + ", paint call and commit", frames);
-    };
-
-    ASSERT_NE (ApplicationTheme::getGlobalTheme(), nullptr);
-
-    MidiKeyboardComponent keyboard;
-    keyboard.setBounds (0.0f, 0.0f, 800.0f, 100.0f);
-
-    const auto parsed = YuiParser::parse (R"yui(
-        drawing Keys {
-            repeat i in 0 .. len (keyNotes) {
-                rect { id: white; bounds: keyBounds[i].reduced (0.5); cornerRadius: 2; visible: ! keyBlack[i];
-                       fill: keyPressed[i] ? palette.accent : palette.text; }
-            }
-
-            repeat i in 0 .. len (keyNotes) {
-                rect { id: black; bounds: keyBounds[i]; cornerRadius: 2; visible: keyBlack[i];
-                       fill: keyPressed[i] ? palette.accent : palette.surfaceRaised; }
-            }
-        })yui");
-    ASSERT_TRUE (parsed.wasOk()) << DataTreeDiagnostic::join (parsed.diagnostics);
-
-    const auto created = DrawingStyle::create (keyboard, parsed.document.getChildWithName ("drawing"));
-    ASSERT_TRUE (created.wasOk()) << created.getErrorMessage();
-    keyboard.setStyle (created.getReference());
-
-    const auto target = GpuCanvas::create (*gpuContext, 1600, 200);
-    ASSERT_NE (target, nullptr);
-
-    // Reads series of the keyboard as a drawing does, where the keyboard keeps them: one read for each name
-    const auto timeSeries = [&] (const String& what, std::initializer_list<const char*> names)
-    {
-        std::vector<const ComponentProperty*> series;
-
-        for (const auto* name : names)
-        {
-            const auto* property = keyboard.getTypeInfo().findProperty (Identifier (name));
-            ASSERT_TRUE (property != nullptr && property->isSeries()) << name;
-            series.push_back (property);
-        }
-
-        int numElements = 0;
-
-        timeRun (what, 100, [&]
-        {
-            for (const auto* property : series)
-                numElements += property->arrayGetter (keyboard).size;
-        });
-
-        EXPECT_GT (numElements, 0);
-    };
-
-    timePaint ("P6: MidiKeyboard of 85 keys painted by a drawing reading its series", keyboard, *target);
-
-    // Each repeat reads 1 series and its rect 3
-    timeSeries ("P6: the 8 series reads a paint of that drawing makes, alone",
-                { "keyNotes", "keyBounds", "keyBlack", "keyPressed", "keyNotes", "keyBounds", "keyBlack", "keyPressed" });
-
-    timeSeries ("P6: each of the 5 series of the keyboard read once, alone",
-                { "keyBounds", "keyNotes", "keyBlack", "keyPressed", "keyHovered" });
-
-    keyboard.setStyle (nullptr);
+    // Back in the narrow one it is written as it was
+    plane->setMargins (20, 80, 40, 20);
+    ASSERT_TRUE (paintPlane());
+    EXPECT_EQ (getSignalExtent ({ 0, 60, 80, 160 }), wrapped);
 }
 
-// TEMPORARY-PERF-AB end
+TEST_F (CartesianPlaneGpuTests, AnAxisLabelIsLaidOutAgainInAnotherFontOfTheTheme)
+{
+    const auto otherFont = Font::loadFontFromFile (File (__FILE__).getParentDirectory().getParentDirectory().getChildFile ("data/fonts/Linefont-VariableFont_wdth,wght.ttf"));
+    ASSERT_TRUE (otherFont.wasOk()) << otherFont.getErrorMessage();
+
+    // A theme of its own, to change its font
+    auto oldTheme = ApplicationTheme::getGlobalTheme();
+    auto theme = createThemeVersion1();
+    ApplicationTheme::setGlobalTheme (theme);
+    const ScopeGuard restoreTheme { [&]
+    {
+        ApplicationTheme::setGlobalTheme (oldTheme.get());
+    } };
+
+    plane->setMargins (20, 80, 40, 20);
+    plane->addXAxisLabel (0.5, "888", Color (0xffff0000), 20.0f);
+    ASSERT_TRUE (paintPlane());
+
+    const auto written = getSignalExtent ({ 200, 262, 60, 38 });
+    ASSERT_FALSE (written.isEmpty());
+
+    // Nothing tells the plane that the font of the theme changed
+    theme->setDefaultFont (otherFont.getValue());
+    ASSERT_TRUE (paintPlane());
+    EXPECT_NE (getSignalExtent ({ 200, 262, 60, 38 }), written);
+}

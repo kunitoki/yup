@@ -361,6 +361,7 @@ private:
     void drawSignals (Graphics& g, const Rectangle<float>& bounds);
     Path createSignalPath (const PlotSignal& signal, const SignalMapping& mapping);
     void drawAxisLabels (Graphics& g, const Rectangle<float>& bounds);
+    void layoutAxisLabels();
     void drawTitle (Graphics& g);
     void drawLegend (Graphics& g, const Rectangle<float>& bounds);
 
@@ -395,6 +396,12 @@ private:
     // Axis labels
     std::vector<AxisLabel> xAxisLabels;
     std::vector<AxisLabel> yAxisLabels;
+
+    // The text of each axis label, laid out when the label is added and when the margin it is written in or the font
+    // of the theme changes
+    std::vector<std::unique_ptr<StyledText>> xAxisLabelTexts;
+    std::vector<std::unique_ptr<StyledText>> yAxisLabelTexts;
+    Font axisLabelFont;
 
     // Signals
     std::vector<PlotSignal> signals;

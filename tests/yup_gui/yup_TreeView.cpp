@@ -1462,3 +1462,61 @@ TEST_F (TreeViewTests, OpennessStateCanCarryTheScrollPosition)
 
     EXPECT_FLOAT_EQ (100.0f, tree->getScrollPosition());
 }
+
+TEST_F (TreeViewTests, ThePainterOfARowLaysTheTextOfItsItemOutAgainOnlyForAnotherTextOrOtherBounds)
+{
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    auto renderer = context->makeRenderer (300, 240);
+    Graphics g (*context, *renderer);
+
+    buildFlatTree (2);
+    auto& item = find ("0");
+
+    auto* row = dynamic_cast<TreeViewRow*> (list().getComponentForRow (0));
+    ASSERT_NE (nullptr, row);
+
+    // The row lays nothing out: whoever paints it does
+    auto& kept = row->getTextLayoutCache();
+    EXPECT_TRUE (kept.styledText.isEmpty());
+
+    row->paint (g);
+    EXPECT_EQ (kept.text, "0");
+    EXPECT_FALSE (kept.styledText.isEmpty());
+    EXPECT_EQ (kept.styledText.getMaxSize(), row->getTextBounds().getSize());
+
+    // What is kept is what is painted again: emptied here, it stays empty until the painter has to lay it out
+    const auto isLaidOutAgain = [&] (const std::function<void()>& change)
+    {
+        kept.styledText.startUpdate().clear();
+        change();
+        row->paint (g);
+        return ! kept.styledText.isEmpty();
+    };
+
+    // A row refreshed with nothing changed, then selected
+    EXPECT_FALSE (isLaidOutAgain ([&item] { item.itemChanged(); }));
+    EXPECT_FALSE (isLaidOutAgain ([&item] { item.setSelected (true); }));
+
+    EXPECT_TRUE (isLaidOutAgain ([&item]
+    {
+        item.name = "Another name";
+        item.itemChanged();
+    }));
+    EXPECT_EQ (kept.text, "Another name");
+
+    // Other bounds of the text: an icon before it, another indent, another width of the tree
+    EXPECT_TRUE (isLaidOutAgain ([&item]
+    {
+        item.paintsIcon = true;
+        item.itemChanged();
+    }));
+    EXPECT_EQ (kept.styledText.getMaxSize(), row->getTextBounds().getSize());
+
+    EXPECT_TRUE (isLaidOutAgain ([this] { tree->setIndentSize (32.0f); }));
+    EXPECT_EQ (kept.styledText.getMaxSize(), row->getTextBounds().getSize());
+
+    EXPECT_TRUE (isLaidOutAgain ([this] { tree->setBounds (0.0f, 0.0f, 200.0f, 240.0f); }));
+    EXPECT_EQ (kept.styledText.getMaxSize(), row->getTextBounds().getSize());
+
+    EXPECT_EQ (dynamic_cast<TreeViewRow*> (list().getComponentForRow (0)), row);
+}

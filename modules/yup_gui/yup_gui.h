@@ -171,6 +171,7 @@
 #include "effects/yup_FilterEffect.h"
 #include "effects/yup_ComponentEffectRegistry.h"
 #include "themes/yup_ThemePalette.h"
+#include "themes/yup_TextLayoutCache.h"
 #include "component/yup_ComponentStyle.h"
 #include "component/yup_ComponentPaintMetrics.h"
 #include "component/yup_ComponentListener.h"

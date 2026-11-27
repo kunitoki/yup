@@ -143,6 +143,7 @@ public:
         static const Identifier backgroundColorHoveredId;  /**< The identifier for the hovered background color. */
 
         static const Identifier iconPartId;                /**< The name of the part that is the icon: `part icon { }` in a drawing. */
+        static const Identifier textPartId;                /**< The name of the part that is the text: `part text { }` in a drawing. */
     };
 
     //==============================================================================
@@ -158,6 +159,13 @@ public:
 
     /** Returns the area of the icon, beside the text where getIconPosition() tells. Empty for an item without an icon. */
     Rectangle<float> getIconBounds() const { return iconBounds; }
+
+    //==============================================================================
+    /** Returns where whoever paints the item keeps the text it laid out, to lay it out again only when it has to.
+
+        The item holds it and never looks into it: see TextLayoutCache.
+    */
+    TextLayoutCache& getTextLayoutCache() const noexcept { return textLayoutCache; }
 
     //==============================================================================
     /** @internal */
@@ -178,6 +186,7 @@ private:
 
     Rectangle<float> textBounds;
     Rectangle<float> iconBounds;
+    mutable TextLayoutCache textLayoutCache;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ListBoxItem)
 };

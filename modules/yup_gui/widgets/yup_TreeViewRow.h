@@ -97,6 +97,7 @@ public:
     struct Style
     {
         static const Identifier iconPartId; /**< The name of the part that is the icon of the row's item: `part icon { }` in a drawing. */
+        static const Identifier textPartId; /**< The name of the part that is the text of the row's item: `part text { }` in a drawing. */
     };
 
     //==============================================================================
@@ -105,6 +106,13 @@ public:
 
     /** @internal */
     const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
+
+    //==============================================================================
+    /** Returns where whoever paints the row keeps the text it laid out, to lay it out again only when it has to.
+
+        The row holds it and never looks into it: see TextLayoutCache.
+    */
+    TextLayoutCache& getTextLayoutCache() const noexcept { return textLayoutCache; }
 
     //==============================================================================
     /** @internal */
@@ -130,6 +138,7 @@ private:
     bool itemHasIcon = false;
     std::unique_ptr<Component> content;
     std::unique_ptr<DisclosureButton> disclosureButton;
+    mutable TextLayoutCache textLayoutCache;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TreeViewRow)
 };
