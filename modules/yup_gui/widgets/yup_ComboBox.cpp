@@ -34,7 +34,6 @@ struct ComboBoxIds
     static inline const Identifier selectedIndex { "selectedIndex" };
     static inline const Identifier text { "text" };
     static inline const Identifier open { "open" };
-    static inline const Identifier textPart { "text" };
 };
 
 } // namespace
@@ -49,6 +48,7 @@ const Identifier ComboBox::Style::focusedBorderColorId = "comboBoxFocusedBorder"
 const Identifier ComboBox::Style::cornerRadiusId = "comboBoxCornerRadius";
 const Identifier ComboBox::Style::outlineWidthId = "comboBoxOutlineWidth";
 const Identifier ComboBox::Style::focusedOutlineWidthId = "comboBoxFocusedOutlineWidth";
+const Identifier ComboBox::Style::textPartId = "text";
 
 //==============================================================================
 
@@ -71,7 +71,7 @@ const ComponentTypeInfo& ComboBox::getClassTypeInfo()
                                  .readOnly ("textBounds", &ComboBox::getTextBounds, {}, "The area the text of the selected item is laid out in.")
                                  .readOnly ("arrowBounds", &ComboBox::getArrowBounds, {}, "The area of the arrow at the end of the box.")
                                  .signal ("onSelectedItemChanged", &ComboBox::onSelectedItemChanged, "Emitted when another item is selected")
-                                 .part (ComboBoxIds::textPart, &ComboBox::getTextBounds, "The text of the selected item, filled with the fill color in the area it is given: the one of textBounds when it is given none.")
+                                 .part (Style::textPartId, &ComboBox::getTextBounds, "The text of the selected item, filled with the fill color in the area it is given: the one of textBounds when it is given none.")
                                  .build();
 
     return info;

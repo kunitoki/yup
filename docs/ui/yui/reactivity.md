@@ -117,6 +117,17 @@ graph.bind (meter, "value", "gain.value * 2", ComponentProperty::Type::number, r
 where bindings can be inspected, removed with `unbind`, or added to the built
 tree.
 
+`findLinkedModel` tells which property of a model a property is linked to,
+following the links between the two, as the alias of a `component` block is.
+It is how [`edit`](documents.md#editing-a-value-as-text) finds the text a model
+shows a value with:
+
+```cpp
+if (const auto linked = graph.findLinkedModel (dial, "value"))
+    if (auto* provider = linked->model->getProvider())
+        text = provider->getTextForValue (linked->property, dial.getValue()).value_or (text);
+```
+
 ## See also
 
 - [How YUI fits together](architecture.md) - diagrams of the binding classes

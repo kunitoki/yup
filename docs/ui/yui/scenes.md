@@ -109,6 +109,10 @@ Every element also has the properties of a component: `id`, `class`,
 | `tier` | `automatic`, `raster`, `full` | `automatic` | The tier of the renderer drawing the scene, see below. |
 | `samples` | integer | `4` | The samples per pixel that smooth the edges on the raster tier, rounded down to a power of two the device supports. `1` turns it off. |
 | `bloom` | boolean | `false` | A glow around the bright highlights, where the device can draw it. |
+| `environment` | string | `""` | The path of a panorama lighting the scene, see below and [Assets and hot reload](#assets-and-hot-reload). |
+| `environmentIntensity` | number | `1` | The multiplier applied to the light of the environment. |
+| `environmentVisible` | boolean | `false` | Draws the environment behind the scene, instead of the `background`. |
+| `loading` | boolean | read only | Whether a file of the scene is still being loaded, see [Assets and hot reload](#assets-and-hot-reload). |
 
 - A `Scene3D` is sized as every component is: by the layout it is in
   (`flexGrow: 1`), or by its `width` and `height`.
@@ -118,8 +122,32 @@ Every element also has the properties of a component: `id`, `class`,
   which can read `parent.width` and `parent.height`.
 - Clips, transitions, keyframes and shaders given the time repaint the scene by
   themselves. `continuous` is for scenes that code animates.
-- The environment, the fog and the other settings of the renderer have no
-  property: see [What is left to C++](#what-is-left-to-c).
+- The fog and the other settings of the renderer have no property: see
+  [What is left to C++](#what-is-left-to-c).
+
+`environment` lights the scene from an image: every surface reflects it,
+sharply when smooth and blurred when rough, and receives its soft light, which
+is what gives a metal something to show. The image is a panorama of what
+surrounds the scene, twice as wide as it is high, its top row straight above
+and its bottom row straight below. Its colors are those of an ordinary image:
+`environmentIntensity` makes its light stronger or weaker.
+
+```yui
+Scene3D {
+    environment: "images/studio.jpg"; environmentIntensity: 1.5; ambient: #000000;
+
+    Camera3D { position: [0, 0.5, 4]; lookAt: [0, 0, 0]; }
+    Model3D  { source: "models/computer.glb"; }
+}
+```
+
+- The environment adds to the lights and to `ambient`: lower `ambient`, often
+  to black, when an environment lights the scene.
+- `environmentVisible: true` draws the panorama behind the scene. It then
+  covers the `background`, a translucent one included.
+- An environment made by code, an analytic sky or one brighter than an image
+  can hold, is given to the scene from C++: see
+  [What is left to C++](#what-is-left-to-c).
 
 `tier` is `automatic` by default: the full tier of the renderer on the desktop
 GPUs that can run it, and the raster tier elsewhere, as on phones, tablets and
@@ -369,9 +397,9 @@ style {
   to three numbers is not blended, and neither are lists of different lengths.
 - A [transition needs a value on both sides](styles.md#transitions-and-animations):
   give the resting rule one.
-- `toneMapping`, `continuous`, `tier`, `samples`, `bloom`, `projection`,
-  `type`, `surface`, `node`, `source` and `scene` are not styleable: set them
-  on the element.
+- `toneMapping`, `continuous`, `tier`, `samples`, `bloom`, `environment`,
+  `projection`, `type`, `surface`, `node`, `source` and `scene` are not
+  styleable: set them on the element.
 - `@keyframes` hold the values themselves. To move several objects the same
   way around where each stands, put each in a `Node3D` that places it, and
   animate the object inside.
@@ -815,9 +843,9 @@ Stack {
 
 ## Assets and hot reload
 
-The models of `Model3D`, the textures of `Material3D` and the shaders of
-`shader` blocks are read through the document, by paths relative to the folder
-of its main file:
+The models of `Model3D`, the textures of `Material3D`, the `environment` of a
+`Scene3D` and the shaders of `shader` blocks are read through the document, by
+paths relative to the folder of its main file:
 
 - from that folder, for a document loaded from a file;
 - from the resources embedded in the binary, listed in the `ASSETS`, `SHADERS`
@@ -825,16 +853,42 @@ of its main file:
   [`yup_add_yui_resources`](hot-reload.md#embedded-resources);
 - from the unsaved text of an editor, for text files.
 
+A model, a texture and an environment are loaded in the background: the
+interface opens without waiting for them, and the scene shows each one when it
+is ready. Until then a `Model3D` shows nothing, a material goes without its
+texture and the scene keeps the environment it had, or none. The `loading` of
+the `Scene3D` is true meanwhile, and a rule for `Scene3D:loading` matches:
+
+```yui
+Stack {
+    Scene3D { id: view; Model3D { source: "models/computer.glb"; } }
+    Label   { text: "Loading"; visible: view.loading; }
+}
+```
+
+- What a file has wrong, one that is not a model or not an image, is reported
+  once it is loaded. A file that can't be read is reported at once.
+- A shader is loaded on the spot, when it is first used: the variants a build
+  compiles it into are quick to load, and compiling one from its source is for
+  development.
+- What draws or checks a document with no message loop running, a test or a
+  tool, calls `SceneComponent::finishLoading()` on its scenes first.
+  [`yup_yui_tool`](tooling.md) does.
+
 A [`YuiLoader`](hot-reload.md) that watches its files watches these too: a
-model, a texture or a shader that is saved is read again, every element using
-it follows, and the document is loaded again, which keeps the interface and
-brings its diagnostics up to date.
+model, a texture, an environment or a shader that is saved is read again,
+every element using it follows, and the document is loaded again, which keeps
+the interface and brings its diagnostics up to date.
 
 - A `.gltf` keeping its buffers and its images in other files reads them from
-  its folder, which embedded resources do not have: embed a `.glb`.
+  its folder, which embedded resources do not have: embed a `.glb`. Those
+  files are not watched: saving one of them does not load the model again,
+  saving its `.gltf` does.
 - A file is read once for a `Scene3D`, whatever the number of elements naming
-  it. `a.glb` and `./a.glb` are two files for that.
-- Textures are decoded with the image formats the application links.
+  it. `a.glb` and `./a.glb` are two files for that. A file that no element
+  names anymore is let go of when the document is next loaded.
+- Textures and environments are decoded with the image formats the application
+  links.
 
 ## What is left to C++
 
@@ -844,7 +898,7 @@ reached through the component:
 ```cpp
 auto* view = document.findById<yup::SceneComponent> ("view");     // Scene3D { id: view; }
 
-// The environment and the fog are nodes of the root of the scene
+// An environment made by code, as a sky, and the fog are nodes of the root of the scene
 view->getOrCreateScene().getRoot().attach<yup::EnvironmentNode> (environment);
 
 // The settings of the renderer that have no property, such as the depth of field
@@ -896,6 +950,7 @@ Model3D.source: the file 'models/chair.glb' can't be read
 Model3D.clip: the model has no clip 'Walk'
 Node3D.morphWeights: the entity of the node draws no mesh with morph targets
 Material3D.baseColorTexture: the file 'textures/wood.png' can't be read
+Scene3D.environment: the file 'images/studio.jpg' can't be read
 Material3D.shader: the stylesheet has no shader 'Hologram'
 shader Hologram: the renderer can't draw with it, which leaves the meshes to their material: it has no full tier variant
 Material3D: the parent already has a Material3D, this one is not used
@@ -928,6 +983,10 @@ all of these before the application runs.
   full tier, and, on the raster tier, one showing components on a mesh.
 - **What runs at every frame**: a playing clip, an `animation:`, a running
   transition, a material or an effect given the `time`, and `continuous`.
+- **Files load in the background, one after the other** for a `Scene3D`: a
+  model is parsed and an image decoded off the thread of the interface. Reading
+  the file is not, nor is giving the GPU its textures and its buffers, the
+  first time the scene is drawn with them, nor loading a shader.
 - **Skinned and morphed meshes are deformed on the CPU**, each time their
   joints or their weights change.
 - **Picking tests triangles**: fine for instrument panels and product models,

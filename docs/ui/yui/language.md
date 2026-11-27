@@ -238,18 +238,22 @@ property (`value <=> params.cutoff;`) or to one element of a list
 bindings](documents.md#two-way-bindings).
 
 A property named after a signal is a handler: a call, either an action
-registered by the application or a signal of the enclosing component, or a
-block of calls. `(a, b) =>` names the signal's arguments, and
-`changed property: handler;` runs a handler when a property changes:
+registered by the application, a property to set or to edit as text, or a
+signal of the enclosing component, or a block of calls. `(a, b) =>` names the
+signal's arguments, and `changed property: handler;` runs a handler when a
+property changes. Every component has the signal `onDoubleClick`:
 
 ```yui
 TextButton { text: "Reset"; onClick: action ("reset"); }
+TextButton { text: "Mute"; onClick: set (params.mute, ! params.mute); }
+Label      { text: "Cutoff"; onDoubleClick: edit (params.cutoff); }
 Slider     { onValueChanged: (v) => root.onChanged (v); }
 TextButton { onClick: { action ("save"); root.onDone (); } }
 Slider     { changed value: (v) => action ("log", v); }
 ```
 
-See [Handlers and actions](documents.md#handlers-and-actions).
+See [Handlers and actions](documents.md#handlers-and-actions) and
+[Editing a value as text](documents.md#editing-a-value-as-text).
 
 ## Imports
 

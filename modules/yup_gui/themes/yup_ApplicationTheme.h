@@ -138,7 +138,7 @@ public:
         one before.
 
         @code
-        theme->setComponentPart<Label> ("text", [] (Graphics& g, const ApplicationTheme&, const Label& label, const Rectangle<float>& area)
+        theme->setComponentPart<Label> (Label::Style::textPartId, [] (Graphics& g, const ApplicationTheme&, const Label& label, const Rectangle<float>& area)
         {
             g.fillFittedText (label.getStyledText(), area);
         });

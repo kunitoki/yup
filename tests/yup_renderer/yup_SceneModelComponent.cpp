@@ -458,6 +458,7 @@ TEST_F (SceneModelComponentTests, ANameTheModelDoesNotHaveIsReported)
                                                  "    Light3D { id: lamp; node: \"Knob\"; }\n"
                                                  "}");
 
+    finishLoading (document);
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
 
     expectDiagnostic (document, "Node3D.node: the model has no entity 'Handle'");
@@ -527,6 +528,7 @@ TEST_F (SceneModelComponentTests, TheModelIsLoadedAgainWhenItsFileChanges)
 
     files["device.gltf"] = modelFile ("4, 5, 6");
     document.notifyAssetChanged ("device.gltf");
+    finishLoading (document);
 
     EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
@@ -567,6 +569,7 @@ TEST_F (SceneModelComponentTests, AFileThatCanNotBeLoadedIsReported)
                                                  "    Model3D { id: none; }\n"
                                                  "}");
 
+    finishLoading (document);
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
 
     expectDiagnostic (document, "Model3D.source: the file 'nowhere.gltf' can't be read");
@@ -596,6 +599,7 @@ TEST_F (SceneModelComponentTests, AFileThatCanNotBeLoadedIsReported)
     // A source that is right again shows the model
     files["nowhere.gltf"] = modelFile();
     document.notifyAssetChanged ("nowhere.gltf");
+    finishLoading (document);
 
     auto* missing = document.findById<SceneModelComponent> ("missing");
     ASSERT_NE (missing, nullptr);
@@ -636,6 +640,7 @@ TEST_F (SceneModelComponentTests, ChangingTheSourceOrTheSceneInstantiatesAgain)
 
     // Another scene of the file is another instance
     model->setSource ("robot.gltf");
+    finishLoading (document);
 
     const auto main = model->getInstance();
     ASSERT_TRUE (main.isValid());
@@ -684,6 +689,237 @@ TEST_F (SceneModelComponentTests, DestroyingTheModelDestroysItsInstance)
     EXPECT_FALSE (instance.isValid());
     EXPECT_FALSE (knob.isValid());
     EXPECT_EQ (scene->getRoot().getNumChildren(), 1);
+}
+
+//==============================================================================
+
+TEST_F (SceneModelComponentTests, AModelIsParsedAwayFromTheSceneAndShownOnceItIsThere)
+{
+    // A state, as the others a style rule matches
+    const auto* state = SceneComponent::getClassTypeInfo().findProperty (Identifier ("loading"));
+    ASSERT_NE (state, nullptr);
+    EXPECT_TRUE (state->isState);
+
+    YuiDocument document;
+    serve (document);
+    load (document, "Scene3D { id: view; Model3D { id: model; Node3D { id: knob; node: \"Knob\"; } } }");
+
+    auto* view = document.findById<SceneComponent> ("view");
+    auto* model = document.findById<SceneModelComponent> ("model");
+    auto* knob = document.findById<SceneNodeComponent> ("knob");
+
+    ASSERT_NE (view, nullptr);
+    ASSERT_NE (model, nullptr);
+    ASSERT_NE (knob, nullptr);
+    EXPECT_FALSE (view->isLoading());
+
+    ChangeCounter loadingChanges (*view, "loading");
+    Internals::takeRepaintRequest (*view);
+
+    // The file is read by the call, and parsed elsewhere: the model is not there when the call returns, and nothing
+    // is wrong with it
+    model->setSource ("device.gltf");
+
+    EXPECT_EQ (reads["device.gltf"], 1);
+    EXPECT_TRUE (view->isLoading());
+    EXPECT_TRUE (static_cast<bool> (view->getProperty (Identifier ("loading"))));
+    EXPECT_FALSE (model->getInstance().isValid());
+    EXPECT_EQ (model->getEntity().getNumChildren(), 0);
+    EXPECT_FALSE (knob->getEntity().isValid());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+
+    // What a message loop does once the model is parsed: its users are told, and the scene is painted with it
+    Internals::takeRepaintRequest (*view);
+    view->finishLoading();
+
+    EXPECT_FALSE (view->isLoading());
+    EXPECT_FALSE (static_cast<bool> (view->getProperty (Identifier ("loading"))));
+    EXPECT_EQ (loadingChanges.count, 2);
+    EXPECT_TRUE (Internals::takeRepaintRequest (*view));
+
+    ASSERT_TRUE (model->getInstance().isValid());
+    EXPECT_EQ (model->getInstance().getName(), "Main");
+    EXPECT_EQ (model->getEntity().getNumChildren(), 1);
+    ASSERT_TRUE (knob->getEntity().isValid());
+    EXPECT_EQ (knob->getEntity(), entityAt (*model, { "Body", "Knob" }));
+    EXPECT_EQ (reads["device.gltf"], 1);
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+
+    // With nothing left to load there is nothing to wait for, nor to tell
+    view->finishLoading();
+    EXPECT_EQ (loadingChanges.count, 2);
+}
+
+TEST_F (SceneModelComponentTests, ASourceSetAgainBeforeItsModelIsThereShowsTheLastOneOnly)
+{
+    files["other.gltf"] = modelFile ("7, 8, 9");
+
+    YuiDocument document;
+    serve (document);
+    load (document, "Scene3D { id: view; Model3D { id: model; } }");
+
+    auto* view = document.findById<SceneComponent> ("view");
+    auto* model = document.findById<SceneModelComponent> ("model");
+
+    ASSERT_NE (view, nullptr);
+    ASSERT_NE (model, nullptr);
+
+    model->setSource ("device.gltf");
+    model->setSource ("other.gltf");
+    EXPECT_FALSE (model->getInstance().isValid());
+
+    view->finishLoading();
+
+    // One instance, of the file that was named last
+    ASSERT_TRUE (model->getInstance().isValid());
+    EXPECT_EQ (model->getEntity().getNumChildren(), 1);
+
+    auto knob = entityAt (*model, { "Body", "Knob" });
+    ASSERT_TRUE (knob.isValid());
+    expectVector (knob.get<TransformNode>()->getPosition(), 7.0f, 8.0f, 9.0f);
+
+    // A file that changes while it is being loaded is read again: what was made of it as it was is not shown
+    files["late.gltf"] = modelFile ("4, 5, 6");
+    model->setSource ("late.gltf");
+
+    files["late.gltf"] = modelFile ("1, 1, 1");
+    document.notifyAssetChanged ("late.gltf");
+
+    EXPECT_TRUE (view->isLoading());
+    EXPECT_FALSE (model->getInstance().isValid());
+
+    view->finishLoading();
+
+    EXPECT_FALSE (view->isLoading());
+    ASSERT_TRUE (model->getInstance().isValid());
+    EXPECT_EQ (model->getEntity().getNumChildren(), 1);
+    EXPECT_EQ (reads["late.gltf"], 2);
+
+    knob = entityAt (*model, { "Body", "Knob" });
+    ASSERT_TRUE (knob.isValid());
+    expectVector (knob.get<TransformNode>()->getPosition(), 1.0f, 1.0f, 1.0f);
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+}
+
+TEST_F (SceneModelComponentTests, ASceneOrAModelThatGoesWhileAFileIsLoadedLeavesNothingBehind)
+{
+    {
+        // The scene goes with its document, the files of its two models still with its thread
+        YuiDocument document;
+        serve (document);
+
+        ASSERT_TRUE (document.loadFromString (robotWith ("playing: true;", "Model3D { source: \"device.gltf\"; }")).wasOk());
+
+        auto* view = document.findById<SceneComponent> ("view");
+        ASSERT_NE (view, nullptr);
+        EXPECT_TRUE (view->isLoading());
+    }
+
+    YuiDocument document;
+    serve (document);
+    load (document, "Scene3D { id: view; Node3D { } }");
+
+    auto* view = document.findById<SceneComponent> ("view");
+    ASSERT_NE (view, nullptr);
+
+    {
+        // A model goes alone: its file is loaded all the same, for nothing to show
+        SceneModelComponent model;
+        view->addAndMakeVisible (model);
+        model.setSource ("device.gltf");
+
+        EXPECT_TRUE (view->isLoading());
+    }
+
+    view->finishLoading();
+
+    EXPECT_FALSE (view->isLoading());
+    EXPECT_EQ (view->getScene()->getRoot().getNumChildren(), 1);
+    EXPECT_EQ (reads["device.gltf"], 2);
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+}
+
+TEST_F (SceneModelComponentTests, AFileThatIsNoModelIsReportedOnceItIsLoaded)
+{
+    files["broken.gltf"] = bytesOf ("this is not a model");
+
+    const String text ("Scene3D {\n"
+                       "    id: view;\n"
+                       "    Model3D { id: broken; source: \"broken.gltf\"; }\n"
+                       "}");
+
+    YuiDocument document;
+    serve (document);
+
+    int told = 0;
+
+    const DiagnosticListener listener (document, [&told] (const DataTreeDiagnostic&)
+    {
+        ++told;
+    });
+
+    ASSERT_TRUE (document.loadFromString (text).wasOk());
+
+    auto* view = document.findById<SceneComponent> ("view");
+    auto* broken = document.findById<SceneModelComponent> ("broken");
+
+    ASSERT_NE (view, nullptr);
+    ASSERT_NE (broken, nullptr);
+
+    // Read, and not parsed yet: nothing is known to be wrong with it
+    EXPECT_TRUE (view->isLoading());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (Internals::getNumProblems (*view), 0u);
+
+    view->finishLoading();
+
+    // Told once, where the file is named, by the loader that could not parse it
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().front().message.startsWith ("Model3D.source: ")) << document.getDiagnostics().front().message;
+    EXPECT_EQ (document.getDiagnostics().front().line, 3);
+    EXPECT_TRUE (document.getDiagnostics().front().isError());
+    EXPECT_EQ (told, 1);
+    EXPECT_EQ (Internals::getNumProblems (*view), 1u);
+    EXPECT_FALSE (broken->getInstance().isValid());
+
+    // And again by the loads that keep the model, which do not read its file again
+    ASSERT_TRUE (document.loadFromString (text).wasOk());
+    ASSERT_EQ (document.findById<SceneComponent> ("view"), view);
+
+    EXPECT_FALSE (view->isLoading());
+    EXPECT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (reads["broken.gltf"], 1);
+}
+
+TEST_F (SceneModelComponentTests, AFileThatNoElementNamesAnymoreIsLetGoOfByTheNextLoad)
+{
+    files["other.gltf"] = modelFile ("7, 8, 9");
+
+    const auto text = [] (const char* source)
+    {
+        return "Scene3D { Model3D { id: model; source: \"" + String (source) + "\"; } Model3D { source: \"robot.gltf\"; } }";
+    };
+
+    YuiDocument document;
+    serve (document);
+    load (document, text ("device.gltf"));
+
+    EXPECT_EQ (reads["device.gltf"], 1);
+    EXPECT_EQ (reads["robot.gltf"], 1);
+
+    // The first model shows another file: nothing names the one it showed once the document has loaded
+    load (document, text ("other.gltf"));
+
+    // Named again, that file is read again. The one that was named all along was kept
+    load (document, text ("device.gltf"));
+
+    auto* model = document.findById<SceneModelComponent> ("model");
+    ASSERT_NE (model, nullptr);
+    ASSERT_TRUE (model->getInstance().isValid());
+
+    EXPECT_EQ (reads["device.gltf"], 2);
+    EXPECT_EQ (reads["other.gltf"], 1);
+    EXPECT_EQ (reads["robot.gltf"], 1);
 }
 
 //==============================================================================
@@ -1173,6 +1409,7 @@ TEST_F (SceneModelComponentTests, AClipIsNamedOrCountedAndOneTheModelDoesNotHave
                                                  "    Model3D { id: missing; source: \"nowhere.gltf\"; clip: \"Open\"; }\n"
                                                  "}");
 
+    finishLoading (document);
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
 
     // A model that could not be loaded says so itself, and one without clips only when it is asked for one
@@ -1220,6 +1457,7 @@ TEST_F (SceneModelComponentTests, AClipIsNamedOrCountedAndOneTheModelDoesNotHave
 
     files["device.gltf"] = robotFile();
     document.notifyAssetChanged ("device.gltf");
+    finishLoading (document);
 
     EXPECT_DOUBLE_EQ (quiet->getDuration(), 1.0);
     EXPECT_DOUBLE_EQ (quiet->getTime(), 0.5);
@@ -1265,6 +1503,7 @@ TEST_F (SceneModelComponentTests, AModelInstantiatedAgainPlaysOnAsItWas)
     // The file changed: another instance, playing the same clip from the same place, where it is posed at once
     const auto first = robot.model->getInstance();
     document.notifyAssetChanged ("robot.gltf");
+    finishLoading (document);
 
     EXPECT_FALSE (first.isValid());
     ASSERT_TRUE (robot.model->getInstance().isValid());
@@ -1517,6 +1756,7 @@ TEST_F (SceneModelComponentTests, AnotherSourceOrSceneStartsOverAClipThatHadEnde
 
     // Another file is another model: its clip, a second long, is at its start and plays, and the slider is there with it
     robot.model->setSource ("robot.gltf");
+    finishLoading (document);
 
     EXPECT_DOUBLE_EQ (robot.model->getTime(), 0.0);
     EXPECT_DOUBLE_EQ (robot.model->getDuration(), 1.0);
@@ -1545,6 +1785,7 @@ TEST_F (SceneModelComponentTests, AnotherSourceOrSceneStartsOverAClipThatHadEnde
 
     // A file that changes is the same model, which carries on from where it was
     document.notifyAssetChanged ("robot.gltf");
+    finishLoading (document);
     EXPECT_DOUBLE_EQ (robot.model->getTime(), 0.25);
 
     robot.view->refreshDisplay (0.25);
@@ -1660,6 +1901,7 @@ TEST_F (SceneModelComponentTests, MorphWeightsOfAnEntityWithoutMorphTargetsAreRe
                                                  "    Node3D { id: plain; morphWeights: [0.5]; }\n"
                                                  "}");
 
+    finishLoading (document);
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
 
     // The strip is deformed by a skin alone, and a node of its own draws nothing

@@ -785,6 +785,7 @@ TEST_F (SceneSurfaceTests, AMeshWhoseTextureCoordinatesSpanNoAreaShowsNoComponen
                                                "    }\n"
                                                "}");
 
+    finishLoading (device);
     ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
     ASSERT_EQ (device.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (device.getDiagnostics());
     EXPECT_EQ (device.getDiagnostics().front().message, "Node3D: " + problem);
@@ -876,6 +877,7 @@ TEST_F (SceneSurfaceTests, AMeshOfSeveralPrimitivesShownByTheMaterialOfTheSurfac
     serve (document);
 
     const auto result = document.loadFromString (text (""));
+    finishLoading (document);
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
 
     auto* view = showSceneOf (document);

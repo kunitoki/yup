@@ -338,6 +338,18 @@ void checkMaterialShader (YuiDocument& document, const DataTree& block)
 
 #endif
 
+// Waits for the files the scenes of an interface are loading: no message loop brings them in while a command runs
+void finishLoadingScenes ([[maybe_unused]] Component& component)
+{
+#if YUP_MODULE_AVAILABLE_yup_renderer
+    std::vector<SceneComponent*> scenes;
+    collectScenes (component, scenes);
+
+    for (auto* scene : scenes)
+        scene->finishLoading();
+#endif
+}
+
 // Checks what a document needs that only shows once it is used or shown, for one that is checked with no window: its
 // shaders are loaded whether a component uses them or not, and its scenes run the frame a window showing them starts with
 void checkResources (YuiDocument& document)
@@ -372,9 +384,13 @@ void checkResources (YuiDocument& document)
     std::vector<SceneComponent*> scenes;
     collectScenes (*root, scenes);
 
-    // What a scene left to its first frame is built there, and tells what is wrong with it
+    // The files of a scene are waited for, as no message loop brings them in. What it left to its first frame is then
+    // built there, and tells what is wrong with it
     for (auto* scene : scenes)
+    {
+        scene->finishLoading();
         scene->refreshDisplay (0.0);
+    }
 #endif
 }
 
@@ -1192,6 +1208,10 @@ YuiToolShown loadYuiToolTarget (YuiDocument& document, YuiLoader& loader, const 
     YuiToolShown shown;
     shown.result = loader.loadFile (input);
 
+    // The files of its scenes are there, with what they have wrong, before the interface is told about or drawn
+    if (auto* root = document.getRoot())
+        finishLoadingScenes (*root);
+
 #if YUP_WASM
     // The host of the module gave it the files: it is told those the document names that it was not given
     noteYuiToolMissingFiles (document);
@@ -1555,9 +1575,13 @@ void YuiToolView::settle()
         return;
 
     // A pass restyles what the size, a state or the pass before changed, which may start transitions, then
-    // brings those running to their end, which may in turn change what other styles read
+    // brings those running to their end, which may in turn change what other styles read. The files a scene was
+    // asked for by then are waited for first, for the pass to style it loaded
     for (int pass = 0; pass < 4; ++pass)
+    {
+        finishLoadingScenes (*root);
         context->refresh (3600.0);
+    }
 
     context->restyleNow();
 }

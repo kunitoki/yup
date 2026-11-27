@@ -23,6 +23,37 @@ labels and text editors covered by [component basics](component-basics.md).
   custom content, drag and drop reordering, `DataTree` mirroring and saved
   openness state.
 
+## Typing the value of a control
+
+A `Slider` drags finer while a modifier key is held, and goes back to its
+default value on a click with another one:
+
+```cpp
+slider.setMouseDragSensitivity (0.3);
+slider.setFineDragScale (0.1);                         // ten times slower...
+slider.setFineDragModifiers (KeyModifiers::shiftMask); // ...while Shift is held, for a drag and the wheel
+slider.setResetModifiers (KeyModifiers::altMask);      // Alt+click brings the default value back
+```
+
+A double click does the same, unless a `ComponentListener` takes it by
+returning true from `componentDoubleClicked`, which any component can be
+listened for. `InPlaceTextEditor` is what to open then: a single line
+`TextEditor` over a component, in the interface that component is in. Return,
+a press elsewhere and the loss of the keyboard focus commit, Escape cancels:
+
+```cpp
+bool componentDoubleClicked (Component&, const MouseEvent&) override
+{
+    editor.onCommit = [this] (const String& text) { slider.setValue (text.getDoubleValue()); };
+    editor.open (valueLabel, String (slider.getValue()));
+    return true;
+}
+```
+
+A `TextEditor` tells the same with `onReturnKey`, `onEscapeKey` and
+`onFocusLost`. In `.yui` all of this is a handler, see
+[Editing a value as text](yui/documents.md#editing-a-value-as-text).
+
 Every widget can be painted by a `.yui` drawing instead of the theme:
 [Widgets in drawings](yui/widgets.md) lists the geometry, the data series and
 the parts each one gives a drawing.

@@ -113,6 +113,14 @@ void addYuiFigures (Figures& f)
         {
             auto view = std::make_unique<yup::YuiView>();
             const auto result = view->getLoader().loadFile (file);
+
+            // The files of its scenes are waited for: the figure shows them, and what they have wrong fails it
+            std::vector<yup::SceneComponent*> scenes;
+            collectScenes (*view, scenes);
+
+            for (auto* scene : scenes)
+                scene->finishLoading();
+
             const auto& diagnostics = view->getDocument().getDiagnostics();
 
             if (result.failed())

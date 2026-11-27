@@ -309,11 +309,11 @@ A part painter paints with the paint set on the `Graphics` it gets, so one
 function serves the style of the type, which calls it where it wants the part,
 and the drawing. A theme that sets no painter for a part paints nothing of it.
 A `ComponentStyle` set on one component places a part with
-`Component::paintPart`:
+`Component::paintPart`, naming it as the widget does in its `Style`:
 
 ```cpp
 g.setFillColor (label.findColor (Label::Style::textFillColorId).value_or (Colors::white));
-label.paintPart (g, "text");
+label.paintPart (g, Label::Style::textPartId);
 ```
 
 [Widgets in drawings](yui/widgets.md) lists the series and the parts of the

@@ -617,7 +617,7 @@ void TabBar::buttonMouseDown (TabButton& button, const MouseEvent& event)
     newPress.button = &button;
     newPress.downPosition = position;
     newPress.grabOffset = (vertical ? position.getY() : position.getX()) - tabBarStart (button.getBounds(), vertical);
-    newPress.onCloseButton = button.isClosable() && button.getCloseButtonBounds().contains (event.getPosition());
+    newPress.onCloseButton = button.isClosable() && button.getCloseBounds().contains (event.getPosition());
     press = newPress;
 
     if (! newPress.onCloseButton)
@@ -670,7 +670,7 @@ void TabBar::buttonMouseUp (TabButton& button, const MouseEvent& event)
 
     if (released.onCloseButton)
     {
-        if (button.getCloseButtonBounds().contains (event.getPosition()))
+        if (button.getCloseBounds().contains (event.getPosition()))
             requestClose (button.getTabId());
 
         return;

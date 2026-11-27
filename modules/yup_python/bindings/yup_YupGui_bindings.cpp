@@ -1799,8 +1799,8 @@ void registerYupGuiBindings (py::module_& m)
         // ScrollBar also declares a private isThumbHovered (Point<float>) helper, so the
         // no-argument getter has to be selected explicitly - and being const, with py::const_.
         .def ("isThumbHovered", py::overload_cast<> (&ScrollBar::isThumbHovered, py::const_))
-        .def ("getThumbBoundsForRendering", &ScrollBar::getThumbBoundsForRendering)
-        .def ("getTrackBoundsForRendering", &ScrollBar::getTrackBoundsForRendering)
+        .def ("getThumbBounds", &ScrollBar::getThumbBounds)
+        .def ("getTrackBounds", &ScrollBar::getTrackBounds)
 
         .def_readwrite ("onScrollPositionChanged", &ScrollBar::onScrollPositionChanged,
                         "Called with the new scroll position when it changes.");
@@ -1984,8 +1984,8 @@ void registerYupGuiBindings (py::module_& m)
         .def ("isSelected", &ListBoxItem::isSelected)
         .def ("setHovered", &ListBoxItem::setHovered, "shouldBeHovered"_a)
         .def ("isHovered", &ListBoxItem::isHovered)
-        .def ("getTextBoundsForRendering", &ListBoxItem::getTextBoundsForRendering)
-        .def ("getIconBoundsForRendering", &ListBoxItem::getIconBoundsForRendering);
+        .def ("getTextBoundsForRendering", &ListBoxItem::getTextBounds)
+        .def ("getIconBoundsForRendering", &ListBoxItem::getIconBounds);
 
     py::class_<ListBoxItem::Style> listBoxItemStyle (classListBoxItem, "Style");
     listBoxItemStyle.attr ("textColorId") = ListBoxItem::Style::textColorId;
@@ -2341,7 +2341,7 @@ void registerYupGuiBindings (py::module_& m)
         .def ("getFont", &TabButton::getFont, "forSelectedTab"_a)
         .def ("getIconBounds", &TabButton::getIconBounds)
         .def ("getTextBounds", &TabButton::getTextBounds)
-        .def ("getCloseButtonBounds", &TabButton::getCloseButtonBounds)
+        .def ("getCloseBounds", &TabButton::getCloseBounds)
         .def ("getArrowBounds", &TabButton::getArrowBounds);
 
     py::class_<TabButton::Style> tabButtonStyle (classTabButton, "Style");

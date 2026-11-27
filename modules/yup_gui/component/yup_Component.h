@@ -1706,6 +1706,9 @@ public:
     /**
         Called when the mouse button is double clicked.
 
+        It is not called when a component listener takes the double click
+        (see ComponentListener::componentDoubleClicked).
+
         @param event The mouse event.
      */
     void mouseDoubleClick (const MouseEvent& event) override;

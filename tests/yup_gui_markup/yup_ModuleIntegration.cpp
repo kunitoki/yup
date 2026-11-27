@@ -194,18 +194,18 @@ TEST_F (GuiMarkupModuleIntegrationTests, DrawingsPaintTheControlsFromTheGeometry
     ASSERT_NE (scrollerStyle, nullptr);
 
     // The thumb of the fader is along the track the slider tells, where its value is
-    const auto track = fader->getSliderBounds();
+    const auto track = fader->getTrackBounds();
     EXPECT_NEAR (measure (*faderStyle, *fader, "thumb").bounds.getCenterX(), track.getX() + 0.6f * track.getWidth(), 0.01f);
 
     fader->setValue (0.25, dontSendNotification);
     EXPECT_NEAR (measure (*faderStyle, *fader, "thumb").bounds.getCenterX(), track.getX() + 0.25f * track.getWidth(), 0.01f);
 
     // The buttons of the stepper, the handle of the switch and the thumb of the scroll bar are where the widgets put them
-    EXPECT_FALSE (stepper->getDecrementButtonBounds().isEmpty());
-    expectSameArea (measure (*stepperStyle, *stepper, "minus").bounds, stepper->getDecrementButtonBounds().reduced (1.0f));
-    expectSameArea (measure (*stepperStyle, *stepper, "plus").bounds, stepper->getIncrementButtonBounds().reduced (1.0f));
-    expectSameArea (measure (*toggleStyle, *toggle, "handle").bounds, toggle->getSwitchCircleBounds().reduced (4.0f));
-    expectSameArea (measure (*scrollerStyle, *scroller, "grip").bounds, scroller->getThumbBoundsForRendering().reduced (3.0f));
+    EXPECT_FALSE (stepper->getDecrementBounds().isEmpty());
+    expectSameArea (measure (*stepperStyle, *stepper, "minus").bounds, stepper->getDecrementBounds().reduced (1.0f));
+    expectSameArea (measure (*stepperStyle, *stepper, "plus").bounds, stepper->getIncrementBounds().reduced (1.0f));
+    expectSameArea (measure (*toggleStyle, *toggle, "handle").bounds, toggle->getThumbBounds().reduced (4.0f));
+    expectSameArea (measure (*scrollerStyle, *scroller, "grip").bounds, scroller->getThumbBounds().reduced (3.0f));
 }
 
 //==============================================================================

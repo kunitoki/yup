@@ -148,8 +148,11 @@ public:
     virtual void maxValueChanged();
 
     //==============================================================================
-    /** Sets the slider's default value (used for double-click reset).
+    /** Sets the slider's default value, which a double click and a click with the reset modifier go back to.
+
         @param newDefaultValue The new default value
+
+        @see setResetModifiers
     */
     void setDefaultValue (double newDefaultValue);
 
@@ -209,13 +212,20 @@ public:
         on a button steps the value by the interval of the range, or by a hundredth of the range
         when it has none, and keeps stepping while it is held.
     */
-    Rectangle<float> getDecrementButtonBounds() const;
+    Rectangle<float> getDecrementBounds() const;
 
     /** Returns the area of the button raising the value of a slider of type IncDecButtons.
 
-        @see getDecrementButtonBounds
+        @see getDecrementBounds
     */
-    Rectangle<float> getIncrementButtonBounds() const;
+    Rectangle<float> getIncrementBounds() const;
+
+    /** Returns the area the value of a slider of type IncDecButtons is shown in, as a text: what its
+        two buttons leave of the slider between them. Empty for a slider of another type.
+
+        @see getDecrementBounds, getIncrementBounds
+    */
+    Rectangle<float> getTextBounds() const;
 
     /** Returns which button of a slider of type IncDecButtons is pressed: -1 for the one lowering
         the value, 1 for the one raising it and 0 for none.
@@ -223,6 +233,18 @@ public:
     int getPressedStep() const noexcept { return pressedStep; }
 
     //==============================================================================
+    /** Returns the area the value moves in, in the coordinates of the slider.
+
+        For a linear slider it is the track, which stops short of both ends of the slider to leave
+        room for the thumb drawn around its own. For a rotary slider it is the area the dial is drawn
+        in the middle of. For a slider of type IncDecButtons it is the area its buttons and its value
+        share, which keeps the thickness of a button in the middle of a larger slider. A drag is
+        measured against it.
+
+        @see getThumbBounds, getDecrementBounds
+    */
+    Rectangle<float> getTrackBounds() const;
+
     /** Returns the area of the thumb of a linear slider, in its coordinates. Empty for a slider of another type.
 
         The thumb is centered where the value is along the track, and has the size the `thumbSize` property
@@ -230,7 +252,7 @@ public:
         brings it under the pointer first. A slider of a bar type paints none, and ends its bar at the
         center of this area.
 
-        @see getSliderBounds, getMinThumbBounds, getMaxThumbBounds
+        @see getTrackBounds, getMinThumbBounds, getMaxThumbBounds
     */
     Rectangle<float> getThumbBounds() const;
 
@@ -317,6 +339,49 @@ public:
     /** Returns the current mouse drag sensitivity. */
     double getMouseDragSensitivity() const;
 
+    /** Sets how much slower the value moves while the fine drag modifier is held.
+
+        The sensitivity of a drag and of the mouse wheel is multiplied by it, so 0.1, the default,
+        makes the value move ten times slower.
+
+        @param scale The multiplier, above 0.
+
+        @see setFineDragModifiers, setMouseDragSensitivity
+    */
+    void setFineDragScale (double scale);
+
+    /** Returns how much slower the value moves while the fine drag modifier is held. */
+    double getFineDragScale() const;
+
+    /** Sets the modifier keys that make a drag and the mouse wheel fine while they are held, Shift by default.
+
+        Pressing or releasing them during a drag goes on from the value the slider has, with no jump.
+
+        @param modifiers The keys, all of which are to be held, such as KeyModifiers::shiftMask.
+                         No key, a default KeyModifiers, for no fine drag.
+
+        @see setFineDragScale
+    */
+    void setFineDragModifiers (KeyModifiers modifiers);
+
+    /** Returns the modifier keys that make a drag and the mouse wheel fine. */
+    KeyModifiers getFineDragModifiers() const;
+
+    /** Sets the modifier keys a click is held with to bring the default value back, Alt by default.
+
+        Such a click starts no drag. A double click does the same, unless a component listener
+        takes it (see ComponentListener::componentDoubleClicked).
+
+        @param modifiers The keys, all of which are to be held, such as KeyModifiers::altMask.
+                         No key, a default KeyModifiers, for no such click.
+
+        @see setDefaultValue
+    */
+    void setResetModifiers (KeyModifiers modifiers);
+
+    /** Returns the modifier keys a click is held with to bring the default value back. */
+    KeyModifiers getResetModifiers() const;
+
     /** Sets the velocity-based sensitivity for mouse wheel and fine dragging.
 
         @param sensitivity Multiplier for velocity-based movement
@@ -398,8 +463,6 @@ public:
     void enablementChanged() override;
     /** @internal */
     void visibilityChanged() override;
-    /** @internal */
-    Rectangle<float> getSliderBounds() const;
 
 private:
     //==============================================================================
@@ -417,6 +480,7 @@ private:
     void sendRangeChanged (const NormalisableRange<double>& previousRange);
 
     void updateValueFromMousePosition (Point<float> mousePos, DragMode dragMode);
+    double getDragScale (const KeyModifiers& modifiers) const;
     bool updateValueFromKeypress (const KeyPress& key);
     void resetToDefaultValue();
 
@@ -452,6 +516,9 @@ private:
 
     int numDecimalPlaces = 7;
     double mouseDragSensitivity = 1.0;
+    double fineDragScale = 0.1;
+    KeyModifiers fineDragModifiers { KeyModifiers::shiftMask };
+    KeyModifiers resetModifiers { KeyModifiers::altMask };
     double velocitySensitivity = 1.0;
     double velocityThreshold = 1.0;
     double velocityOffsetThreshold = 0.0;
@@ -469,6 +536,7 @@ private:
     Point<float> pointerPosition;
     Point<float> mouseDownPosition;
     Point<float> mouseDragStartPosition;
+    double dragScale = 1.0;
     double valueOnMouseDown = 0.0;
     double minValueOnMouseDown = 0.0;
     double maxValueOnMouseDown = 0.0;

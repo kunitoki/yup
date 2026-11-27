@@ -30,13 +30,15 @@ namespace yup
 
     @code
     onClick: action ("save");
+    onClick: set (params.mode, 2);
+    onDoubleClick: edit (knob.value);
     onValueChanged: (v) => action ("gain", v * 2);
     onPicked: (index, name) => { action ("pick", name); root.onChanged (index); }
     @endcode
 */
 struct YuiHandler
 {
-    /** One call, such as `action ("save", 1)` or `root.onChanged (index)`, with its parsed argument expressions. */
+    /** One call, such as `action ("save", 1)`, `set (params.mode, 2)`, `edit (knob.value)` or `root.onChanged (index)`, with its parsed argument expressions. */
     struct Call
     {
         String target;
@@ -84,6 +86,21 @@ private:
 
     WeakReference<Component> component;
     Identifier property;
+    ComponentSignal::Handler handler;
+};
+
+//==============================================================================
+/** Runs a handler when a component is double clicked, in place of what the component does itself on a double click. */
+class YuiDoubleClickWatcher final : private ComponentListener
+{
+public:
+    YuiDoubleClickWatcher (Component& component, ComponentSignal::Handler handler);
+    ~YuiDoubleClickWatcher() override;
+
+private:
+    bool componentDoubleClicked (Component& clicked, const MouseEvent& event) override;
+
+    WeakReference<Component> component;
     ComponentSignal::Handler handler;
 };
 

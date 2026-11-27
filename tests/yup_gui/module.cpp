@@ -66,6 +66,7 @@
 #include "yup_Grid.cpp"
 #include "yup_GridParity.cpp"
 #include "yup_ImageComponent.cpp"
+#include "yup_InPlaceTextEditor.cpp"
 #include "yup_KeyModifiers.cpp"
 #include "yup_KeyPress.cpp"
 #include "yup_KineticScroller.cpp"

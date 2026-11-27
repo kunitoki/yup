@@ -171,7 +171,7 @@ public:
     Rectangle<float> getTextBounds() const noexcept { return textBounds; }
 
     /** Returns the area of the close button, or an empty rectangle when the tab is not closable. */
-    Rectangle<float> getCloseButtonBounds() const noexcept { return closeButtonBounds; }
+    Rectangle<float> getCloseBounds() const noexcept { return closeButtonBounds; }
 
     /** Returns the area of the dropdown arrow of an overflow button, or an empty rectangle otherwise. */
     Rectangle<float> getArrowBounds() const noexcept { return arrowBounds; }
@@ -185,6 +185,8 @@ public:
         static const Identifier hoveredBackgroundColorId; /**< The background color when the tab is hovered. */
         static const Identifier closeButtonColorId;       /**< The color of the close button. */
         static const Identifier cornerRadiusId;           /**< The corner radius of the hovered background. */
+
+        static const Identifier iconPartId;               /**< The name of the part that is the icon image: `part icon { }` in a drawing. */
     };
 
     //==============================================================================

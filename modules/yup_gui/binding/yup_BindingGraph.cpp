@@ -233,6 +233,39 @@ bool BindingGraph::unlink (Component& component, const Identifier& property)
     return removed;
 }
 
+std::optional<BindingGraph::ModelProperty> BindingGraph::findLinkedModel (const Component& component, const Identifier& property) const
+{
+    // Breadth first, so that the model the fewest links away is the one found
+    std::vector<PropertyKey> reached { { &component, property } };
+
+    for (size_t index = 0; index < reached.size(); ++index)
+    {
+        const auto current = reached[index];
+
+        if (auto* model = dynamic_cast<BindingModel*> (const_cast<Component*> (current.component)))
+            return ModelProperty { model, current.property };
+
+        const auto found = linksByProperty.find (current);
+
+        if (found == linksByProperty.end())
+            continue;
+
+        for (const auto& candidate : found->second)
+        {
+            if (candidate->secondIndex >= 0)
+                continue;
+
+            const auto isFirst = candidate->first == current.component && candidate->firstProperty == current.property;
+            const PropertyKey other { isFirst ? candidate->second : candidate->first, isFirst ? candidate->secondProperty : candidate->firstProperty };
+
+            if (std::find (reached.begin(), reached.end(), other) == reached.end())
+                reached.push_back (other);
+        }
+    }
+
+    return std::nullopt;
+}
+
 //==============================================================================
 
 bool BindingGraph::hasBinding (const Component& target, const Identifier& property) const noexcept

@@ -80,8 +80,20 @@ class SceneNodeComponent;
     another scene: `tier` is its RenderSettings::tier (`automatic`, `raster` or `full`), `samples`
     its sample count (SceneRenderer::setSampleCount) and `bloom` its RenderSettings::bloom. They
     read what the renderer holds, so they follow what code sets on getRenderer(), which tells no
-    change: repaint the component after it. The environment, the fog and the other RenderSettings
-    have no property: set them from code, on the scene and on getRenderer().
+    change: repaint the component after it. The fog and the other RenderSettings have no property:
+    set them from code, on the scene and on getRenderer().
+
+    `environment` is the path of an image lighting the scene, see setEnvironment(), and
+    `environmentIntensity` and `environmentVisible` are the fields of the EnvironmentNode of the
+    root of the scene.
+
+    The files of the scene, its models, its textures and its environment, are read through the
+    document on the message thread, and what is slow of loading them, parsing a model or decoding
+    an image, runs on a thread of the component: the scene is shown without a file until it is
+    there, and painted again once it is. A file that changed is shown as it was until it is
+    loaded again. isLoading(), the `loading` state of a `Scene3D`, tells whether a file is still
+    being loaded. What shows a scene with no message loop running, as a tool rendering it to an
+    image does, calls finishLoading() first.
 
     The nodes take the pointer where they are shown, see findNodeAt(): a mouse event goes to the
     node under it, and to the component only where no node is. A component that moves its camera
@@ -117,7 +129,8 @@ public:
         The features of the component are those of the scene it shows, so they are not carried
         over to the new one: the background, the ambient light, the exposure, the tone mapping
         and the default light read what the new scene resolves to, and the properties that read
-        another value than before are told to have changed.
+        another value than before are told to have changed. The image of setEnvironment() is a
+        value of the component, as the file of a model is: it lights the new scene.
 
         A scene is meant to be shown by one SceneComponent at a time: every component showing it
         updates it on its display frames, so its clips and the time of its shaders would run
@@ -209,6 +222,46 @@ public:
     /** Returns true if the scene resolves to using the default light, see SceneSettings. */
     bool isDefaultLightEnabled() const;
 
+    /** Lights the scene from an image, the `environment` of a `Scene3D`.
+
+        The image is a panorama of what surrounds the scene, twice as wide as it is high: its
+        columns go around the vertical axis and its rows from the zenith to the nadir, as
+        EnvironmentMap::getTextureCoordinates() maps them. Its colors are sRGB encoded, as those of
+        any image are. It is read and decoded as the textures are, see loadTexture(), made into an
+        EnvironmentMap, and given to the EnvironmentNode of the root of the scene, attached when it
+        has none: the scene keeps the environment it has until the image is there. An image that
+        can't be read or decoded is reported in the diagnostics of the document, and leaves the
+        scene without an environment.
+
+        The path is a value of the component: after setScene() its image lights the new scene.
+
+        @param newPath The path of the image, as written in the document, or an empty string for
+                       the scene to have no environment.
+    */
+    void setEnvironment (const String& newPath);
+
+    /** Returns the path of the image lighting the scene, or an empty string. */
+    const String& getEnvironment() const noexcept { return environment; }
+
+    //==============================================================================
+    /** Returns true while a file of the scene is being loaded: the `loading` state of a `Scene3D`.
+
+        The files are the ones loadModel() and loadTexture() are asked for, and the image of the
+        environment. The state tells its changes from the message loop, or from finishLoading().
+    */
+    bool isLoading() const noexcept;
+
+    /** Waits for the files being loaded, and shows the scene with them before returning.
+
+        This is for what has no message loop to bring the files in: a test, or a tool that checks a
+        document or renders it to an image. The calling thread, which has to be the message thread,
+        is blocked until the thread of the component is done with every file. Their users are then
+        told, with the files these ask for in turn, and what a load of the document leaves to its
+        end is done again: the meshes are built, the nodes find the mesh showing the components
+        inside them, and what is wrong is reported. Nothing is done when no file is being loaded.
+    */
+    void finishLoading();
+
     //==============================================================================
     /** Loads a glTF model for the components of this scene, once for each path.
 
@@ -216,7 +269,14 @@ public:
         ComponentDocument::readAssetFor), so from a folder, from embedded resources or from the
         unsaved text of an editor, and the model is kept: the Model3D components naming the
         same path share its meshes, its materials and its textures. A path is read again once
-        the document tells that its file changed.
+        the document tells that its file changed, and what was kept of it is returned until it
+        is loaded again.
+
+        The file is read here, and parsed on a thread of the component: nothing is returned
+        until the model is there. The components naming the path are then told as they are when
+        its file changes: they ask again, and get it. A file that can't be read fails at once.
+        A model is parsed here, and returned, when it names a WebP image, whose decoder shares
+        tables it fills without a lock, and where no thread can be started.
 
         The buffers and the images a `.gltf` keeps in other files are read from the folder of
         its file, which a document loaded from embedded resources does not have: embed a `.glb`,
@@ -224,9 +284,10 @@ public:
 
         @param path The path of the `.glb` or `.gltf` file, as written in the document.
 
-        @returns The model, or what prevented reading or loading it.
+        @returns The model, what prevented reading or loading it, or nothing while it is being
+                 loaded.
     */
-    ResultValue<GltfModel> loadModel (const String& path);
+    std::optional<ResultValue<GltfModel>> loadModel (const String& path);
 
     /** Loads an image as a texture for the components of this scene, once for each path and
         color encoding.
@@ -236,20 +297,26 @@ public:
         texture. It is filtered linearly with mipmaps and repeats, as the textures of a glTF
         model do by default.
 
+        The image is decoded on the thread of the component, as a model is parsed: nothing is
+        returned until the texture is there, and the components naming the path are then told.
+        A WebP or a TIFF image is decoded here, and returned.
+
         @param path   The path of the image, as written in the document.
         @param isSrgb True for the textures holding sRGB encoded colors, the base color and the
                       emissive ones, false for those holding data.
 
-        @returns The texture, or what prevented reading or decoding it.
+        @returns The texture, what prevented reading or decoding it, or nothing while it is
+                 being loaded.
     */
-    ResultValue<Texture::Ptr> loadTexture (const String& path, bool isSrgb);
+    std::optional<ResultValue<Texture::Ptr>> loadTexture (const String& path, bool isSrgb);
 
     /** Loads a material shader for the components of this scene, once for each path.
 
         The file is read as loadModel() reads its files, and the shader is kept: the Material3D
         components whose `shader` block names the same path share it, whatever happens to the
         stylesheet, and only a change of its files loads it again. A material compiled from its
-        source takes a moment, which is another reason to keep it.
+        source takes a moment, which is another reason to keep it: it is compiled here, on the
+        calling thread, and returned.
 
         The two variants a build compiles the material into are read first, `path` followed by
         `.raster.ysl` and by `.full.ysl` (see MaterialShader::createFromData), either of which
@@ -396,6 +463,7 @@ public:
 
 private:
     struct DocumentLink;
+    struct Loader;
 
     struct Problem
     {
@@ -426,7 +494,19 @@ private:
     void updateSurfaces();
     void releaseLeavingNodes();
     SceneNodeComponent* pickNode (Point<float> position);
+    template <class Key, class Value, class Load>
+    std::optional<ResultValue<Value>> loadAsset (std::map<Key, std::optional<ResultValue<Value>>>& kept, const Key& key, const String& path, bool canUseWorker, Load load);
+    template <class Key, class Value, class Load>
+    void reloadAsset (std::map<Key, std::optional<ResultValue<Value>>>& kept, const Key& key, Load load);
+    template <class Key, class Value, class Make>
+    std::optional<ResultValue<Value>> loadImage (std::map<Key, std::optional<ResultValue<Value>>>& kept, const Key& key, const String& path, Make make);
+    void keepLoaded();
+    void tellLoading();
+    void contentLoaded();
+    void forgetUnusedAssets();
+    void updateEnvironment();
     void assetChanged (const String& path);
+    void tellAssetUsers (const String& path);
     GpuPlatform findGraphicsApi();
     void updateCompiledMaterials();
     bool updateAnimatedComponents (double elapsedSeconds);
@@ -441,11 +521,14 @@ private:
     bool rendered = false; // A paint rendered the scene since its last display frame
     Entity activeCamera;
     SignalConnection entityDestroyed;
-    std::map<String, ResultValue<GltfModel>> models;
-    std::map<std::pair<String, bool>, ResultValue<Texture::Ptr>> textures;
+    std::map<String, std::optional<ResultValue<GltfModel>>> models; // Without a result while the file is being loaded, as the two that follow
+    std::map<std::pair<String, bool>, std::optional<ResultValue<Texture::Ptr>>> textures;
+    std::map<String, std::optional<ResultValue<EnvironmentMap::Ptr>>> environments;
     std::map<String, ResultValue<MaterialShader::Ptr>> materialShaders;
     std::map<String, GpuPlatform> compiledMaterials; // The graphics API each material shader compiled from its source was compiled for, by its path
     std::optional<GpuPlatform> paintedApi;           // The graphics API of what painted the scene last
+    String environment;
+    bool isLoadingTold = false;                      // What isLoading() returned when the `loading` state was last told
     std::vector<Problem> problems;
     Array<WeakReference<Component>> changedMeshes;
     std::vector<WeakReference<Component>> leavingNodes; // The nodes that left the scene with an entity it keeps for them until its next frame
@@ -455,6 +538,7 @@ private:
     bool isFrameRequested = false; // Something asked for a display frame since the last one started
     bool hasSurfaces = false;      // A node showed components on its mesh when the nodes were last looked at
     std::unique_ptr<DocumentLink> documentLink;
+    std::unique_ptr<Loader> loader; // Made by the first file that is loaded
     FrameAttachment frameAttachment { *this, bindFront (&SceneComponent::takeFrame, this) };
 
     template <class T>

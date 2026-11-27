@@ -3121,6 +3121,69 @@ TEST_F (ComponentTest, DisabledComponentsOnlyReceiveTheEndOfMouseInteractions)
     child->removeMouseListener (&listener);
 }
 
+TEST_F (ComponentTest, AListenerTakingADoubleClickHasItInPlaceOfTheComponent)
+{
+    struct ClickedComponent : Component
+    {
+        void mouseDoubleClick (const MouseEvent&) override { ++doubleClicks; }
+
+        int doubleClicks = 0;
+    };
+
+    struct TakingListener : ComponentListener
+    {
+        bool componentDoubleClicked (Component&, const MouseEvent&) override
+        {
+            ++doubleClicks;
+            return takes;
+        }
+
+        int doubleClicks = 0;
+        bool takes = true;
+    };
+
+    struct CountingListener : MouseListener
+    {
+        void mouseDoubleClick (const MouseEvent&) override { ++doubleClicks; }
+
+        int doubleClicks = 0;
+    };
+
+    ClickedComponent clicked;
+    clicked.setVisible (true);
+
+    TakingListener taking;
+    CountingListener mouse;
+    clicked.addComponentListener (&taking);
+    clicked.addMouseListener (&mouse);
+
+    const MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float> (10.0f, 10.0f));
+
+    // The component is not told a double click a listener takes, and the mouse listeners are
+    ComponentHelper::triggerMouseDoubleClick (clicked, event);
+    EXPECT_EQ (taking.doubleClicks, 1);
+    EXPECT_EQ (clicked.doubleClicks, 0);
+    EXPECT_EQ (mouse.doubleClicks, 1);
+
+    // One a listener leaves is the component's, as with no listener
+    taking.takes = false;
+    ComponentHelper::triggerMouseDoubleClick (clicked, event);
+    EXPECT_EQ (taking.doubleClicks, 2);
+    EXPECT_EQ (clicked.doubleClicks, 1);
+    EXPECT_EQ (mouse.doubleClicks, 2);
+
+    // A disabled component is double clicked for no one
+    taking.takes = true;
+    clicked.setEnabled (false);
+    ComponentHelper::triggerMouseDoubleClick (clicked, event);
+    EXPECT_EQ (taking.doubleClicks, 2);
+    EXPECT_EQ (clicked.doubleClicks, 1);
+    EXPECT_EQ (mouse.doubleClicks, 2);
+
+    clicked.removeMouseListener (&mouse);
+    clicked.removeComponentListener (&taking);
+}
+
 TEST_F (ComponentTest, AComponentHiddenWhilePressedStillGetsTheRelease)
 {
     struct ReleaseCounter : public MouseListener

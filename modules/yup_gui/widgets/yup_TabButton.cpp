@@ -49,7 +49,6 @@ struct TabButtonIds
     static inline const Identifier textBounds { "textBounds" };
     static inline const Identifier closeBounds { "closeBounds" };
     static inline const Identifier arrowBounds { "arrowBounds" };
-    static inline const Identifier icon { "icon" };
 };
 
 } // namespace
@@ -60,6 +59,7 @@ const Identifier TabButton::Style::textSelectedColorId { "tabButtonTextSelected"
 const Identifier TabButton::Style::hoveredBackgroundColorId { "tabButtonHoveredBackground" };
 const Identifier TabButton::Style::closeButtonColorId { "tabButtonCloseButton" };
 const Identifier TabButton::Style::cornerRadiusId { "tabButtonCornerRadius" };
+const Identifier TabButton::Style::iconPartId { "icon" };
 
 //==============================================================================
 const ComponentTypeInfo& TabButton::getClassTypeInfo()
@@ -84,9 +84,9 @@ const ComponentTypeInfo& TabButton::getClassTypeInfo()
                                  .readOnly (TabButtonIds::hasIcon, [] (const TabButton& b) { return b.getIconImage().isValid(); }, false, "Whether the tab was given an image as its icon, which the part 'icon' paints.")
                                  .readOnly (TabButtonIds::iconBounds, &TabButton::getIconBounds, {}, "The area of the icon, empty for a tab without one.")
                                  .readOnly (TabButtonIds::textBounds, &TabButton::getTextBounds, {}, "The area of the text, empty for a tab without one.")
-                                 .readOnly (TabButtonIds::closeBounds, &TabButton::getCloseButtonBounds, {}, "The area of the close button, empty for a tab that can't be closed.")
+                                 .readOnly (TabButtonIds::closeBounds, &TabButton::getCloseBounds, {}, "The area of the close button, empty for a tab that can't be closed.")
                                  .readOnly (TabButtonIds::arrowBounds, &TabButton::getArrowBounds, {}, "The area of the arrow of the overflow button, empty for a tab.")
-                                 .part (TabButtonIds::icon, &TabButton::getIconBounds, "The image the tab was given as its icon.")
+                                 .part (Style::iconPartId, &TabButton::getIconBounds, "The image the tab was given as its icon.")
                                  .build();
 
     return info;

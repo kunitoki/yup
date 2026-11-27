@@ -74,6 +74,12 @@ const Identifier& drawingProperty()
     return identifier;
 }
 
+const Identifier& doubleClickSignal()
+{
+    static const Identifier identifier ("onDoubleClick");
+    return identifier;
+}
+
 const Identifier& repeatType()
 {
     static const Identifier identifier ("repeat");
@@ -82,6 +88,66 @@ const Identifier& repeatType()
 
 constexpr int maxRepeatedComponents = 1024;
 constexpr int maximumRangePasses = 8;
+
+// A value as the text it is edited with: a number has the zeros it ends with dropped
+String toEditedText (const var& value)
+{
+    if (! value.isDouble())
+        return value.toString();
+
+    const auto text = String (static_cast<double> (value), 6).trimCharactersAtEnd ("0").trimCharactersAtEnd (".");
+
+    return text == "-0" ? String ("0") : text;
+}
+
+// The number a text starts with, as "440 Hz" does, or nothing when it starts with none
+std::optional<double> readLeadingNumber (const String& text)
+{
+    const auto trimmed = text.trimStart();
+
+    if (! trimmed.initialSectionContainingOnly ("+-.0123456789").containsAnyOf ("0123456789"))
+        return std::nullopt;
+
+    return trimmed.getDoubleValue();
+}
+
+// The provider of the model a property is linked to, with the name it knows the property by
+std::pair<BindingProvider*, Identifier> findLinkedProvider (const BindingGraph& bindings, const Component& component, const Identifier& property)
+{
+    if (const auto linked = bindings.findLinkedModel (component, property))
+        return { linked->model->getProvider(), linked->property };
+
+    return {};
+}
+
+// The text a property is edited with: the one its model shows the value with, else the value
+String readEditedText (const BindingGraph& bindings, const Component& component, const Identifier& property)
+{
+    if (const auto [provider, name] = findLinkedProvider (bindings, component, property); provider != nullptr)
+        if (const auto text = provider->getTextForValue (name, provider->getValue (name)))
+            return *text;
+
+    return toEditedText (component.getProperty (property));
+}
+
+// The value a text typed for a property stands for: the one its model reads from it, else the number it starts
+// with, or the text itself for a string. Nothing for a text with no number to read
+var readEditedValue (const BindingGraph& bindings, const Component& component, const Identifier& property, ComponentProperty::Type type, const String& text)
+{
+    if (const auto [provider, name] = findLinkedProvider (bindings, component, property); provider != nullptr)
+        if (const auto value = provider->getValueForText (name, text))
+            return *value;
+
+    if (type == ComponentProperty::Type::string)
+        return text;
+
+    const auto number = readLeadingNumber (text);
+
+    if (! number.has_value())
+        return {};
+
+    return type == ComponentProperty::Type::integer ? var (roundToInt (*number)) : var (*number);
+}
 
 // Where an element is in its document, as the indices leading to it from the root
 String makeElementKey (const DataTree& element)
@@ -600,6 +666,8 @@ void YuiBuilder::resetBindings()
     pending.clear();
     connections.clear();
     watchers.clear();
+    doubleClickWatchers.clear();
+    valueEditor.close();
 
     for (auto& [name, model] : models)
         model->stopTrackingGestures();
@@ -1459,6 +1527,10 @@ void YuiBuilder::resetValue (Component& component, const ComponentTypeInfo& type
         return;
     }
 
+    // What ran its handler went with the bindings
+    if (name == doubleClickSignal())
+        return;
+
     const auto* descriptor = typeInfo.findProperty (name);
 
     if (descriptor == nullptr && name == paletteProperty())
@@ -1583,6 +1655,22 @@ YuiBuilder::ApplyOutcome YuiBuilder::applyProperty (Component& component, const 
     if (const auto* signal = typeInfo.findSignal (name))
     {
         connectHandler (component, *signal, value, scope);
+        return ApplyOutcome::live;
+    }
+
+    // A signal of every component, unless its type declares one of the name: it is emitted by a listener
+    // kept here, which takes the double click in place of the component
+    if (name == doubleClickSignal())
+    {
+        const ComponentSignal signal {
+            .name = name,
+            .connect = [this] (Component& target, ComponentSignal::Handler handler)
+            {
+                doubleClickWatchers.push_back (std::make_unique<YuiDoubleClickWatcher> (target, std::move (handler)));
+            }
+        };
+
+        connectHandler (component, signal, value, scope);
         return ApplyOutcome::live;
     }
 
@@ -1950,18 +2038,73 @@ void YuiBuilder::connectHandler (Component& component, const ComponentSignal& si
     struct Step
     {
         String actionName;
-        WeakReference<Component> emitter;
+        WeakReference<Component> target;
         Identifier emitted;
+        Identifier written;
         std::vector<std::shared_ptr<PropertyExpression>> values;
+
+        // An edit: what its editor opens over, the text it opens with, and the value of the text typed, which
+        // is read with the names it is given
+        bool isEdit = false;
+        WeakReference<Component> anchor;
+        ComponentProperty::Type editedType = ComponentProperty::Type::any;
+        std::shared_ptr<PropertyExpression> shown;
+        std::shared_ptr<PropertyExpression> parsed;
+        std::shared_ptr<YuiHandlerArguments> typed;
     };
 
     auto steps = std::make_shared<std::vector<Step>>();
+
+    const auto namesProperty = [] (const Expression& argument)
+    {
+        return argument.getKind() == Expression::Kind::symbol && detail::splitYuiPath (argument.getName()).has_value();
+    };
+
+    // The property a call writes, found as the one a link names: of an element or of a model
+    const auto findWritten = [&] (const Expression& named, Step& step) -> const ComponentProperty*
+    {
+        const auto path = detail::splitYuiPath (named.getName());
+        auto* target = resolve (scope, path->first, &component);
+
+        if (auto* model = dynamic_cast<BindingModel*> (target); model != nullptr && model->getTypeInfo().findProperty (path->second) == nullptr)
+            model->refreshProperties();
+
+        const auto* property = target != nullptr ? target->getTypeInfo().findProperty (path->second) : nullptr;
+
+        // Told as an expression reading the name tells it
+        if (property == nullptr)
+        {
+            fail ("Unknown symbol '" + named.getName() + "'");
+            return nullptr;
+        }
+
+        if (property->isReadOnly())
+        {
+            fail ("'" + named.getName() + "' is read-only");
+            return nullptr;
+        }
+
+        step.target = target;
+        step.written = path->second;
+        return property;
+    };
 
     for (const auto& call : handler.calls)
     {
         Step step;
         std::size_t firstArgument = 0;
         const ComponentSignal* emitted = nullptr;
+        std::optional<ComponentProperty::Type> writtenType;
+
+        // An edit opens over the component its handler is on, or over the one it is called on, unless that one
+        // declares a signal of the name
+        Component* editAnchor = nullptr;
+
+        if (call.name == "edit")
+            editAnchor = call.target.isEmpty() ? &component : resolveComponent (scope, call.target, &component);
+
+        if (editAnchor != nullptr && call.target.isNotEmpty() && findDeclaredSignal (*editAnchor, Identifier (call.name)) != nullptr)
+            editAnchor = nullptr;
 
         if (call.target.isEmpty() && call.name == "action")
         {
@@ -1972,6 +2115,70 @@ void YuiBuilder::connectHandler (Component& component, const ComponentSignal& si
 
             step.actionName = call.arguments[0].getConstantValue().toString();
             firstArgument = 1;
+        }
+        else if (call.target.isEmpty() && call.name == "set")
+        {
+            if (call.arguments.size() != 2 || ! namesProperty (call.arguments[0]))
+                return fail ("set expects the property to write, as element.property, then its value");
+
+            const auto* property = findWritten (call.arguments[0], step);
+
+            if (property == nullptr)
+                return;
+
+            if (ComponentProperty::isExpressionType (property->type))
+                writtenType = property->type;
+
+            firstArgument = 1;
+        }
+        else if (editAnchor != nullptr)
+        {
+            if ((call.arguments.size() != 1 && call.arguments.size() != 3) || ! namesProperty (call.arguments[0]))
+                return fail ("edit expects the property to edit, as element.property, then the text shown and the value of the text typed, or neither");
+
+            const auto* property = findWritten (call.arguments[0], step);
+
+            if (property == nullptr)
+                return;
+
+            if (property->type != ComponentProperty::Type::number
+                && property->type != ComponentProperty::Type::integer
+                && property->type != ComponentProperty::Type::string)
+                return fail ("'" + call.arguments[0].getName() + "' is not edited as a text: edit takes a number, an integer or a string");
+
+            step.isEdit = true;
+            step.anchor = editAnchor;
+            step.editedType = property->type;
+
+            if (call.arguments.size() == 3)
+            {
+                auto shown = PropertyExpression::compile (component, call.arguments[1].toString(), std::nullopt, resolverFor (scope), locals.get(), baseDirectory);
+
+                if (shown.failed())
+                    return fail (shown.getErrorMessage());
+
+                step.shown = std::move (shown.getReference());
+
+                // What was typed is read as `text`, and the number it starts with as `input`
+                auto typedNames = localNames;
+                auto typedTypes = localTypes;
+
+                typedNames.add ("text");
+                typedTypes.push_back ({ Identifier ("text"), ComponentProperty::Type::string });
+                typedNames.add ("input");
+                typedTypes.push_back ({ Identifier ("input"), ComponentProperty::Type::number });
+
+                step.typed = std::make_shared<YuiHandlerArguments> (typedNames, typedTypes);
+
+                auto parsed = PropertyExpression::compile (component, call.arguments[2].toString(), property->type, resolverFor (scope), step.typed.get(), baseDirectory);
+
+                if (parsed.failed())
+                    return fail (parsed.getErrorMessage());
+
+                step.parsed = std::move (parsed.getReference());
+            }
+
+            firstArgument = call.arguments.size();
         }
         else
         {
@@ -1987,14 +2194,15 @@ void YuiBuilder::connectHandler (Component& component, const ComponentSignal& si
             if (emitted == nullptr)
                 return fail ("'" + callee + "' is not a signal declared by a component");
 
-            step.emitter = target;
+            step.target = target;
         }
 
-        // The arguments are evaluated each time the signal is emitted, typed as the emitted signal declares them
+        // The arguments are evaluated each time the signal is emitted, typed as the emitted signal declares them, or as
+        // the property written
         for (std::size_t i = firstArgument; i < call.arguments.size(); ++i)
         {
             const auto argIndex = i - firstArgument;
-            std::optional<ComponentProperty::Type> type;
+            auto type = writtenType;
 
             if (emitted != nullptr && argIndex < emitted->arguments.size())
                 if (const auto declared = emitted->arguments[argIndex].type; ComponentProperty::isExpressionType (declared))
@@ -2042,9 +2250,65 @@ void YuiBuilder::connectHandler (Component& component, const ComponentSignal& si
                     callArguments.add (argument->evaluate());
             }
 
-            if (step.actionName.isEmpty())
+            if (step.isEdit)
             {
-                if (auto* target = step.emitter.get())
+                auto* target = step.target.get();
+                auto* anchor = step.anchor.get();
+
+                // Nothing is edited of a component that is disabled, as a control that is locked
+                if (target == nullptr || anchor == nullptr || ! target->isEnabled())
+                    continue;
+
+                const auto text = step.shown != nullptr ? toEditedText (step.shown->evaluate())
+                                                        : readEditedText (owner.bindings, *target, step.written);
+
+                owner.valueEditor.onCommit = [&owner, heldScope, heldSteps, &step, localValues] (const String& typed)
+                {
+                    auto* edited = step.target.get();
+
+                    if (heldScope.expired() || edited == nullptr || ! edited->isEnabled())
+                        return;
+
+                    var value;
+
+                    if (step.parsed != nullptr)
+                    {
+                        auto typedValues = localValues;
+                        typedValues.add (typed);
+                        typedValues.add (readLeadingNumber (typed).value_or (0.0));
+
+                        step.typed->setValues (typedValues);
+                        value = step.parsed->evaluate();
+                    }
+                    else
+                    {
+                        value = readEditedValue (owner.bindings, *edited, step.written, step.editedType, typed);
+                    }
+
+                    // The write goes through the property, which keeps the value in what it takes, as a slider its range
+                    if (! value.isVoid())
+                        edited->setProperty (step.written, value);
+                };
+
+                // Where the popups of the anchor go, or in the root when that is outside the document, whose styles
+                // would not reach the editor
+                auto* parent = anchor->getPopupParentComponent();
+                auto* root = owner.getRoot();
+                auto* ancestor = parent;
+
+                while (ancestor != nullptr && ancestor != root)
+                    ancestor = ancestor->getParentComponent();
+
+                owner.valueEditor.open (*anchor, text, ancestor != nullptr ? parent : root);
+            }
+            else if (step.written.isValid())
+            {
+                if (auto* target = step.target.get())
+                    target->setProperty (step.written, callArguments[0]);
+            }
+            else if (step.actionName.isEmpty())
+            {
+                if (auto* target = step.target.get())
                     owner.emit (*target, step.emitted, callArguments);
             }
             else if (const auto found = owner.actions.find (step.actionName); found != owner.actions.end())

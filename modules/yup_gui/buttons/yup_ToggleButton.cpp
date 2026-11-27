@@ -33,6 +33,7 @@ const Identifier ToggleButton::Style::borderToggledColorId = "toggleButtonBorder
 const Identifier ToggleButton::Style::cornerRadiusId = "toggleButtonCornerRadius";
 const Identifier ToggleButton::Style::outlineWidthId = "toggleButtonOutlineWidth";
 const Identifier ToggleButton::Style::focusedOutlineWidthId = "toggleButtonFocusedOutlineWidth";
+const Identifier ToggleButton::Style::textPartId = "text";
 
 //==============================================================================
 
@@ -50,7 +51,7 @@ const ComponentTypeInfo& ToggleButton::getClassTypeInfo()
                                  .number ("focusedOutlineWidth", Style::focusedOutlineWidthId, 2.0, "The outline width when focused.")
                                  .state (checkedPropertyId, &ToggleButton::getToggleState, [] (ToggleButton& b, bool v) { b.setToggleState (v); })
                                  .property (textPropertyId, &ToggleButton::getButtonText, &ToggleButton::setButtonText)
-                                 .fixedPart ("text", "The text as the button laid it out, filled with the fill color.")
+                                 .fixedPart (Style::textPartId, "The text as the button laid it out, filled with the fill color.")
                                  .build();
 
     return info;
@@ -144,6 +145,9 @@ void ToggleButton::resized()
 
 void ToggleButton::clicked()
 {
+    if (selectValueOnClick())
+        return;
+
     // The button of a radio group that is on stays on when clicked. A change of state runs onClick itself
     if (toggleState && getRadioGroupId() != 0)
         Button::clicked();

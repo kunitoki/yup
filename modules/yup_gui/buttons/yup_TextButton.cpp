@@ -33,6 +33,7 @@ const Identifier TextButton::Style::outlineFocusedColorId = "textButtonOutlineFo
 const Identifier TextButton::Style::cornerRadiusId = "textButtonCornerRadius";
 const Identifier TextButton::Style::outlineWidthId = "textButtonOutlineWidth";
 const Identifier TextButton::Style::focusedOutlineWidthId = "textButtonFocusedOutlineWidth";
+const Identifier TextButton::Style::textPartId = "text";
 
 //==============================================================================
 
@@ -50,7 +51,7 @@ const ComponentTypeInfo& TextButton::getClassTypeInfo()
                                  .number ("focusedOutlineWidth", Style::focusedOutlineWidthId, 2.0, "The outline width when focused.")
                                  .property (textPropertyId, &TextButton::getButtonText, &TextButton::setButtonText)
                                  .readOnly ("textBounds", &TextButton::getTextBounds, {}, "The area the text is laid out in.")
-                                 .fixedPart ("text", &TextButton::getTextBounds, "The text as the button laid it out, filled with the fill color.")
+                                 .fixedPart (Style::textPartId, &TextButton::getTextBounds, "The text as the button laid it out, filled with the fill color.")
                                  .build();
 
     return info;

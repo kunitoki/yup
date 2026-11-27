@@ -361,6 +361,56 @@ TEST_F (BindingGraphTests, LinksAStoreBackedPropertyThroughAChain)
     EXPECT_FLOAT_EQ (static_cast<float> (first.getValue()), 2.0f);
 }
 
+TEST_F (BindingGraphTests, FindsTheModelAPropertyIsLinkedToThroughOtherProperties)
+{
+    CountingProvider provider;
+    BindingModel model (provider);
+
+    Component holder;
+    Slider dial { Slider::LinearHorizontal }, alone { Slider::LinearHorizontal };
+    dial.setRange (0.0, 10.0);
+
+    // As the alias of a component block: the dial to the holder, the holder to the model
+    graph.link (dial, Identifier (valueId), holder, Identifier ("amount"));
+    graph.link (holder, Identifier ("amount"), model, Identifier ("second"));
+
+    const auto expectLinked = [&] (const Component& component, const char* property)
+    {
+        const auto found = graph.findLinkedModel (component, Identifier (property));
+
+        ASSERT_TRUE (found.has_value()) << property;
+        EXPECT_EQ (found->model, &model);
+        EXPECT_EQ (found->property, Identifier ("second"));
+    };
+
+    // Two links away, one, and the property of the model itself
+    expectLinked (dial, valueId);
+    expectLinked (holder, "amount");
+    expectLinked (model, "second");
+
+    // Another property of a linked component is linked to nothing, as a component with no link
+    EXPECT_FALSE (graph.findLinkedModel (dial, Identifier ("minimum")).has_value());
+    EXPECT_FALSE (graph.findLinkedModel (alone, Identifier (valueId)).has_value());
+
+    graph.unlink (holder, Identifier ("amount"));
+    EXPECT_FALSE (graph.findLinkedModel (dial, Identifier (valueId)).has_value());
+}
+
+TEST_F (BindingGraphTests, ALinkToAnElementOfAListIsNotALinkToTheModelProperty)
+{
+    DataTree tree ("seq");
+    tree.beginTransaction().setProperty ("steps", var (Array<var> { false, true }));
+
+    DataTreeBindingProvider provider (tree, nullptr);
+    BindingModel model (provider);
+
+    ToggleButton step;
+    graph.link (step, Identifier ("checked"), model, Identifier ("steps"), 1);
+
+    ASSERT_TRUE (step.getToggleState());
+    EXPECT_FALSE (graph.findLinkedModel (step, Identifier ("checked")).has_value());
+}
+
 TEST_F (BindingGraphTests, ALinkOnEnabledMovesWhatWasGivenNotTheStateOfAParent)
 {
     Component parent, child, model;

@@ -55,9 +55,10 @@ namespace yup
     The colors are colors of the interface, sRGB encoded: the material gets them as the linear
     factors it shades with (the alpha of `baseColor` as it is), and they read back as they were
     set. The textures are paths of image files, read through the document and shared by the
-    materials of the same `Scene3D` (see SceneComponent::loadTexture). An image that can't be
-    read or decoded is reported in the diagnostics of the document and leaves the material
-    without that texture.
+    materials of the same `Scene3D` (see SceneComponent::loadTexture). An image is decoded on a
+    thread of the scene, and the material is without the texture until it is there. One that
+    can't be read or decoded is reported in the diagnostics of the document and leaves the
+    material without that texture.
 
     A parent takes one material: its first `Material3D`. Another one is reported and not used,
     until the first one goes.
@@ -179,6 +180,9 @@ public:
     /** @internal Loads again the textures made from the file that changed, and has the shader looked for again when
         the file is one of its own: the material its `shader` block names, or one of its two compiled variants. */
     void assetChanged (const String& path);
+    /** @internal Returns true when the material names a file: the image of one of its textures, or the material its
+        `shader` block names. Any file when its shader is still to be looked for. */
+    bool isUsingAsset (const String& path) const;
     /** @internal Looks for the shaders the Material3D components shown by a scene name and reads their values again, on
         every display frame. Returns true when a value given to the renderer changed. */
     static bool updateShaders (Scene& shownScene, double elapsedSeconds);

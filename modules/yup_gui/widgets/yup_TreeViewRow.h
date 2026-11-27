@@ -93,6 +93,13 @@ public:
     Rectangle<float> getTextBounds() const;
 
     //==============================================================================
+    /** Style identifiers of the row. Its colors are the ones of TreeView::Style. */
+    struct Style
+    {
+        static const Identifier iconPartId; /**< The name of the part that is the icon of the row's item: `part icon { }` in a drawing. */
+    };
+
+    //==============================================================================
     /** Returns the static type info describing the TreeViewRow type. */
     static const ComponentTypeInfo& getClassTypeInfo();
 

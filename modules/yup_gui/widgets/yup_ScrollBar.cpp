@@ -57,8 +57,8 @@ const ComponentTypeInfo& ScrollBar::getClassTypeInfo()
                                  .number ("cornerRadius", Style::cornerRadiusId, {}, "The thumb corner radius, unset for a pill.")
                                  .state (ScrollBarIds::dragging, &ScrollBar::isDragging)
                                  .state (ScrollBarIds::thumbHovered, [] (const ScrollBar& s) { return s.isThumbHovered(); }, false, "Whether the mouse pointer is over the bar.")
-                                 .readOnly (ScrollBarIds::thumbBounds, &ScrollBar::getThumbBoundsForRendering, {}, "The area of the thumb, before its inset.")
-                                 .readOnly (ScrollBarIds::trackBounds, &ScrollBar::getTrackBoundsForRendering, {}, "The area the thumb moves in.")
+                                 .readOnly (ScrollBarIds::thumbBounds, &ScrollBar::getThumbBounds, {}, "The area of the thumb, before its inset.")
+                                 .readOnly (ScrollBarIds::trackBounds, &ScrollBar::getTrackBounds, {}, "The area the thumb moves in.")
                                  .readOnly (ScrollBarIds::scrollingNeeded, &ScrollBar::isScrollingNeeded, false, "Whether there is more content than the bar shows at once.")
                                  .enumeration<VisibilityMode> (ScrollBarIds::visibilityMode,
                                                                { { "autoHide", VisibilityMode::autoHide },
@@ -345,7 +345,7 @@ bool ScrollBar::mouseWheel (const MouseEvent& event, const MouseWheelData& wheel
 //==============================================================================
 void ScrollBar::updateThumbBounds()
 {
-    thumbBounds = getThumbBounds();
+    thumbBounds = calculateThumbBounds();
 }
 
 void ScrollBar::updateVisibility()
@@ -366,7 +366,7 @@ void ScrollBar::updateVisibility()
     setVisible (isScrollingNeeded());
 }
 
-Rectangle<float> ScrollBar::getThumbBounds() const
+Rectangle<float> ScrollBar::calculateThumbBounds() const
 {
     auto trackBounds = getTrackBounds();
 

@@ -37,8 +37,6 @@ struct TextEditorIds
     static inline const Identifier caretVisible { "caretVisible" };
     static inline const Identifier hasSelection { "hasSelection" };
     static inline const Identifier scrollOffset { "scrollOffset" };
-    static inline const Identifier selectionPart { "selection" };
-    static inline const Identifier caretPart { "caret" };
 };
 
 } // namespace
@@ -54,6 +52,9 @@ const Identifier TextEditor::Style::focusedOutlineColorId = "textEditorFocusedOu
 const Identifier TextEditor::Style::cornerRadiusId = "textEditorCornerRadius";
 const Identifier TextEditor::Style::outlineWidthId = "textEditorOutlineWidth";
 const Identifier TextEditor::Style::focusedOutlineWidthId = "textEditorFocusedOutlineWidth";
+const Identifier TextEditor::Style::selectionPartId = "selection";
+const Identifier TextEditor::Style::textPartId = "text";
+const Identifier TextEditor::Style::caretPartId = "caret";
 
 //==============================================================================
 
@@ -73,14 +74,17 @@ const ComponentTypeInfo& TextEditor::getClassTypeInfo()
                                  .property (TextEditorIds::readOnly, &TextEditor::isReadOnly, &TextEditor::setReadOnly)
                                  .property (TextEditorIds::multiLine, &TextEditor::isMultiLine, &TextEditor::setMultiLine)
                                  .signal ("onTextChange", &TextEditor::onTextChange, "Emitted when the text is edited")
+                                 .signal ("onReturnKey", &TextEditor::onReturnKey, "Emitted when Return is pressed in a single line editor, which keeps the key while this is handled")
+                                 .signal ("onEscapeKey", &TextEditor::onEscapeKey, "Emitted when Escape is pressed, which the editor keeps while this is handled")
+                                 .signal ("onFocusLost", &TextEditor::onFocusLost, "Emitted when the editor loses the keyboard focus")
                                  .readOnly (TextEditorIds::textBounds, &TextEditor::getTextBounds, {}, "The area the text is shown in.")
                                  .readOnly (TextEditorIds::caretBounds, &TextEditor::getCaretBounds, {}, "The area of the caret.")
                                  .readOnly (TextEditorIds::caretVisible, [] (const TextEditor& e) { return e.hasKeyboardFocus() && e.isCaretVisible(); }, false, "Whether the caret shows: the editor has the keyboard focus, and the caret is in the lit half of its blink.")
                                  .readOnly (TextEditorIds::hasSelection, &TextEditor::hasSelection, false, "Whether some of the text is selected.")
                                  .readOnly (TextEditorIds::scrollOffset, &TextEditor::getScrollOffset, {}, "How far the text is scrolled inside the area it is shown in.")
-                                 .fixedPart (TextEditorIds::selectionPart, &TextEditor::getTextBounds, "The background of the selected text, filled with the fill color.")
-                                 .fixedPart (TextEditorIds::text, &TextEditor::getTextBounds, "The text as the editor laid it out and scrolled it, filled with the fill color.")
-                                 .fixedPart (TextEditorIds::caretPart, &TextEditor::getCaretBounds, "The caret, filled with the fill color while it shows.")
+                                 .fixedPart (Style::selectionPartId, &TextEditor::getTextBounds, "The background of the selected text, filled with the fill color.")
+                                 .fixedPart (Style::textPartId, &TextEditor::getTextBounds, "The text as the editor laid it out and scrolled it, filled with the fill color.")
+                                 .fixedPart (Style::caretPartId, &TextEditor::getCaretBounds, "The caret, filled with the fill color while it shows.")
                                  .build();
 
     return info;
@@ -429,6 +433,9 @@ void TextEditor::focusLost()
     stopCaretBlinking();
     relinquishTextInput();
     repaint();
+
+    if (const auto callback = onFocusLost)
+        callback();
 }
 
 //==============================================================================
@@ -603,9 +610,17 @@ bool TextEditor::keyDown (const KeyPress& key, const Point<float>& position)
     }
     else if (key.getKey() == KeyPress::enterKey || key.getKey() == KeyPress::tabKey)
     {
-        // A single line editor has no use for them, so they go to the components around.
         if (! multiLine)
-            return false;
+        {
+            // A single line editor has no use for them, so they go to the components around, unless Return is asked for
+            if (key.getKey() != KeyPress::enterKey || onReturnKey == nullptr)
+                return false;
+
+            // Held, and nothing of the editor is touched after it: it may hide or remove the editor
+            const auto callback = onReturnKey;
+            callback();
+            return true;
+        }
 
         insertText (key.getKey() == KeyPress::enterKey ? "\n" : "\t");
     }
@@ -635,7 +650,12 @@ bool TextEditor::keyDown (const KeyPress& key, const Point<float>& position)
     }
     else if (key.getKey() == KeyPress::escapeKey)
     {
-        return false;
+        if (onEscapeKey == nullptr)
+            return false;
+
+        const auto callback = onEscapeKey;
+        callback();
+        return true;
     }
 
     // Typed characters arrive through textInput(), so their presses belong here too.

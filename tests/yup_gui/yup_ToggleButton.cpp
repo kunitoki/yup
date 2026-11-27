@@ -432,3 +432,109 @@ TEST_F (ToggleButtonTest, TheRadioGroupIsAPropertyThatNotifies)
 
     toggleButton->removeComponentListener (&recorder);
 }
+
+TEST_F (ToggleButtonTest, AButtonWithAValueIsOnWhileItsSelectionIsThatValue)
+{
+    struct Recorder : ComponentListener
+    {
+        void componentPropertyChanged (Component&, const Identifier& name) override { names.add (name.toString()); }
+
+        StringArray names;
+    } recorder;
+
+    toggleButton->addComponentListener (&recorder);
+    toggleButton->setProperty ("value", 2);
+    EXPECT_FALSE (toggleButton->getToggleState());
+
+    // A number equal to the value selects it, whatever kind of number it is
+    toggleButton->setProperty ("selection", 2.0);
+    EXPECT_TRUE (toggleButton->getToggleState());
+    EXPECT_EQ (recorder.names.joinIntoString (" "), "value selection checked");
+
+    toggleButton->setSelection (3);
+    EXPECT_FALSE (toggleButton->getToggleState());
+
+    // The button follows its value too
+    toggleButton->setValue (3);
+    EXPECT_TRUE (toggleButton->getToggleState());
+
+    // A selection of nothing is no value, not even 0
+    toggleButton->setValue (0);
+    toggleButton->setSelection (0);
+    EXPECT_TRUE (toggleButton->getToggleState());
+
+    toggleButton->setSelection (var());
+    EXPECT_FALSE (toggleButton->getToggleState());
+
+    // A switch does the same, here with a text
+    SwitchButton switched;
+    switched.setValue ("saw");
+    switched.setSelection ("saw");
+    EXPECT_TRUE (switched.getToggleState());
+
+    switched.setSelection ("square");
+    EXPECT_FALSE (switched.getToggleState());
+
+    // Without a value the selection is not looked at
+    ToggleButton plain;
+    plain.setToggleState (true);
+    plain.setSelection (1);
+    EXPECT_TRUE (plain.getToggleState());
+
+    // And a button that has no checked state is given none
+    TextButton momentary;
+    momentary.setValue (1);
+    momentary.setSelection (1);
+    EXPECT_FALSE (momentary.hasProperty ("checked"));
+
+    toggleButton->removeComponentListener (&recorder);
+}
+
+TEST_F (ToggleButtonTest, AClickSelectsTheValueOfTheButtonOrItsOffValue)
+{
+    Component panel;
+    SwitchButton switched;
+    int toggleClicks = 0;
+
+    panel.setVisible (true);
+    panel.setBounds (0.0f, 0.0f, 200.0f, 30.0f);
+    switched.setBounds (100.0f, 0.0f, 100.0f, 30.0f);
+    panel.addAndMakeVisible (*toggleButton);
+    panel.addAndMakeVisible (switched);
+
+    toggleButton->setValue (5);
+    switched.setValue ("saw");
+    switched.setOffValue ("none");
+    EXPECT_EQ (switched.getProperty ("offValue").toString(), "none");
+
+    toggleButton->onClick = [&toggleClicks]
+    {
+        ++toggleClicks;
+    };
+
+    PointerSimulator pointer (panel);
+
+    // A click selects the value of the button, which turns it on
+    pointer.click ({ 50.0f, 15.0f });
+    EXPECT_EQ (static_cast<int> (toggleButton->getSelection()), 5);
+    EXPECT_TRUE (toggleButton->getToggleState());
+    EXPECT_EQ (toggleClicks, 1);
+
+    // With no off value the button that is on stays on, and still tells it was clicked
+    pointer.click ({ 50.0f, 15.0f });
+    EXPECT_TRUE (toggleButton->getToggleState());
+    EXPECT_EQ (toggleClicks, 2);
+
+    // With one, a click on the button that is on selects it
+    pointer.click ({ 150.0f, 15.0f });
+    EXPECT_EQ (switched.getSelection().toString(), "saw");
+    EXPECT_TRUE (switched.getToggleState());
+
+    pointer.click ({ 150.0f, 15.0f });
+    EXPECT_EQ (switched.getSelection().toString(), "none");
+    EXPECT_FALSE (switched.getToggleState());
+
+    // The selection decides: given another one, the button goes off without a click
+    toggleButton->setSelection (6);
+    EXPECT_FALSE (toggleButton->getToggleState());
+}

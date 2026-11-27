@@ -91,7 +91,7 @@ TEST (CodeEditorTest, TellsADrawingWhereItsTextIsAndPaintsItselfAsOnePart)
     EXPECT_FALSE (content->isPlaceable);
     EXPECT_EQ (content->getArea (editor), editor.getLocalBounds());
 
-    EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (editor.getProperty (Identifier ("textBounds"))), editor.getTextArea());
+    EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (editor.getProperty (Identifier ("textBounds"))), editor.getTextBounds());
     EXPECT_FLOAT_EQ (static_cast<float> (editor.getProperty (Identifier ("gutterWidth"))), editor.getGutterWidth());
 }
 
@@ -1807,7 +1807,7 @@ TEST (CodeEditorTest, DiagnosticGeometryCoversUnderlinesAndGutter)
     const auto gutter = editor.getDiagnosticGutterMarkers();
     ASSERT_EQ (1u, gutter.size());
     EXPECT_EQ (CodeEditor::Diagnostic::Severity::error, gutter[0].severity);
-    EXPECT_LT (gutter[0].area.getRight(), editor.getTextArea().getX());
+    EXPECT_LT (gutter[0].area.getRight(), editor.getTextBounds().getX());
 
     editor.setLineNumbersVisible (false);
     EXPECT_TRUE (editor.getDiagnosticGutterMarkers().empty());
@@ -2779,7 +2779,7 @@ TEST (CodeEditorTest, HorizontalScrollBarAppearsForLongLines)
     longEditor.setSize (200, 200);
     longEditor.setScrollOffset ({ 0.0f, 0.0f });
 
-    EXPECT_LT (longEditor.getTextArea().getHeight(), shortEditor.getTextArea().getHeight());
+    EXPECT_LT (longEditor.getTextBounds().getHeight(), shortEditor.getTextBounds().getHeight());
 
     longEditor.setScrollOffset ({ 100.0f, 0.0f });
     EXPECT_FLOAT_EQ (100.0f, longEditor.getScrollOffset().getX());
@@ -3268,7 +3268,7 @@ TEST (CodeEditorTest, MouseDownInGutterTogglesBreakpoint)
     editor.setGutterBreakpointsEnabled (true);
 
     const float lineHeight = editor.getLineHeight();
-    const float clickY = editor.getTextArea().getY() + lineHeight * 1.5f; // Line index 1.
+    const float clickY = editor.getTextBounds().getY() + lineHeight * 1.5f; // Line index 1.
 
     MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float> (2.0f, clickY));
     editor.mouseDown (event);
@@ -3285,7 +3285,7 @@ TEST (CodeEditorTest, MouseDownInGutterIgnoresBreakpointsByDefault)
 
     EXPECT_FALSE (editor.areGutterBreakpointsEnabled());
 
-    const float clickY = editor.getTextArea().getY() + editor.getLineHeight() * 1.5f; // Line index 1.
+    const float clickY = editor.getTextBounds().getY() + editor.getLineHeight() * 1.5f; // Line index 1.
 
     MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float> (2.0f, clickY));
     editor.mouseDown (event);
@@ -3302,7 +3302,7 @@ TEST (CodeEditorTest, MouseDownInTextAreaMovesCaretAndClearsSelection)
     editor.setSize (400, 200);
     editor.setLineNumbersVisible (false); // Simplify: whole width is text area.
 
-    const auto textArea = editor.getTextArea();
+    const auto textArea = editor.getTextBounds();
     MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float> (textArea.getX() + 5.0f, textArea.getY() + 5.0f));
     editor.mouseDown (event);
 
@@ -3317,7 +3317,7 @@ TEST (CodeEditorTest, MouseDownOnEmptyLastLineMovesCaretThere)
     editor.setSize (400, 200);
     editor.setLineNumbersVisible (false);
 
-    const auto textArea = editor.getTextArea();
+    const auto textArea = editor.getTextBounds();
     const auto lineHeight = editor.getLineHeight();
 
     editor.mouseDown (MouseEvent (MouseEvent::leftButton, KeyModifiers(), Point<float> (textArea.getX() + 30.0f, textArea.getY() + lineHeight * 2.5f)));
@@ -3336,7 +3336,7 @@ TEST (CodeEditorTest, MouseDownOnEmptyMiddleLineMovesCaretThere)
     editor.setSize (400, 200);
     editor.setLineNumbersVisible (false);
 
-    const auto textArea = editor.getTextArea();
+    const auto textArea = editor.getTextBounds();
     editor.mouseDown (MouseEvent (MouseEvent::leftButton, KeyModifiers(), Point<float> (textArea.getX() + 30.0f, textArea.getY() + editor.getLineHeight() * 1.5f)));
 
     EXPECT_EQ (6, editor.getCaretPosition());
@@ -3350,7 +3350,7 @@ TEST (CodeEditorTest, MouseDragExtendsSelectionWhileDragging)
     editor.setSize (400, 200);
     editor.setLineNumbersVisible (false);
 
-    const auto textArea = editor.getTextArea();
+    const auto textArea = editor.getTextBounds();
     MouseEvent down (MouseEvent::leftButton, KeyModifiers(), Point<float> (textArea.getX(), textArea.getY() + 5.0f));
     editor.mouseDown (down);
 
@@ -3400,7 +3400,7 @@ TEST (CodeEditorTest, MouseDoubleClickSelectsWord)
     editor.setSize (400, 200);
     editor.setLineNumbersVisible (false);
 
-    const auto textArea = editor.getTextArea();
+    const auto textArea = editor.getTextBounds();
     MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float> (textArea.getX() + 2.0f, textArea.getY() + 5.0f));
     editor.mouseDoubleClick (event);
 
@@ -3415,7 +3415,7 @@ TEST (CodeEditorTest, ThirdClickAfterDoubleClickSelectsLine)
     editor.setSize (400, 200);
     editor.setLineNumbersVisible (false);
 
-    const auto textArea = editor.getTextArea();
+    const auto textArea = editor.getTextBounds();
     MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float> (textArea.getX() + 2.0f, textArea.getY() + 5.0f));
 
     editor.mouseDoubleClick (event);

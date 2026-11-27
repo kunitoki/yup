@@ -110,6 +110,9 @@ public:
         static const Identifier outlineColorId;        /**< Outline color */
 
         static const Identifier textHeightProportionId; /**< Text height proportion */
+
+        static const Identifier textPartId;             /**< Name of the part that is the text: `part text { }` in a drawing */
+        static const Identifier textOutlinePartId;      /**< Name of the part that is the outline of the text: `part textOutline { }` in a drawing */
     };
 
     //==============================================================================

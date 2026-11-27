@@ -568,6 +568,51 @@ TEST_F (TextEditorTests, KeyDownClaimsTypingButLeavesOtherKeysToTheComponentsAro
     EXPECT_FALSE (editor->keyDown (KeyPress (KeyPress::textZKey, KeyModifiers::commandMask), {}));
 }
 
+TEST_F (TextEditorTests, ReturnAndEscapeAreKeptOnlyWhileTheyAreAskedFor)
+{
+    editor->setText ("Hello");
+
+    int returns = 0;
+    int escapes = 0;
+    editor->onReturnKey = [&returns] { ++returns; };
+    editor->onEscapeKey = [&escapes] { ++escapes; };
+
+    EXPECT_TRUE (editor->keyDown (KeyPress (KeyPress::enterKey), {}));
+    EXPECT_TRUE (editor->keyDown (KeyPress (KeyPress::escapeKey), {}));
+    EXPECT_FALSE (editor->keyDown (KeyPress (KeyPress::tabKey), {}));
+    EXPECT_EQ (returns, 1);
+    EXPECT_EQ (escapes, 1);
+    EXPECT_EQ (editor->getText(), "Hello");
+
+    // Return breaks the line of a multi line editor, which Escape still leaves
+    editor->setMultiLine (true);
+    editor->moveCaretToEnd();
+    EXPECT_TRUE (editor->keyDown (KeyPress (KeyPress::enterKey), {}));
+    EXPECT_TRUE (editor->keyDown (KeyPress (KeyPress::escapeKey), {}));
+    EXPECT_EQ (returns, 1);
+    EXPECT_EQ (escapes, 2);
+    EXPECT_EQ (editor->getText(), "Hello\n");
+
+    // With no one asking, both go to the components around
+    editor->setMultiLine (false);
+    editor->onReturnKey = nullptr;
+    editor->onEscapeKey = nullptr;
+    EXPECT_FALSE (editor->keyDown (KeyPress (KeyPress::enterKey), {}));
+    EXPECT_FALSE (editor->keyDown (KeyPress (KeyPress::escapeKey), {}));
+}
+
+TEST_F (TextEditorTests, TellsWhenItLosesTheKeyboardFocus)
+{
+    int losses = 0;
+    editor->onFocusLost = [&losses] { ++losses; };
+
+    editor->focusGained();
+    EXPECT_EQ (losses, 0);
+
+    editor->focusLost();
+    EXPECT_EQ (losses, 1);
+}
+
 TEST_F (TextEditorTests, TabKeyInsertsInMultiLineMode)
 {
     editor->setMultiLine (true);

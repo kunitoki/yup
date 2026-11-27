@@ -88,6 +88,8 @@ public:
         static const Identifier cornerRadiusId;        /**< Corner radius, 4 by default */
         static const Identifier outlineWidthId;        /**< Border width, 1 by default */
         static const Identifier focusedOutlineWidthId; /**< Border width with keyboard focus, 2 by default */
+
+        static const Identifier textPartId;            /**< Name of the part that is the text: `part text { }` in a drawing */
     };
 
     //==============================================================================

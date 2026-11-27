@@ -145,6 +145,28 @@ public:
     /** Returns how many links the graph holds. */
     int getNumLinks() const noexcept { return static_cast<int> (links.size()); }
 
+    /** A property of a model, as reported by findLinkedModel(). */
+    struct ModelProperty
+    {
+        /** The model holding the property. */
+        BindingModel* model = nullptr;
+
+        /** The property of the model. */
+        Identifier property;
+    };
+
+    /** Returns the property of a model a property is linked to, or nothing when it is linked to none.
+
+        The links are followed through the properties between the two, as the alias of a
+        `component` block is: with `dial.value <=> root.value <=> params.gain`, the value of the
+        dial is found linked to `params.gain`. A property of a model is found as itself, and a
+        link to one element of a list is not followed, as the property is not the whole list.
+
+        @param component  The component holding the property.
+        @param property   The property.
+    */
+    std::optional<ModelProperty> findLinkedModel (const Component& component, const Identifier& property) const;
+
     //==============================================================================
     /** Returns how many live bindings the graph holds. */
     int getNumBindings() const noexcept { return static_cast<int> (bindings.size()); }

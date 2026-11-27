@@ -111,12 +111,12 @@ public:
         size of the component: it is centered in it, and only gets smaller in a component with less room. It is
         what the pointer hits: a press beside it in a larger component is not a press of the switch.
     */
-    Rectangle<float> getSwitchBounds() const;
+    Rectangle<float> getTrackBounds() const;
 
     /** Returns the area of the handle in the switch, before the inset of its style: it slides from one end of
-        getSwitchBounds() to the other when the switch is toggled.
+        getTrackBounds() to the other when the switch is toggled.
     */
-    Rectangle<float> getSwitchCircleBounds() const;
+    Rectangle<float> getThumbBounds() const;
 
     /** @internal */
     bool hitTest (float x, float y) override;

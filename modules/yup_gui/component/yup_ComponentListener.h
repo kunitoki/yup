@@ -63,6 +63,24 @@ public:
         ignoreUnused (component, name);
     }
 
+    /** Called when an enabled component is double clicked, before the component itself is told.
+
+        Return true to take the double click: Component::mouseDoubleClick() is then not called, so
+        what the component does itself on a double click, as a Slider going back to its default
+        value, does not happen. The other listeners are still asked, and the mouse listeners are
+        told as before. It is how the `onDoubleClick` handlers of `.yui` run.
+
+        @param component  The component that was double clicked.
+        @param event      The mouse event, relative to the component.
+
+        @returns True to handle the double click in place of the component.
+    */
+    virtual bool componentDoubleClicked (Component& component, const MouseEvent& event)
+    {
+        ignoreUnused (component, event);
+        return false;
+    }
+
     /** Called after a component paint pass completes with measured paint data.
 
         Timing fields in measurement contain raw high-resolution tick counts. Listeners

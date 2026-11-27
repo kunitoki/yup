@@ -141,7 +141,7 @@ protected:
 
     static Point<float> closeButtonCenter (const TabButton& button)
     {
-        return button.getCloseButtonBounds().getCenter() + button.getBounds().getTopLeft();
+        return button.getCloseBounds().getCenter() + button.getBounds().getTopLeft();
     }
 
     ApplicationTheme::Ptr oldTheme;

@@ -75,7 +75,7 @@ TEST_F (TabButtonTests, PreferredLengthGrowsWithAnIconAndACloseButton)
 
     button.setClosable (true);
     EXPECT_GT (button.getPreferredLength(), withIcon);
-    EXPECT_FALSE (button.getCloseButtonBounds().isEmpty());
+    EXPECT_FALSE (button.getCloseBounds().isEmpty());
 }
 
 TEST_F (TabButtonTests, SelectedFontKeepsTheDefaultHeight)
@@ -121,8 +121,8 @@ TEST_F (TabButtonTests, TextBoundsDoNotOverlapTheIconOrTheCloseButton)
     button.setClosable (true);
 
     EXPECT_LE (button.getIconBounds().getRight(), button.getTextBounds().getX());
-    EXPECT_LE (button.getTextBounds().getRight(), button.getCloseButtonBounds().getX());
-    EXPECT_LE (button.getCloseButtonBounds().getRight(), button.getWidth());
+    EXPECT_LE (button.getTextBounds().getRight(), button.getCloseBounds().getX());
+    EXPECT_LE (button.getCloseBounds().getRight(), button.getWidth());
 }
 
 TEST_F (TabButtonTests, CustomComponentKeepsItsSizeAndIgnoresTheMouse)
@@ -167,7 +167,7 @@ TEST_F (TabButtonTests, CloseButtonHoverFollowsTheMouse)
     auto& button = bar->addTab ("table", "Table");
     button.setClosable (true);
 
-    button.mouseMove (MouseEvent (MouseEvent::noButtons, KeyModifiers(), button.getCloseButtonBounds().getCenter()));
+    button.mouseMove (MouseEvent (MouseEvent::noButtons, KeyModifiers(), button.getCloseBounds().getCenter()));
     EXPECT_TRUE (button.isCloseButtonOver());
 
     button.mouseMove (MouseEvent (MouseEvent::noButtons, KeyModifiers(), { 1.0f, 1.0f }));

@@ -266,4 +266,28 @@ void YuiPropertyWatcher::componentPropertyChanged (Component& changed, const Ide
         handler ({ changed.getProperty (property) });
 }
 
+//==============================================================================
+
+YuiDoubleClickWatcher::YuiDoubleClickWatcher (Component& componentToWatch, ComponentSignal::Handler handlerToRun)
+    : component (&componentToWatch)
+    , handler (std::move (handlerToRun))
+{
+    componentToWatch.addComponentListener (this);
+}
+
+YuiDoubleClickWatcher::~YuiDoubleClickWatcher()
+{
+    if (auto* watched = component.get())
+        watched->removeComponentListener (this);
+}
+
+bool YuiDoubleClickWatcher::componentDoubleClicked (Component&, const MouseEvent&)
+{
+    // Held, as what the handler does may have the document built again, which destroys this watcher
+    const auto held = handler;
+    held ({});
+
+    return true;
+}
+
 } // namespace yup

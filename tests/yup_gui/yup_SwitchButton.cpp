@@ -236,9 +236,9 @@ TEST_F (SwitchButtonTest, StateChangeWithNotification)
     EXPECT_FALSE (switchButton->getToggleState());
 }
 
-TEST_F (SwitchButtonTest, GetSwitchCircleBoundsReturnsValidRectangle)
+TEST_F (SwitchButtonTest, GetThumbBoundsReturnsValidRectangle)
 {
-    auto circleBounds = switchButton->getSwitchCircleBounds();
+    auto circleBounds = switchButton->getThumbBounds();
 
     // Circle bounds should be within the button bounds
     EXPECT_GE (circleBounds.getX(), 0.0f);
@@ -247,12 +247,12 @@ TEST_F (SwitchButtonTest, GetSwitchCircleBoundsReturnsValidRectangle)
     EXPECT_LE (circleBounds.getBottom(), static_cast<float> (switchButton->getHeight()));
 }
 
-TEST_F (SwitchButtonTest, CircleBoundsChangeWithToggleState)
+TEST_F (SwitchButtonTest, ThumbBoundsChangeWithToggleState)
 {
-    auto initialBounds = switchButton->getSwitchCircleBounds();
+    auto initialBounds = switchButton->getThumbBounds();
 
     switchButton->setToggleState (true, dontSendNotification);
-    auto toggledBounds = switchButton->getSwitchCircleBounds();
+    auto toggledBounds = switchButton->getThumbBounds();
 
     // The circle should move when toggled (exact position depends on implementation)
     // We just verify bounds are still valid
@@ -267,14 +267,14 @@ TEST_F (SwitchButtonTest, VerticalSwitchBehavior)
 
     EXPECT_TRUE (verticalSwitch->isVertical());
 
-    auto circleBounds = verticalSwitch->getSwitchCircleBounds();
+    auto circleBounds = verticalSwitch->getThumbBounds();
     EXPECT_LE (circleBounds.getRight(), static_cast<float> (verticalSwitch->getWidth()));
     EXPECT_LE (circleBounds.getBottom(), static_cast<float> (verticalSwitch->getHeight()));
 
     verticalSwitch->setToggleState (true, dontSendNotification);
     EXPECT_TRUE (verticalSwitch->getToggleState());
 
-    auto toggledBounds = verticalSwitch->getSwitchCircleBounds();
+    auto toggledBounds = verticalSwitch->getThumbBounds();
     EXPECT_LE (toggledBounds.getRight(), static_cast<float> (verticalSwitch->getWidth()));
     EXPECT_LE (toggledBounds.getBottom(), static_cast<float> (verticalSwitch->getHeight()));
 }
@@ -285,22 +285,22 @@ TEST_F (SwitchButtonTest, KeepsItsSizeInALargerComponentAndStaysInItsMiddle)
     switchButton->setBounds (0, 0, 200, 100);
 
     // Twice as long as it is thick, whatever room it is given
-    EXPECT_EQ (switchButton->getSwitchBounds(), Rectangle<float> (72.0f, 36.0f, 56.0f, 28.0f));
-    EXPECT_EQ (switchButton->getSwitchCircleBounds(), Rectangle<float> (73.0f, 37.0f, 26.0f, 26.0f));
+    EXPECT_EQ (switchButton->getTrackBounds(), Rectangle<float> (72.0f, 36.0f, 56.0f, 28.0f));
+    EXPECT_EQ (switchButton->getThumbBounds(), Rectangle<float> (73.0f, 37.0f, 26.0f, 26.0f));
 
     switchButton->setToggleState (true, dontSendNotification);
-    EXPECT_EQ (switchButton->getSwitchCircleBounds(), Rectangle<float> (101.0f, 37.0f, 26.0f, 26.0f));
+    EXPECT_EQ (switchButton->getThumbBounds(), Rectangle<float> (101.0f, 37.0f, 26.0f, 26.0f));
 
     // A style makes it larger, and a component with less room makes it fit
     switchButton->setProperty (Identifier ("thumbSize"), 40.0);
-    EXPECT_EQ (switchButton->getSwitchBounds(), Rectangle<float> (60.0f, 30.0f, 80.0f, 40.0f));
+    EXPECT_EQ (switchButton->getTrackBounds(), Rectangle<float> (60.0f, 30.0f, 80.0f, 40.0f));
 
     switchButton->setBounds (0, 0, 30, 10);
-    EXPECT_EQ (switchButton->getSwitchBounds(), Rectangle<float> (5.0f, 0.0f, 20.0f, 10.0f));
+    EXPECT_EQ (switchButton->getTrackBounds(), Rectangle<float> (5.0f, 0.0f, 20.0f, 10.0f));
 
     // Where it is and where its handle is are told as properties, for a style painting it
-    EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (switchButton->getProperty (Identifier ("trackBounds"))), switchButton->getSwitchBounds());
-    EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (switchButton->getProperty (Identifier ("thumbBounds"))), switchButton->getSwitchCircleBounds());
+    EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (switchButton->getProperty (Identifier ("trackBounds"))), switchButton->getTrackBounds());
+    EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (switchButton->getProperty (Identifier ("thumbBounds"))), switchButton->getThumbBounds());
 }
 
 TEST_F (SwitchButtonTest, ThePointerHitsTheSwitchAndNotTheRoomAroundIt)
@@ -316,7 +316,7 @@ TEST_F (SwitchButtonTest, ThePointerHitsTheSwitchAndNotTheRoomAroundIt)
     PointerSimulator pointer (panel);
 
     // The switch keeps its size in the middle of the component: a press beside it is not a press of the switch
-    const auto bounds = button.getSwitchBounds();
+    const auto bounds = button.getTrackBounds();
     ASSERT_EQ (bounds, Rectangle<float> (72.0f, 36.0f, 56.0f, 28.0f));
 
     EXPECT_NE (pointer.click ({ 10.0f, 10.0f }), &button);
@@ -342,7 +342,7 @@ TEST_F (SwitchButtonTest, SwitchWithZeroSize)
     switchButton->setToggleState (true, dontSendNotification);
     EXPECT_TRUE (switchButton->getToggleState());
 
-    auto circleBounds = switchButton->getSwitchCircleBounds();
+    auto circleBounds = switchButton->getThumbBounds();
     // Should handle zero size gracefully
     EXPECT_GE (circleBounds.getX(), 0.0f);
     EXPECT_GE (circleBounds.getY(), 0.0f);
@@ -356,7 +356,7 @@ TEST_F (SwitchButtonTest, SwitchWithVerySmallSize)
     switchButton->setToggleState (true, dontSendNotification);
     EXPECT_TRUE (switchButton->getToggleState());
 
-    auto circleBounds = switchButton->getSwitchCircleBounds();
+    auto circleBounds = switchButton->getThumbBounds();
     EXPECT_LE (circleBounds.getRight(), 1.0f);
     EXPECT_LE (circleBounds.getBottom(), 1.0f);
 }
@@ -372,20 +372,20 @@ TEST_F (SwitchButtonTest, AsksForFramesOnlyWhileTheHandleSlides)
     switchButton->setMillisecondsToSpendMoving (100);
     EXPECT_FALSE (native.hasFrameListeners());
 
-    const auto off = switchButton->getSwitchCircleBounds();
+    const auto off = switchButton->getThumbBounds();
 
     switchButton->setToggleState (true, dontSendNotification);
     EXPECT_TRUE (native.hasFrameListeners());
-    EXPECT_EQ (switchButton->getSwitchCircleBounds(), off);
+    EXPECT_EQ (switchButton->getThumbBounds(), off);
 
     // The handle moves by the time of the frames, whatever the clock says
     native.callFrameListeners (0.05);
-    const auto midway = switchButton->getSwitchCircleBounds();
+    const auto midway = switchButton->getThumbBounds();
     EXPECT_GT (midway.getX(), off.getX());
     EXPECT_TRUE (native.hasFrameListeners());
 
     native.callFrameListeners (0.06);
-    EXPECT_GT (switchButton->getSwitchCircleBounds().getX(), midway.getX());
+    EXPECT_GT (switchButton->getThumbBounds().getX(), midway.getX());
     EXPECT_FALSE (native.hasFrameListeners());
 
     window.removeChildComponent (*switchButton);
@@ -401,11 +401,11 @@ TEST_F (SwitchButtonTest, AHiddenSwitchAsksForNoFrameAndSlidesOnWhenItShowsAgain
 
     switchButton->setMillisecondsToSpendMoving (100);
 
-    const auto off = switchButton->getSwitchCircleBounds();
+    const auto off = switchButton->getThumbBounds();
 
     switchButton->setToggleState (true, dontSendNotification);
     native.callFrameListeners (0.05);
-    const auto midway = switchButton->getSwitchCircleBounds();
+    const auto midway = switchButton->getThumbBounds();
     ASSERT_TRUE (native.hasFrameListeners());
 
     // Hiding a parent hides the switch
@@ -414,12 +414,12 @@ TEST_F (SwitchButtonTest, AHiddenSwitchAsksForNoFrameAndSlidesOnWhenItShowsAgain
 
     window.setVisible (true);
     EXPECT_TRUE (native.hasFrameListeners());
-    EXPECT_EQ (switchButton->getSwitchCircleBounds(), midway);
+    EXPECT_EQ (switchButton->getThumbBounds(), midway);
 
     native.callFrameListeners (0.06);
     EXPECT_FALSE (native.hasFrameListeners());
 
-    const auto on = switchButton->getSwitchCircleBounds();
+    const auto on = switchButton->getThumbBounds();
     EXPECT_GT (on.getX(), midway.getX());
 
     // Toggled out of sight it has nowhere to slide: the handle is at its end when the switch shows again
@@ -429,7 +429,7 @@ TEST_F (SwitchButtonTest, AHiddenSwitchAsksForNoFrameAndSlidesOnWhenItShowsAgain
 
     switchButton->setVisible (true);
     EXPECT_FALSE (native.hasFrameListeners());
-    EXPECT_EQ (switchButton->getSwitchCircleBounds(), off);
+    EXPECT_EQ (switchButton->getThumbBounds(), off);
 
     window.removeChildComponent (*switchButton);
 }

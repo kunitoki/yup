@@ -91,6 +91,9 @@ public:
     /** Returns the current value, in the range of the wheel. */
     double getValue() const noexcept { return value; }
 
+    /** Returns where the value is along the range of the wheel, from 0.0 at its lowest to 1.0 at its highest. */
+    double getNormalizedValue() const noexcept { return (value - valueRange.getStart()) / valueRange.getLength(); }
+
     //==============================================================================
     /** Changes the midi channel of the state that this component follows.
 

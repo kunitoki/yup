@@ -251,6 +251,11 @@ Point<float> JoystickComponent::getThumbPosition() const
              static_cast<float> (1.0 - getNormalizedValue (Axis::y)) * getHeight() };
 }
 
+Rectangle<float> JoystickComponent::getThumbBounds() const
+{
+    return Rectangle<float> (0.0f, 0.0f, thumbSize, thumbSize).withCenter (getThumbPosition());
+}
+
 //==============================================================================
 void JoystickComponent::paint (Graphics& g)
 {

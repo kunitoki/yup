@@ -382,7 +382,7 @@ flowchart LR
         tokens["Root type info<br/>tokens as inherited properties"]
         composite["Type info per<br/>component block"]
         model["BindingModel<br/>provider as Component"]
-        handler["Signal handler<br/>action (...) or root.sig (...)"]
+        handler["Signal handler<br/>action (...), set (...), edit (...) or root.sig (...)"]
     end
 
     subgraph treeSide [Component tree]
@@ -397,6 +397,7 @@ flowchart LR
     composite -- setTypeInfo --> instance
     model <-->|two-way link| linked
     linked -- "ComponentSignal<br/>onValueChanged" --> handler
+    handler -- "set" --> model
 
     classDef self fill:#005aff,color:#fff,stroke:#003db3;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
@@ -413,9 +414,17 @@ flowchart LR
   links. Drags on linked components open and close the provider's gestures, and
   any other change is a gesture of its own.
 - A property named after a signal connects a handler. When the signal fires, the
-  handler runs document actions or emits signals declared by composites, reading
-  the signal's arguments through the names it gives them. `changed property:`
-  handlers run the same way when a property changes.
+  handler runs document actions, sets properties of components and models or
+  emits signals declared by composites, reading the signal's arguments through
+  the names it gives them. `changed property:` handlers run the same way when a
+  property changes, and `onDoubleClick` ones when a component is double
+  clicked: the builder keeps a `ComponentListener` for each, the one of a
+  double click taking it in place of the component.
+- An `edit (...)` call opens the one `InPlaceTextEditor` of the builder over a
+  component, inside the document root. The text it opens with and the value of
+  what is typed come from the expressions of the call, else from the provider
+  of the model the property is linked to, which `BindingGraph::findLinkedModel`
+  finds through the aliases between the two.
 - The elements of a [3D scene](scenes.md) are component types too, declared by
   `yup_renderer` and registered by `registerYuiComponentTypes()` when the
   application links it. The builder creates them as it creates widgets, and

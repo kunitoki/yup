@@ -56,6 +56,19 @@ REPEATED = ('Column { width: 200; height: 120;\n'
             '        repeat i in 0 .. (seq.wide ? 4 : 2) { ToggleButton { checked <=> seq.steps[i]; onClick: action ("step", i); } }\n'
             '    }\n'
             '}\n')
+# Two buttons standing for the values of one property of a model, and one whose handler writes another
+SELECTED = ('Component { width: 200; height: 60;\n'
+            '    repeat note in 1 .. 3 {\n'
+            '        ToggleButton { x: (note - 1) * 100; y: 0; width: 100; height: 30; value: note; selection <=> keys.note; offValue: 0; }\n'
+            '    }\n'
+            '    TextButton { id: up; x: 0; y: 30; width: 100; height: 30; onClick: set (keys.octave, keys.octave + 1); }\n'
+            '}\n')
+# A label whose double click edits a property of a model as text, and a slider whose double click is its own
+EDITED = ('Component { width: 200; height: 60;\n'
+          '    Label { id: readout; x: 0; y: 0; width: 200; height: 30; onDoubleClick: edit (keys.octave); }\n'
+          '    Slider { id: dial; x: 0; y: 30; width: 200; height: 30; sliderType: rotaryVerticalDrag; fineDragScale: 0.2; fineDragModifier: command;\n'
+          '             resetModifier: none; defaultValue: 0.5; value <=> keys.level; }\n'
+          '}\n')
 COVERED = ('Component { width: 100; height: 100;\n'
            '    TextButton { id: under; x: 0; y: 0; width: 100; height: 100; onClick: action ("never"); }\n'
            '    Component { id: cover; x: 0; y: 0; width: 100; height: 100; }\n'
@@ -670,6 +683,13 @@ class YuiToolCliTests(unittest.TestCase):
 
         signals = {entry["name"]: entry for entry in slider["signals"]}
         self.assertEqual([argument["name"] for argument in signals["onValueChanged"]["arguments"]], ["value"])
+
+        # The signal of every component is told once, for the type they all derive from, with the new properties of a slider
+        self.assertNotIn("onDoubleClick", signals)
+        self.assertEqual([entry["name"] for entry in base["signals"]], ["onDoubleClick"])
+        self.assertEqual(properties["fineDragModifier"]["values"], ["none", "shift", "ctrl", "alt", "command"])
+        self.assertEqual(properties["fineDragModifier"]["default"], "shift")
+        self.assertEqual(properties["resetModifier"]["default"], "alt")
 
         self.assertFalse(types["DocumentWindow"]["instantiable"])
 
@@ -1645,6 +1665,50 @@ class YuiToolCliTests(unittest.TestCase):
         self.assertEqual(len(steps(told)), 4)
         self.assertEqual(told["changed"], {"seq": {"wide": [False, True], "steps": {"3": [False, True]}}})
         self.assertEqual([(action["name"], action["arguments"]) for action in told["actions"]], [("step", [3])])
+
+    def test_mcp_follows_what_buttons_select_and_handlers_set(self):
+        self.write("ui.yui", SELECTED)
+
+        # A property a selection is linked to, or one a handler only writes, is found lacking as one that is read
+        self.assertEqual(json.loads(self.call("yui_check", file="ui.yui")[1])["missingModels"], {"keys": {"note": 0, "octave": 0}})
+
+        self.write("ui.models.json", json.dumps({"keys": {"note": 0, "octave": 2}}))
+
+        def play(*events):
+            failed, text, _ = self.call("yui_inspect", file="ui.yui", events=list(events))
+            self.assertFalse(failed, text)
+            return json.loads(text)
+
+        # A click on a button selects its value, and the handler of the other one writes what it computes
+        told = play({"path": "1", "type": "click"}, {"id": "up", "type": "click"})
+        self.assertEqual(told["changed"], {"keys": {"note": [0, 2], "octave": [2, 3]}})
+        self.assertEqual(told["actions"], [])
+
+        # A second click on the button that is on selects its off value, and another button takes the selection over
+        self.assertEqual(play({"path": "1", "type": "click"}, {"path": "1", "type": "click"})["changed"], {})
+        self.assertEqual(play({"path": "1", "type": "click"}, {"path": "0", "type": "click"})["changed"], {"keys": {"note": [0, 1]}})
+
+    def test_mcp_checks_and_plays_the_double_clicks_that_edit_a_value(self):
+        self.write("ui.yui", EDITED)
+
+        # A property an edit names is found lacking as one that is read, and the handler is one of any component
+        checked = json.loads(self.call("yui_check", file="ui.yui")[1])
+        self.assertEqual(checked["missingModels"], {"keys": {"level": 0, "octave": 0}})
+
+        self.write("ui.models.json", json.dumps({"keys": {"level": 0.25, "octave": 2}}))
+        self.assertNotIn("missingModels", json.loads(self.call("yui_check", file="ui.yui")[1]))
+
+        def play(*events):
+            failed, text, _ = self.call("yui_inspect", file="ui.yui", events=list(events))
+            self.assertFalse(failed, text)
+            return json.loads(text)
+
+        # The editor opens over the label and a press elsewhere closes it: nothing was typed, so nothing is written
+        told = play({"id": "readout", "type": "doubleClick"}, {"id": "dial", "type": "click"})
+        self.assertEqual(told["changed"], {})
+
+        # With no handler the double click is the one of the slider, which goes back to its default value
+        self.assertEqual(play({"id": "dial", "type": "doubleClick"})["changed"], {"keys": {"level": [0.25, 0.5]}})
 
     def test_mcp_warns_when_an_event_does_not_reach_its_component(self):
         self.write("ui.yui", COVERED)

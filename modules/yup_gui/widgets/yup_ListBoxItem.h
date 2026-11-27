@@ -141,6 +141,8 @@ public:
         static const Identifier backgroundColorId;         /**< The identifier for the background color. */
         static const Identifier backgroundColorSelectedId; /**< The identifier for the selected background color. */
         static const Identifier backgroundColorHoveredId;  /**< The identifier for the hovered background color. */
+
+        static const Identifier iconPartId;                /**< The name of the part that is the icon: `part icon { }` in a drawing. */
     };
 
     //==============================================================================
@@ -151,11 +153,13 @@ public:
     const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
     //==============================================================================
-    /** @internal */
-    Rectangle<float> getTextBoundsForRendering() const { return textBounds; }
-    /** @internal*/
-    Rectangle<float> getIconBoundsForRendering() const { return iconBounds; }
+    /** Returns the area of the text, in the coordinates of the item: what the icon leaves of the item inside its padding. */
+    Rectangle<float> getTextBounds() const { return textBounds; }
 
+    /** Returns the area of the icon, beside the text where getIconPosition() tells. Empty for an item without an icon. */
+    Rectangle<float> getIconBounds() const { return iconBounds; }
+
+    //==============================================================================
     /** @internal */
     void paint (Graphics& g) override;
     /** @internal */

@@ -984,7 +984,7 @@ TEST_F (PopupMenuTest, ScrollingKeepsRowsAdjacentToScrollIndicators)
             lastVisibleItemBottom = jmax (lastVisibleItemBottom, item->area.getBottom());
     }
 
-    const auto downIndicatorTop = menu->getScrollDownIndicatorBounds().getY();
+    const auto downIndicatorTop = menu->getScrollDownBounds().getY();
     EXPECT_LE (lastVisibleItemBottom, downIndicatorTop);
     EXPECT_LE (downIndicatorTop - lastVisibleItemBottom, 4.0f);
 }
@@ -1008,8 +1008,8 @@ TEST_F (PopupMenuTest, ShowScrollsTickedItemIntoView)
 
     EXPECT_TRUE (menu->canScrollUp());
     EXPECT_FALSE (ticked.area.isEmpty());
-    EXPECT_GE (ticked.area.getY(), menu->getScrollUpIndicatorBounds().getBottom());
-    EXPECT_LE (ticked.area.getBottom(), menu->getScrollDownIndicatorBounds().getY());
+    EXPECT_GE (ticked.area.getY(), menu->getScrollUpBounds().getBottom());
+    EXPECT_LE (ticked.area.getBottom(), menu->getScrollDownBounds().getY());
 }
 
 TEST_F (PopupMenuTest, TappingScrollIndicatorsScrollsTheMenu)
@@ -1032,11 +1032,11 @@ TEST_F (PopupMenuTest, TappingScrollIndicatorsScrollsTheMenu)
         menu->mouseUp (event);
     };
 
-    tap (menu->getScrollDownIndicatorBounds().getCenter());
+    tap (menu->getScrollDownBounds().getCenter());
     EXPECT_TRUE (menu->canScrollUp());
     EXPECT_TRUE (menu->isBeingShown());
 
-    tap (menu->getScrollUpIndicatorBounds().getCenter());
+    tap (menu->getScrollUpBounds().getCenter());
     EXPECT_FALSE (menu->canScrollUp());
     EXPECT_TRUE (menu->isBeingShown());
 }
@@ -1223,15 +1223,96 @@ TEST_F (PopupMenuTest, NeedsScrolling)
     EXPECT_FALSE (empty->needsScrolling());
 }
 
-TEST_F (PopupMenuTest, GetScrollUpIndicatorBounds)
+TEST_F (PopupMenuTest, GetScrollUpBounds)
 {
     auto menu = PopupMenu::create();
     for (int i = 1; i <= 100; ++i)
         menu->addItem (String ("Item ") + String (i), i);
 
     menu->show();
-    const auto upBounds = menu->getScrollUpIndicatorBounds();
+    const auto upBounds = menu->getScrollUpBounds();
     EXPECT_FALSE (upBounds.isEmpty());
+}
+
+TEST_F (PopupMenuTest, TellsWhereAnItemPutsItsTextItsTickItsShortcutAndItsArrow)
+{
+    auto subMenu = PopupMenu::create();
+    subMenu->addItem ("Sub Item 1", 10);
+
+    auto menu = PopupMenu::create (PopupMenu::Options().withParentComponent (parentComponent.get()).withPosition (Point<int> (10, 10)));
+    menu->addItem (kPopupTestText1, kPopupTestId1, true, false, kShortcutText);
+    menu->addSeparator();
+    menu->addItem (kPopupTestText2, kPopupTestId2, true, true);
+    menu->addSubMenu (kSubMenuText, subMenu, true);
+    menu->show();
+
+    const auto areaOf = [&menu] (int itemIndex)
+    {
+        return (*(menu->begin() + itemIndex))->area;
+    };
+
+    const auto withShortcut = areaOf (0);
+    const auto ticked = areaOf (2);
+    const auto withSubMenu = areaOf (3);
+    ASSERT_FALSE (withShortcut.isEmpty());
+    ASSERT_FALSE (ticked.isEmpty());
+    ASSERT_FALSE (withSubMenu.isEmpty());
+
+    // The text is inside the padding of its item. One item is ticked, so all of them leave the room of a tick before it
+    EXPECT_EQ (menu->getItemTextBounds (0), withShortcut.reduced (12.0f, 2.0f).withTrimmedLeft (8.0f).withTrimmedRight (80.0f));
+    EXPECT_EQ (menu->getItemTextBounds (2), ticked.reduced (12.0f, 2.0f).withTrimmedLeft (8.0f));
+    EXPECT_EQ (menu->getItemTextBounds (3), withSubMenu.reduced (12.0f, 2.0f).withTrimmedLeft (8.0f).withTrimmedRight (24.0f));
+
+    // The tick is before the text, the shortcut and the arrow after it, all inside the item
+    const auto tick = menu->getItemTickBounds (2);
+    EXPECT_EQ (tick, Rectangle<float> (ticked.getX() + 4.0f, ticked.getCenterY() - 6.0f, 12.0f, 12.0f));
+    EXPECT_LE (tick.getRight(), menu->getItemTextBounds (2).getX());
+    EXPECT_TRUE (ticked.contains (tick));
+
+    const auto shortcut = menu->getItemShortcutBounds (0);
+    EXPECT_EQ (shortcut, Rectangle<float> (withShortcut.getRight() - 80.0f, withShortcut.getY() + 2.0f, 75.0f, withShortcut.getHeight() - 2.0f));
+    EXPECT_GE (shortcut.getX(), menu->getItemTextBounds (0).getRight());
+    EXPECT_TRUE (withShortcut.contains (shortcut));
+
+    const auto arrow = menu->getItemArrowBounds (3);
+    EXPECT_EQ (arrow, Rectangle<float> (withSubMenu.getRight() - 16.0f, withSubMenu.getCenterY() - 6.0f, 8.0f, 12.0f));
+    EXPECT_GE (arrow.getX(), menu->getItemTextBounds (3).getRight());
+    EXPECT_TRUE (withSubMenu.contains (arrow));
+
+    // An item has only the areas of what it shows, and a separator none
+    EXPECT_TRUE (menu->getItemTickBounds (0).isEmpty());
+    EXPECT_TRUE (menu->getItemArrowBounds (0).isEmpty());
+    EXPECT_TRUE (menu->getItemShortcutBounds (2).isEmpty());
+    EXPECT_TRUE (menu->getItemShortcutBounds (3).isEmpty());
+    EXPECT_FALSE (areaOf (1).isEmpty());
+    EXPECT_TRUE (menu->getItemTextBounds (1).isEmpty());
+    EXPECT_TRUE (menu->getItemTextBounds (-1).isEmpty());
+    EXPECT_TRUE (menu->getItemTextBounds (4).isEmpty());
+
+    menu->dismiss();
+}
+
+TEST_F (PopupMenuTest, AnItemScrolledOutOfTheMenuHasNoTextBounds)
+{
+    auto smallParent = std::make_unique<Component> ("smallParent");
+    smallParent->setBounds (0, 0, 220, 130);
+
+    auto menu = PopupMenu::create (PopupMenu::Options().withParentComponent (smallParent.get()).withPosition (Point<int> (10, 10)));
+    for (int i = 1; i <= 40; ++i)
+        menu->addItem (String ("Item ") + String (i), i);
+
+    menu->show();
+    ASSERT_TRUE (menu->needsScrolling());
+
+    // No item is ticked, so the text starts at the padding of its item
+    const auto first = (*menu->begin())->area;
+    ASSERT_FALSE (first.isEmpty());
+    EXPECT_EQ (menu->getItemTextBounds (0), first.reduced (12.0f, 2.0f));
+
+    ASSERT_TRUE ((*(menu->begin() + 39))->area.isEmpty());
+    EXPECT_TRUE (menu->getItemTextBounds (39).isEmpty());
+
+    menu->dismiss();
 }
 
 TEST_F (PopupMenuTest, OptionsWithFocusComponent)

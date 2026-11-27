@@ -119,6 +119,32 @@ public:
     /** Called when a continuous edit of a property ends. */
     virtual void endGesture (const Identifier& name) {}
 
+    /** Returns the text a value of a property is shown with, such as "440 Hz", or nothing when
+        the provider has no text of its own for it, which is the default.
+
+        It is the text a value opens with when it is edited as text, as `edit (params.cutoff)` does in `.yui`.
+
+        @param name   The property.
+        @param value  The value to show, which may not be the current one.
+    */
+    virtual std::optional<String> getTextForValue (const Identifier& name, const var& value) const
+    {
+        ignoreUnused (name, value);
+        return std::nullopt;
+    }
+
+    /** Returns the value a text typed for a property stands for, or nothing when the provider
+        does not parse the texts of the property itself, which is the default.
+
+        @param name  The property.
+        @param text  The text, as getTextForValue() returns it or as someone typed it.
+    */
+    virtual std::optional<var> getValueForText (const Identifier& name, const String& text) const
+    {
+        ignoreUnused (name, text);
+        return std::nullopt;
+    }
+
     //==============================================================================
     /** Adds a listener, which must be removed before it is destroyed. */
     void addListener (Listener* listener) { listeners.add (listener); }

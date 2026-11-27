@@ -197,6 +197,8 @@ public:
         static const Identifier cornerRadiusId;        /**< Corner radius, 4 by default */
         static const Identifier outlineWidthId;        /**< Border width, 1 by default */
         static const Identifier focusedOutlineWidthId; /**< Border width with focus or the popup open, 2 by default */
+
+        static const Identifier textPartId;            /**< Name of the part that is the text of the selected item: `part text { }` in a drawing */
     };
 
     //==============================================================================

@@ -56,8 +56,8 @@ const ComponentTypeInfo& SwitchButton::getClassTypeInfo()
                                  .number (switchThumbSizePropertyId, Style::thumbSizeId, 28.0, "The thickness of the switch, which is twice as long: it keeps this size in a larger component and is centered in it.")
                                  .state (checkedPropertyId, &SwitchButton::getToggleState, [] (SwitchButton& b, bool v) { b.setToggleState (v); })
                                  .property (switchVerticalPropertyId, &SwitchButton::isVertical, &SwitchButton::setVertical)
-                                 .readOnly (switchTrackBoundsPropertyId, &SwitchButton::getSwitchBounds, {}, "The area of the switch, of the size its style gives it and centered in the component.")
-                                 .readOnly (switchThumbBoundsPropertyId, &SwitchButton::getSwitchCircleBounds, {}, "The area of the handle, before its inset: it slides from one end of the switch to the other when it is toggled.")
+                                 .readOnly (switchTrackBoundsPropertyId, &SwitchButton::getTrackBounds, {}, "The area of the switch, of the size its style gives it and centered in the component.")
+                                 .readOnly (switchThumbBoundsPropertyId, &SwitchButton::getThumbBounds, {}, "The area of the handle, before its inset: it slides from one end of the switch to the other when it is toggled.")
                                  .build();
 
     return info;
@@ -198,7 +198,7 @@ void SwitchButton::parentHierarchyChanged()
     updateFrameAttachment();
 }
 
-Rectangle<float> SwitchButton::getSwitchBounds() const
+Rectangle<float> SwitchButton::getTrackBounds() const
 {
     const auto bounds = getLocalBounds();
     const auto across = isVerticalValue ? bounds.getWidth() : bounds.getHeight();
@@ -210,9 +210,9 @@ Rectangle<float> SwitchButton::getSwitchBounds() const
     return bounds.withSizeKeepingCenter (isVerticalValue ? thickness : length, isVerticalValue ? length : thickness);
 }
 
-Rectangle<float> SwitchButton::getSwitchCircleBounds() const
+Rectangle<float> SwitchButton::getThumbBounds() const
 {
-    const auto bounds = getSwitchBounds();
+    const auto bounds = getTrackBounds();
     const auto size = isVerticalValue ? bounds.getWidth() : bounds.getHeight();
     const auto travel = jmax (0.0f, (isVerticalValue ? bounds.getHeight() : bounds.getWidth()) - size);
 
@@ -225,11 +225,14 @@ Rectangle<float> SwitchButton::getSwitchCircleBounds() const
 
 bool SwitchButton::hitTest (float x, float y)
 {
-    return getSwitchBounds().contains (x, y);
+    return getTrackBounds().contains (x, y);
 }
 
 void SwitchButton::clicked()
 {
+    if (selectValueOnClick())
+        return;
+
     // The button of a radio group that is on stays on when clicked. A change of state runs onClick itself
     if (toggleState && getRadioGroupId() != 0)
         Button::clicked();

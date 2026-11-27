@@ -88,6 +88,28 @@ protected:
         StringArray gestures;
     };
 
+    // The editor an `edit` handler has open in an interface, or nullptr
+    static TextEditor* findOpenEditor (const YuiBuilder& builder)
+    {
+        auto* root = builder.getRoot();
+
+        for (int index = root != nullptr ? root->getNumChildComponents() : 0; --index >= 0;)
+            if (auto* editor = dynamic_cast<TextEditor*> (root->getChildComponent (index)); editor != nullptr && editor->hasStyleClass ("edit"))
+                return editor;
+
+        return nullptr;
+    }
+
+    // Types a text in the open editor in place of the one it shows, then presses a key
+    static void typeAndPress (const YuiBuilder& builder, const String& text, int key = KeyPress::enterKey)
+    {
+        auto* editor = findOpenEditor (builder);
+        ASSERT_NE (editor, nullptr);
+
+        editor->setText (text);
+        editor->keyDown (KeyPress (key), {});
+    }
+
     // A column counting its layouts, which documents name once it is registered
     struct CountingColumn : ColumnComponent
     {
@@ -1878,6 +1900,520 @@ TEST_F (YuiBuilderTests, MakesEachChangeOutsideAGestureAGestureOfItsOwn)
 
     EXPECT_FLOAT_EQ (static_cast<float> (provider.gain), 0.3f);
     EXPECT_EQ (provider.gestures.joinIntoString (", "), "begin gain, end gain");
+}
+
+TEST_F (YuiBuilderTests, AHandlerSetsAPropertyOfAModelAsAGestureOfItsOwn)
+{
+    RecordingProvider provider;
+
+    YuiBuilder builder;
+    builder.setModel ("synth", provider);
+
+    const auto result = builder.build (parse (R"yui(
+        Component {
+            TextButton { id: half; onClick: set (synth.gain, synth.gain / 2); }
+            Slider { id: knob; value <=> synth.gain; }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
+
+    auto* half = builder.findById<TextButton> ("half");
+    auto* knob = builder.findById<Slider> ("knob");
+    ASSERT_NE (half, nullptr);
+    ASSERT_NE (knob, nullptr);
+
+    half->onClick();
+
+    EXPECT_FLOAT_EQ (static_cast<float> (provider.gain), 0.25f);
+    EXPECT_FLOAT_EQ (static_cast<float> (knob->getValue()), 0.25f);
+    EXPECT_EQ (provider.gestures.joinIntoString (", "), "begin gain, end gain");
+}
+
+TEST_F (YuiBuilderTests, AHandlerSetsAPropertyOfAnElementFromItsArgumentsAndTheIndexOfItsRepeat)
+{
+    YuiBuilder builder;
+    const auto result = builder.build (parse (R"yui(
+        Column {
+            id: list;
+
+            Slider { id: knob; }
+            Label { id: readout; text: format ("%.2f", knob.value); }
+            Slider { id: follower; changed value: (v) => set (knob.value, v); }
+
+            repeat i in 0 .. 3 {
+                TextButton { onClick: { set (knob.value, i * 0.25); set (self.text, format ("step %d", i)); } }
+            }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
+
+    auto* knob = builder.findById<Slider> ("knob");
+    auto* readout = builder.findById<Label> ("readout");
+    auto* list = builder.findById ("list");
+    ASSERT_NE (knob, nullptr);
+    ASSERT_NE (readout, nullptr);
+    ASSERT_EQ (list->getNumChildComponents(), 6);
+
+    // The value is the argument of the signal, and what reads the property written follows
+    builder.findById<Slider> ("follower")->setValue (0.75);
+    EXPECT_FLOAT_EQ (static_cast<float> (knob->getValue()), 0.75f);
+    EXPECT_EQ (readout->getText(), "0.75");
+
+    // The button of the last turn: each call of its block writes, the second one a property of the button itself
+    auto* last = dynamic_cast<TextButton*> (list->getChildComponent (5));
+    ASSERT_NE (last, nullptr);
+    last->onClick();
+
+    EXPECT_FLOAT_EQ (static_cast<float> (knob->getValue()), 0.5f);
+    EXPECT_EQ (last->getButtonText(), "step 2");
+}
+
+TEST_F (YuiBuilderTests, ReportsTheSetsWithNoPropertyToWrite)
+{
+    const auto located = buildAndLocate (R"yui(
+        Component {
+            Slider { id: knob; }
+            TextButton { onClick: set (knob.value); }
+            TextButton { onClick: set (0.5, knob.value); }
+            TextButton { onClick: set (nobody.value, 1); }
+            TextButton { onClick: set (knob.nothing, 1); }
+            TextButton { onClick: set (knob.hovered, true); }
+        })yui",
+                                         true);
+
+    EXPECT_EQ (located.joinIntoString ("\n"), StringArray ({
+                                                  "4:26: TextButton.onClick: set expects the property to write, as element.property, then its value",
+                                                  "5:26: TextButton.onClick: set expects the property to write, as element.property, then its value",
+                                                  "6:26: TextButton.onClick: Unknown symbol 'nobody.value'",
+                                                  "7:26: TextButton.onClick: Unknown symbol 'knob.nothing'",
+                                                  "8:26: TextButton.onClick: 'knob.hovered' is read-only",
+                                              })
+                                                  .joinIntoString ("\n"));
+}
+
+TEST_F (YuiBuilderTests, ADoubleClickRunsTheHandlerOfAnyComponentInPlaceOfWhatItDoes)
+{
+    YuiBuilder builder;
+    StringArray clicked;
+
+    builder.setAction ("clicked", [&] (const Array<var>& arguments)
+    {
+        clicked.add (arguments[0].toString());
+    });
+
+    const String withHandlers = R"yui(
+        Component {
+            width: 200; height: 100;
+
+            Slider { id: dial; x: 0; y: 0; width: 200; height: 60; sliderType: rotaryVerticalDrag; defaultValue: 0.25; value: 0.75;
+                     onDoubleClick: action ("clicked", "dial"); }
+            Label { id: caption; x: 0; y: 60; width: 200; height: 20; onDoubleClick: action ("clicked", "caption"); }
+            Component { id: plain; x: 0; y: 80; width: 200; height: 20; }
+        })yui";
+
+    ASSERT_TRUE (builder.build (parse (withHandlers)).wasOk());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
+
+    {
+        auto* dial = builder.findById<Slider> ("dial");
+        ASSERT_NE (dial, nullptr);
+
+        builder.getRoot()->setVisible (true);
+        PointerSimulator pointer (*builder.getRoot());
+
+        // The handler runs, and the slider does not go back to its default value as it does with none
+        pointer.doubleClick ({ 100.0f, 30.0f });
+        pointer.doubleClick ({ 100.0f, 70.0f });
+        pointer.doubleClick ({ 100.0f, 90.0f });
+
+        EXPECT_EQ (clicked.joinIntoString (", "), "dial, caption");
+        EXPECT_DOUBLE_EQ (dial->getValue(), 0.75);
+
+        // Nor does it run for a component that is disabled
+        dial->setEnabled (false);
+        pointer.doubleClick ({ 100.0f, 30.0f });
+        EXPECT_EQ (clicked.size(), 2);
+    }
+
+    // Built again with no handler, the slider is double clicked as any other
+    ASSERT_TRUE (builder.build (parse (withHandlers.replace ("onDoubleClick: action (\"clicked\", \"dial\");", ""))).wasOk());
+
+    auto* dial = builder.findById<Slider> ("dial");
+    ASSERT_NE (dial, nullptr);
+
+    builder.getRoot()->setVisible (true);
+    PointerSimulator pointer (*builder.getRoot());
+
+    pointer.doubleClick ({ 100.0f, 30.0f });
+    EXPECT_EQ (clicked.size(), 2);
+    EXPECT_DOUBLE_EQ (dial->getValue(), 0.25);
+}
+
+TEST_F (YuiBuilderTests, AnEditHandlerEditsAPropertyAsTextOverTheComponentItIsGiven)
+{
+    YuiBuilder builder;
+    const auto result = builder.build (parse (R"yui(
+        Component {
+            width: 200; height: 100;
+
+            Slider { id: dial; x: 0; y: 0; width: 200; height: 60; sliderType: rotaryVerticalDrag; maximum: 10; interval: 0.5; value: 2.5;
+                     onDoubleClick: readout.edit (dial.value); }
+            Label { id: readout; x: 20; y: 60; width: 160; height: 20; onDoubleClick: edit (dial.value); }
+            Label { id: name; x: 0; y: 80; width: 200; height: 20; text: "init"; onDoubleClick: edit (self.text); }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
+
+    auto* dial = builder.findById<Slider> ("dial");
+    auto* readout = builder.findById<Label> ("readout");
+    auto* name = builder.findById<Label> ("name");
+    ASSERT_NE (dial, nullptr);
+    ASSERT_NE (readout, nullptr);
+    ASSERT_NE (name, nullptr);
+
+    builder.getRoot()->setVisible (true);
+    PointerSimulator pointer (*builder.getRoot());
+
+    // Over the component the handler is on, in the interface, with the value and no zero after it
+    pointer.doubleClick ({ 100.0f, 70.0f });
+
+    auto* editor = findOpenEditor (builder);
+    ASSERT_NE (editor, nullptr);
+    EXPECT_EQ (editor->getBounds(), readout->getBounds());
+    EXPECT_EQ (editor->getText(), "2.5");
+    EXPECT_EQ (editor->getSelectedText(), "2.5");
+
+    // What is typed is written through the property: the slider snaps it, and keeps it in its range
+    typeAndPress (builder, "7.3 units");
+    EXPECT_EQ (findOpenEditor (builder), nullptr);
+    EXPECT_DOUBLE_EQ (dial->getValue(), 7.5);
+
+    // Over the component the edit is called on, and the double click of the slider is not its own
+    pointer.doubleClick ({ 100.0f, 30.0f });
+    ASSERT_NE (findOpenEditor (builder), nullptr);
+    EXPECT_EQ (findOpenEditor (builder)->getBounds(), readout->getBounds());
+    EXPECT_EQ (findOpenEditor (builder)->getText(), "7.5");
+
+    typeAndPress (builder, "100");
+    EXPECT_DOUBLE_EQ (dial->getValue(), 10.0);
+
+    // Escape, a text that was not changed and one with no number to read write nothing
+    pointer.doubleClick ({ 100.0f, 70.0f });
+    typeAndPress (builder, "3", KeyPress::escapeKey);
+    EXPECT_EQ (findOpenEditor (builder), nullptr);
+
+    pointer.doubleClick ({ 100.0f, 70.0f });
+    typeAndPress (builder, "10");
+
+    pointer.doubleClick ({ 100.0f, 70.0f });
+    typeAndPress (builder, "loud");
+    EXPECT_DOUBLE_EQ (dial->getValue(), 10.0);
+
+    // A press elsewhere commits, and a string takes the text as it is
+    pointer.doubleClick ({ 100.0f, 90.0f });
+    ASSERT_NE (findOpenEditor (builder), nullptr);
+    EXPECT_EQ (findOpenEditor (builder)->getText(), "init");
+
+    findOpenEditor (builder)->setText ("lead 2");
+    pointer.click ({ 100.0f, 30.0f });
+    EXPECT_EQ (findOpenEditor (builder), nullptr);
+    EXPECT_EQ (name->getText(), "lead 2");
+
+    // Nothing opens while the component holding the property is disabled
+    dial->setEnabled (false);
+    pointer.doubleClick ({ 100.0f, 70.0f });
+    EXPECT_EQ (findOpenEditor (builder), nullptr);
+    dial->setEnabled (true);
+
+    // The editor goes with the interface it was opened in
+    pointer.doubleClick ({ 100.0f, 70.0f });
+    ASSERT_NE (findOpenEditor (builder), nullptr);
+
+    ASSERT_TRUE (builder.build (parse ("Component { Label { id: readout; } }")).wasOk());
+    EXPECT_EQ (findOpenEditor (builder), nullptr);
+}
+
+TEST_F (YuiBuilderTests, AnEditShowsTheTextOfTheModelAndWritesWhatItReadsAsAGesture)
+{
+    struct PercentProvider : RecordingProvider
+    {
+        std::optional<String> getTextForValue (const Identifier&, const var& value) const override
+        {
+            return String (roundToInt (static_cast<double> (value) * 100.0)) + " %";
+        }
+
+        std::optional<var> getValueForText (const Identifier&, const String& text) const override
+        {
+            return text.getDoubleValue() / 100.0;
+        }
+    };
+
+    PercentProvider provider;
+
+    YuiBuilder builder;
+    builder.setModel ("synth", provider);
+
+    const auto result = builder.build (parse (R"yui(
+        component Knob : Component {
+            property alias value <=> dial.value;
+
+            Slider { id: dial; x: 0; y: 0; width: 100; height: 60; sliderType: rotaryVerticalDrag; onDoubleClick: readout.edit (dial.value); }
+            Label { id: readout; x: 0; y: 60; width: 100; height: 20; }
+        }
+
+        Component {
+            width: 200; height: 100;
+
+            Knob { id: gain; x: 50; y: 10; width: 100; height: 80; value <=> synth.gain; }
+            Label { id: direct; x: 0; y: 90; width: 200; height: 10; onDoubleClick: edit (synth.gain); }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
+
+    builder.getRoot()->setVisible (true);
+    PointerSimulator pointer (*builder.getRoot());
+
+    // The value of the dial is the one of the model, two links away: the text is the one the model shows it with
+    pointer.doubleClick ({ 100.0f, 40.0f });
+
+    auto* editor = findOpenEditor (builder);
+    ASSERT_NE (editor, nullptr);
+    EXPECT_EQ (editor->getText(), "50 %");
+    EXPECT_EQ (editor->getBounds(), Rectangle<float> (50.0f, 70.0f, 100.0f, 20.0f));
+
+    // And the model reads what is typed, written as one gesture
+    provider.gestures.clear();
+    typeAndPress (builder, "75");
+
+    EXPECT_FLOAT_EQ (static_cast<float> (provider.gain), 0.75f);
+    EXPECT_EQ (provider.gestures.joinIntoString (", "), "begin gain, end gain");
+
+    // As for the property of the model itself
+    pointer.doubleClick ({ 100.0f, 95.0f });
+    ASSERT_NE (findOpenEditor (builder), nullptr);
+    EXPECT_EQ (findOpenEditor (builder)->getText(), "75 %");
+
+    provider.gestures.clear();
+    typeAndPress (builder, "20 %");
+
+    EXPECT_FLOAT_EQ (static_cast<float> (provider.gain), 0.2f);
+    EXPECT_EQ (provider.gestures.joinIntoString (", "), "begin gain, end gain");
+}
+
+TEST_F (YuiBuilderTests, AnEditShowsAndReadsItsTextWithTheExpressionsItIsGiven)
+{
+    RecordingProvider provider;
+
+    YuiBuilder builder;
+    builder.setModel ("synth", provider);
+
+    const auto result = builder.build (parse (R"yui(
+        component Knob : Component {
+            property scale: number = 1;
+            property alias value <=> dial.value;
+
+            Slider { id: dial; x: 0; y: 0; width: 100; height: 60; sliderType: rotaryVerticalDrag;
+                     onDoubleClick: readout.edit (dial.value, dial.value * root.scale, input / root.scale); }
+            Label { id: readout; x: 0; y: 60; width: 100; height: 20;
+                    onDoubleClick: edit (dial.value, format ("%.1f %%", dial.value * root.scale), input / root.scale); }
+        }
+
+        Component {
+            width: 200; height: 100;
+
+            Knob { id: gain; x: 0; y: 0; width: 100; height: 80; scale: 100; value <=> synth.gain; }
+            Label { id: name; x: 100; y: 0; width: 100; height: 20; text: "init"; onDoubleClick: edit (self.text, "new " + self.text, text + "!"); }
+
+            repeat step in 1 .. 3 {
+                Label { x: 100; y: 20 + step * 20; width: 100; height: 20; onDoubleClick: edit (synth.gain, step, input * step / 100); }
+            }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
+
+    auto* name = builder.findById<Label> ("name");
+    ASSERT_NE (name, nullptr);
+
+    builder.getRoot()->setVisible (true);
+    PointerSimulator pointer (*builder.getRoot());
+
+    // A number shown has no zero after it, and what is typed is read as `input`, the number it starts with
+    pointer.doubleClick ({ 50.0f, 30.0f });
+    ASSERT_NE (findOpenEditor (builder), nullptr);
+    EXPECT_EQ (findOpenEditor (builder)->getText(), "50");
+
+    typeAndPress (builder, "25 percent");
+    EXPECT_FLOAT_EQ (static_cast<float> (provider.gain), 0.25f);
+
+    // A text shown is the one the expression gives
+    pointer.doubleClick ({ 50.0f, 70.0f });
+    ASSERT_NE (findOpenEditor (builder), nullptr);
+    EXPECT_EQ (findOpenEditor (builder)->getText(), "25.0 %");
+
+    typeAndPress (builder, "80");
+    EXPECT_FLOAT_EQ (static_cast<float> (provider.gain), 0.8f);
+
+    // What is typed is read as `text` too, which hides the property of that name
+    pointer.doubleClick ({ 150.0f, 10.0f });
+    ASSERT_NE (findOpenEditor (builder), nullptr);
+    EXPECT_EQ (findOpenEditor (builder)->getText(), "new init");
+
+    typeAndPress (builder, "lead");
+    EXPECT_EQ (name->getText(), "lead!");
+
+    // The index of a repeat is read when the editor opens and when it commits
+    pointer.doubleClick ({ 150.0f, 70.0f });
+    ASSERT_NE (findOpenEditor (builder), nullptr);
+    EXPECT_EQ (findOpenEditor (builder)->getText(), "2");
+
+    typeAndPress (builder, "30");
+    EXPECT_FLOAT_EQ (static_cast<float> (provider.gain), 0.6f);
+}
+
+TEST_F (YuiBuilderTests, ASignalNamedEditThatAComponentDeclaresIsEmittedRatherThanAnEditorOpened)
+{
+    YuiBuilder builder;
+    Array<var> edited;
+
+    builder.setAction ("edited", [&] (const Array<var>& arguments)
+    {
+        edited.add (arguments[0]);
+    });
+
+    const auto result = builder.build (parse (R"yui(
+        component Field : Component {
+            signal edit (value: number);
+
+            TextButton { id: button; onClick: root.edit (3); }
+        }
+
+        Component {
+            Field { id: field; edit: action ("edited"); }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
+
+    auto* button = dynamic_cast<TextButton*> (builder.findById ("field")->getChildComponent (0));
+    ASSERT_NE (button, nullptr);
+    button->onClick();
+
+    ASSERT_EQ (edited.size(), 1);
+    EXPECT_EQ (static_cast<int> (edited[0]), 3);
+    EXPECT_EQ (findOpenEditor (builder), nullptr);
+}
+
+TEST_F (YuiBuilderTests, ReportsTheEditsWithNoPropertyToEdit)
+{
+    const auto located = buildAndLocate (R"yui(
+        Component {
+            Slider { id: knob; }
+            TextButton { onClick: edit (); }
+            TextButton { onClick: edit (knob.value, knob.value); }
+            TextButton { onClick: edit (0.5); }
+            TextButton { onClick: edit (nobody.value); }
+            TextButton { onClick: edit (knob.nothing); }
+            TextButton { onClick: edit (knob.hovered); }
+            TextButton { onClick: edit (knob.sliderType); }
+            TextButton { onClick: nobody.edit (knob.value); }
+        })yui",
+                                         true);
+
+    EXPECT_EQ (located.joinIntoString ("\n"), StringArray ({
+                                                  "4:26: TextButton.onClick: edit expects the property to edit, as element.property, then the text shown and the value of the text typed, or neither",
+                                                  "5:26: TextButton.onClick: edit expects the property to edit, as element.property, then the text shown and the value of the text typed, or neither",
+                                                  "6:26: TextButton.onClick: edit expects the property to edit, as element.property, then the text shown and the value of the text typed, or neither",
+                                                  "7:26: TextButton.onClick: Unknown symbol 'nobody.value'",
+                                                  "8:26: TextButton.onClick: Unknown symbol 'knob.nothing'",
+                                                  "9:26: TextButton.onClick: 'knob.hovered' is read-only",
+                                                  "10:26: TextButton.onClick: 'knob.sliderType' is not edited as a text: edit takes a number, an integer or a string",
+                                                  "11:26: TextButton.onClick: unknown function 'nobody.edit'",
+                                              })
+                                                  .joinIntoString ("\n"));
+}
+
+TEST_F (YuiBuilderTests, ButtonsLinkedToOneSelectionAreExclusiveInAnyParent)
+{
+    DataTree tree ("params");
+    tree.beginTransaction().setProperty ("note", 0);
+
+    DataTreeBindingProvider params (tree, nullptr);
+
+    YuiBuilder builder;
+    builder.setModel ("params", params);
+
+    const auto result = builder.build (parse (R"yui(
+        Component {
+            width: 200; height: 60;
+
+            Component {
+                x: 0; y: 0; width: 200; height: 30;
+
+                repeat note in 1 .. 3 {
+                    ToggleButton { x: (note - 1) * 100; y: 0; width: 100; height: 30; value: note; selection <=> params.note; offValue: 0; }
+                }
+            }
+
+            Component {
+                x: 0; y: 30; width: 200; height: 30;
+
+                SwitchButton { id: third; x: 0; y: 0; width: 100; height: 30; value: 3; selection <=> params.note; }
+            }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
+
+    auto* root = builder.getRoot();
+    auto* first = dynamic_cast<ToggleButton*> (root->getChildComponent (0)->getChildComponent (0));
+    auto* second = dynamic_cast<ToggleButton*> (root->getChildComponent (0)->getChildComponent (1));
+    auto* third = builder.findById<SwitchButton> ("third");
+    ASSERT_NE (first, nullptr);
+    ASSERT_NE (second, nullptr);
+    ASSERT_NE (third, nullptr);
+
+    const auto note = [&tree]
+    {
+        return static_cast<int> (tree.getProperty ("note"));
+    };
+
+    root->setVisible (true);
+    PointerSimulator pointer (*root);
+
+    // A click selects the value of the button: the one that was on goes off, whatever its parent
+    pointer.click ({ 50.0f, 15.0f });
+    EXPECT_EQ (note(), 1);
+    EXPECT_TRUE (first->getToggleState());
+
+    pointer.click ({ 50.0f, 45.0f });
+    EXPECT_EQ (note(), 3);
+    EXPECT_FALSE (first->getToggleState());
+    EXPECT_TRUE (third->getToggleState());
+
+    // With no off value the button that is on stays on
+    pointer.click ({ 50.0f, 45.0f });
+    EXPECT_EQ (note(), 3);
+    EXPECT_TRUE (third->getToggleState());
+
+    // With one, a click on it selects that value, and no button is on
+    pointer.click ({ 150.0f, 15.0f });
+    EXPECT_EQ (note(), 2);
+    EXPECT_TRUE (second->getToggleState());
+    EXPECT_FALSE (third->getToggleState());
+
+    pointer.click ({ 150.0f, 15.0f });
+    EXPECT_EQ (note(), 0);
+    EXPECT_FALSE (second->getToggleState());
+
+    // The buttons follow the value whoever changes it
+    tree.beginTransaction().setProperty ("note", 1);
+    EXPECT_TRUE (first->getToggleState());
+    EXPECT_FALSE (second->getToggleState());
 }
 
 TEST_F (YuiBuilderTests, PlacesTheChildOfAViewportAsItsContent)

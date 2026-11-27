@@ -30,6 +30,38 @@ using namespace yup;
 */
 class Scene3DTests : public SceneDocumentTests
 {
+protected:
+    /** A PNG panorama two pixels wide and high: white above the horizon, black below it. */
+    static MemoryBlock skyPng()
+    {
+        Image panorama (2, 2, PixelFormat::RGBA);
+        panorama.fillColor (Colors::black);
+        panorama.setPixelColor (0, 0, Colors::white);
+        panorama.setPixelColor (1, 0, Colors::white);
+
+        MemoryBlock bytes;
+
+        {
+            // The writer owns the stream, which trims the block to what was written when it goes
+            PngImageFormatWriter writer (new MemoryOutputStream (bytes, false), panorama.getPixelFormat());
+            EXPECT_TRUE (writer.writeImage (panorama));
+        }
+
+        return bytes;
+    }
+
+    /** The environment the root of the scene of a component is given, or nullptr. */
+    static EnvironmentMap::Ptr environmentOf (const SceneComponent& view)
+    {
+        const auto* node = view.getScene() != nullptr ? view.getScene()->getRoot().get<EnvironmentNode>() : nullptr;
+        return node != nullptr ? node->map : EnvironmentMap::Ptr();
+    }
+
+    /** How much red light of an environment falls on a surface facing a direction: 1 from a white half of the sky. */
+    static float lightOn (const EnvironmentMap& environment, const Vector3<float>& normal)
+    {
+        return SphericalHarmonics::evaluateIrradiance (environment.getIrradianceCoefficients(), normal).getX();
+    }
 };
 
 TEST_F (Scene3DTests, RegistersTheTypesWithTheirBasesAndFactories)
@@ -584,6 +616,7 @@ TEST_F (Scene3DTests, AFileThatChangesIsToldToAllThatUseItWhateverTheFirstOnesDo
     });
 
     document.notifyAssetChanged ("wood.png");
+    finishLoading (document);
 
     // The material written after it was told all the same: it has no texture left
     EXPECT_GE (told, 1);
@@ -658,4 +691,155 @@ TEST_F (Scene3DTests, ATierTheRendererDoesNotHaveIsReportedAndNotKept)
     auto* view = document.findById<SceneComponent> ("view");
     ASSERT_NE (view, nullptr);
     EXPECT_EQ (view->getRenderer().getRenderSettings().tier, RenderSettings::TierPreference::automatic);
+}
+
+//==============================================================================
+
+TEST_F (Scene3DTests, AnEnvironmentLightsTheSceneFromTheNodeOfItsRoot)
+{
+    files["sky.png"] = skyPng();
+
+    YuiDocument document;
+    serve (document);
+    load (document, "Scene3D { id: view; environment: \"sky.png\"; environmentIntensity: 2; environmentVisible: true; }");
+
+    auto* view = document.findById<SceneComponent> ("view");
+    ASSERT_NE (view, nullptr);
+    ASSERT_NE (view->getScene(), nullptr);
+
+    const auto* node = view->getScene()->getRoot().get<EnvironmentNode>();
+    ASSERT_NE (node, nullptr);
+    ASSERT_NE (node->map, nullptr);
+    EXPECT_FLOAT_EQ (node->intensity, 2.0f);
+    EXPECT_TRUE (node->visible);
+    EXPECT_EQ (reads["sky.png"], 1);
+
+    // The top of the image is above the scene: what faces up is lit, what faces down is not
+    EXPECT_GT (lightOn (*node->map, { 0.0f, 1.0f, 0.0f }), 0.8f);
+    EXPECT_LT (lightOn (*node->map, { 0.0f, -1.0f, 0.0f }), 0.2f);
+
+    // The renderer is given what the node of the root has
+    const auto settings = SceneSettings::resolve (*view->getScene());
+    EXPECT_EQ (settings.environment, node->map);
+    EXPECT_FLOAT_EQ (settings.environmentIntensity, 2.0f);
+    EXPECT_TRUE (settings.environmentVisible);
+
+    // They read back what they were given, and what the scene resolves to
+    EXPECT_EQ (view->getEnvironment(), "sky.png");
+    EXPECT_EQ (view->getProperty (Identifier ("environment")).toString(), "sky.png");
+    EXPECT_FLOAT_EQ (static_cast<float> (view->getProperty (Identifier ("environmentIntensity"))), 2.0f);
+    EXPECT_TRUE (static_cast<bool> (view->getProperty (Identifier ("environmentVisible"))));
+
+    // A value taken out of the document goes back to its default: the scene has no environment left
+    load (document, "Scene3D { id: view; }");
+    ASSERT_EQ (document.findById<SceneComponent> ("view"), view);
+
+    const auto without = SceneSettings::resolve (*view->getScene());
+    EXPECT_EQ (without.environment, nullptr);
+    EXPECT_FLOAT_EQ (without.environmentIntensity, 1.0f);
+    EXPECT_FALSE (without.environmentVisible);
+    EXPECT_TRUE (view->getEnvironment().isEmpty());
+
+    // And its image, which nothing names anymore, is read again when it is asked for again
+    load (document, "Scene3D { id: view; environment: \"sky.png\"; }");
+
+    EXPECT_NE (environmentOf (*view), nullptr);
+    EXPECT_EQ (reads["sky.png"], 2);
+}
+
+TEST_F (Scene3DTests, AnEnvironmentIsLoadedAgainWhenItsFileChanges)
+{
+    files["sky.png"] = skyPng();
+
+    YuiDocument document;
+    serve (document);
+    load (document, "Scene3D { id: view; environment: \"sky.png\"; }");
+
+    auto* view = showSceneOf (document);
+    ASSERT_NE (view, nullptr);
+
+    const auto sky = environmentOf (*view);
+    ASSERT_NE (sky, nullptr);
+
+    // A file that is not the one of the environment changes nothing
+    document.notifyAssetChanged ("other.png");
+
+    EXPECT_FALSE (view->isLoading());
+    EXPECT_EQ (environmentOf (*view), sky);
+    EXPECT_EQ (reads["sky.png"], 1);
+
+    // Its own is read again at once, and the scene keeps the light it has until the image is decoded
+    files["sky.png"] = redPng();
+    document.notifyAssetChanged ("sky.png");
+
+    EXPECT_EQ (reads["sky.png"], 2);
+    EXPECT_TRUE (view->isLoading());
+    EXPECT_EQ (environmentOf (*view), sky);
+
+    Internals::takeRepaintRequest (*view);
+    view->finishLoading();
+
+    const auto red = environmentOf (*view);
+    ASSERT_NE (red, nullptr);
+    EXPECT_NE (red, sky);
+    EXPECT_FALSE (view->isLoading());
+    EXPECT_TRUE (Internals::takeRepaintRequest (*view));
+
+    // Red all around: from below too, where the sky had no light
+    EXPECT_GT (lightOn (*red, { 0.0f, -1.0f, 0.0f }), 0.8f);
+    EXPECT_LT (lightOn (*sky, { 0.0f, -1.0f, 0.0f }), 0.2f);
+
+    // The image is a value of the component: it lights another scene it is given, and is not read again for it
+    view->setScene (Scene::Ptr (new Scene()));
+
+    EXPECT_EQ (environmentOf (*view), red);
+    EXPECT_EQ (reads["sky.png"], 2);
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+}
+
+TEST_F (Scene3DTests, AnEnvironmentThatCanNotBeLoadedIsReported)
+{
+    files["notes.png"] = bytesOf ("this is not an image");
+    files["sky.png"] = skyPng();
+
+    YuiDocument document;
+    serve (document);
+
+    const auto result = document.loadFromString ("Scene3D {\n"
+                                                 "    id: view;\n"
+                                                 "    environment: \"nowhere.png\";\n"
+                                                 "}");
+
+    // A file that can't be read is told with the load
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics().front().message, "Scene3D.environment: the file 'nowhere.png' can't be read");
+    EXPECT_EQ (document.getDiagnostics().front().line, 3);
+    EXPECT_TRUE (document.getDiagnostics().front().isError());
+
+    auto* view = document.findById<SceneComponent> ("view");
+    ASSERT_NE (view, nullptr);
+    EXPECT_FALSE (view->isLoading());
+    EXPECT_EQ (environmentOf (*view), nullptr);
+
+    // One that is no image is told once it is decoded, where the environment is written
+    view->setEnvironment ("notes.png");
+
+    EXPECT_TRUE (view->isLoading());
+    EXPECT_EQ (Internals::getNumProblems (*view), 0u);
+
+    view->finishLoading();
+
+    EXPECT_EQ (Internals::getNumProblems (*view), 1u);
+    ASSERT_EQ (document.getDiagnostics().size(), 2u) << DataTreeDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().back().message.startsWith ("Scene3D.environment: ")) << document.getDiagnostics().back().message;
+    EXPECT_EQ (document.getDiagnostics().back().line, 3);
+    EXPECT_EQ (environmentOf (*view), nullptr);
+
+    // An image withdraws what the scene had to tell
+    view->setEnvironment ("sky.png");
+    view->finishLoading();
+
+    EXPECT_NE (environmentOf (*view), nullptr);
+    EXPECT_EQ (Internals::getNumProblems (*view), 0u);
 }

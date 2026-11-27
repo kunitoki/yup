@@ -484,16 +484,20 @@ void SceneModelComponent::instantiate()
 
     const auto model = view->loadModel (source);
 
-    if (model.failed())
+    // Being loaded: the scene tells when the model is there
+    if (! model.has_value())
+        return;
+
+    if (model->failed())
     {
-        view->reportProblem (*this, SceneModelComponentIds::source, model.getErrorMessage());
+        view->reportProblem (*this, SceneModelComponentIds::source, model->getErrorMessage());
         return;
     }
 
-    for (const auto& warning : model.getReference().getWarnings())
+    for (const auto& warning : model->getReference().getWarnings())
         view->reportProblem (*this, SceneModelComponentIds::source, warning, DataTreeDiagnostic::Severity::warning);
 
-    instance = model.getReference().instantiate (*entity.getScene(), entity, sceneIndex);
+    instance = model->getReference().instantiate (*entity.getScene(), entity, sceneIndex);
 
     if (! instance.isValid())
         view->reportProblem (*this, SceneModelComponentIds::scene, "the model has no scene " + String (sceneIndex));

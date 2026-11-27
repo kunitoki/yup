@@ -53,7 +53,47 @@ struct SliderIds
     static inline const Identifier incrementBounds { "incrementBounds" };
     static inline const Identifier pressedStep { "pressedStep" };
     static inline const Identifier decimalPlaces { "decimalPlaces" };
+    static inline const Identifier dragSensitivity { "dragSensitivity" };
+    static inline const Identifier fineDragScale { "fineDragScale" };
+    static inline const Identifier fineDragModifier { "fineDragModifier" };
+    static inline const Identifier resetModifier { "resetModifier" };
 };
+
+// True while all the keys asked for are held, and never when none is asked for
+bool areModifiersDown (KeyModifiers wanted, const KeyModifiers& held)
+{
+    return wanted.getFlags() != 0 && (held.getFlags() & wanted.getFlags()) == wanted.getFlags();
+}
+
+// A property naming one modifier key, whose default is not the first of the names as the one of an enumeration is
+template <class Getter, class Setter>
+ComponentProperty makeModifierProperty (const Identifier& name, Getter getter, Setter setter, const String& defaultName, String description)
+{
+    const StringArray names { "none", "shift", "ctrl", "alt", "command" };
+    const std::vector<int> masks { 0, KeyModifiers::shiftMask, KeyModifiers::controlMask, KeyModifiers::altMask, KeyModifiers::commandMask };
+
+    return {
+        .name = name,
+        .type = ComponentProperty::Type::enumeration,
+        .defaultValue = defaultName,
+        .getter = [names, masks, getter] (const Component& component)
+        {
+            const auto flags = std::invoke (getter, static_cast<const Slider&> (component)).getFlags();
+            const auto found = std::find (masks.begin(), masks.end(), flags);
+
+            // Keys given together in code have no name
+            return var (found != masks.end() ? names[static_cast<int> (found - masks.begin())] : String());
+        },
+        .setter = [names, masks, setter] (Component& component, const var& value)
+        {
+            if (const auto index = names.indexOf (value.toString()); index >= 0)
+                std::invoke (setter, static_cast<Slider&> (component), KeyModifiers (masks[static_cast<size_t> (index)]));
+        },
+        .isStyleable = false,
+        .enumValues = names,
+        .description = std::move (description)
+    };
+}
 
 void setSliderRangeBound (Slider& slider, double bound, bool isMinimum)
 {
@@ -154,7 +194,7 @@ const ComponentTypeInfo& Slider::getClassTypeInfo()
                                      if (v > 0.0)
                                          s.setSkewFactor (v);
                                  }, 1.0, "The skew factor of the range, 1 for linear, below 1 to give the lower values more space.")
-                                 .property (SliderIds::defaultValue, &Slider::getDefaultValue, &Slider::setDefaultValue, 0.0, "The value a double-click resets to.")
+                                 .property (SliderIds::defaultValue, &Slider::getDefaultValue, &Slider::setDefaultValue, 0.0, "The value a double-click, or a click with the reset modifier, resets to.")
                                  .property (SliderIds::value, &Slider::getValue, [] (Slider& s, double v) { s.setValue (v); })
                                  .readOnly (SliderIds::normalized, &Slider::getValueNormalised)
                                  .property (SliderIds::minValue, &Slider::getMinValue, [] (Slider& s, double v) { s.setMinValue (v); })
@@ -162,12 +202,16 @@ const ComponentTypeInfo& Slider::getClassTypeInfo()
                                  .readOnly (SliderIds::minNormalized, &Slider::getMinValueNormalised, 0.0, "Where the lower value of a two-value slider is along the range, from 0 to 1.")
                                  .readOnly (SliderIds::maxNormalized, &Slider::getMaxValueNormalised, 1.0, "Where the upper value of a two-value slider is along the range, from 0 to 1.")
                                  .state (SliderIds::dragging, &Slider::isCurrentlyBeingDragged, false)
-                                 .readOnly (SliderIds::trackBounds, &Slider::getSliderBounds, {}, "The area the value moves in: the track of a linear slider, the square of a rotary one.")
+                                 .readOnly (SliderIds::trackBounds, &Slider::getTrackBounds, {}, "The area the value moves in: the track of a linear slider, the square of a rotary one.")
                                  .readOnly (SliderIds::thumbBounds, &Slider::getThumbBounds, {}, "The area of the thumb of a linear slider, centered where the value is along the track and of the size of thumbSize: what a press grabs. Empty for the others.")
-                                 .readOnly (SliderIds::decrementBounds, &Slider::getDecrementButtonBounds, {}, "The area of the button lowering the value of an incDecButtons slider, empty for the others.")
-                                 .readOnly (SliderIds::incrementBounds, &Slider::getIncrementButtonBounds, {}, "The area of the button raising the value of an incDecButtons slider, empty for the others.")
+                                 .readOnly (SliderIds::decrementBounds, &Slider::getDecrementBounds, {}, "The area of the button lowering the value of an incDecButtons slider, empty for the others.")
+                                 .readOnly (SliderIds::incrementBounds, &Slider::getIncrementBounds, {}, "The area of the button raising the value of an incDecButtons slider, empty for the others.")
                                  .readOnly (SliderIds::pressedStep, &Slider::getPressedStep, 0, "The button of an incDecButtons slider that is pressed: -1 for the one lowering the value, 1 for the one raising it, 0 for none.")
                                  .property (SliderIds::decimalPlaces, &Slider::getNumDecimalPlacesToDisplay, &Slider::setNumDecimalPlacesToDisplay, 7, "The decimal places the value is shown with, 0 or less for as many as it needs. The default theme shows 3 at most.")
+                                 .property (SliderIds::dragSensitivity, &Slider::getMouseDragSensitivity, &Slider::setMouseDragSensitivity, 1.0, "How far the value moves for a drag: 1 crosses the range in the length of the slider. A new rotary slider has 0.3.")
+                                 .property (SliderIds::fineDragScale, &Slider::getFineDragScale, &Slider::setFineDragScale, 0.1, "What the sensitivity of a drag and of the wheel is multiplied by while the fine drag modifier is held.")
+                                 .addProperty (makeModifierProperty (SliderIds::fineDragModifier, &Slider::getFineDragModifiers, &Slider::setFineDragModifiers, "shift", "The key that makes a drag and the wheel fine while it is held."))
+                                 .addProperty (makeModifierProperty (SliderIds::resetModifier, &Slider::getResetModifiers, &Slider::setResetModifiers, "alt", "The key a click is held with to bring the default value back."))
                                  .signal ("onValueChanged", &Slider::onValueChanged, "Emitted with the new value when the value changes", { { Identifier ("value"), ComponentProperty::Type::number } })
                                  .build();
 
@@ -528,12 +572,62 @@ bool Slider::isCurrentlyBeingDragged() const
 
 void Slider::setMouseDragSensitivity (double sensitivity)
 {
-    mouseDragSensitivity = std::max (0.001, sensitivity);
+    sensitivity = std::max (0.001, sensitivity);
+
+    if (approximatelyEqual (mouseDragSensitivity, sensitivity))
+        return;
+
+    mouseDragSensitivity = sensitivity;
+    notifyPropertyChanged (SliderIds::dragSensitivity);
 }
 
 double Slider::getMouseDragSensitivity() const
 {
     return mouseDragSensitivity;
+}
+
+void Slider::setFineDragScale (double scale)
+{
+    scale = std::max (0.001, scale);
+
+    if (approximatelyEqual (fineDragScale, scale))
+        return;
+
+    fineDragScale = scale;
+    notifyPropertyChanged (SliderIds::fineDragScale);
+}
+
+double Slider::getFineDragScale() const
+{
+    return fineDragScale;
+}
+
+void Slider::setFineDragModifiers (KeyModifiers modifiers)
+{
+    if (fineDragModifiers == modifiers)
+        return;
+
+    fineDragModifiers = modifiers;
+    notifyPropertyChanged (SliderIds::fineDragModifier);
+}
+
+KeyModifiers Slider::getFineDragModifiers() const
+{
+    return fineDragModifiers;
+}
+
+void Slider::setResetModifiers (KeyModifiers modifiers)
+{
+    if (resetModifiers == modifiers)
+        return;
+
+    resetModifiers = modifiers;
+    notifyPropertyChanged (SliderIds::resetModifier);
+}
+
+KeyModifiers Slider::getResetModifiers() const
+{
+    return resetModifiers;
 }
 
 void Slider::setVelocityModeParameters (double sensitivity, double threshold, double offsetThreshold)
@@ -631,8 +725,26 @@ void Slider::mouseDown (const MouseEvent& event)
         return;
     }
 
+    // A click with the reset modifier brings the default value back, and starts no drag
+    if (areModifiersDown (resetModifiers, event.getModifiers()))
+    {
+        const BailOutChecker bailOutChecker (this);
+
+        resetToDefaultValue();
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+
+        if (getClickingGrabFocus())
+            takeKeyboardFocus();
+
+        repaint();
+        return;
+    }
+
     const bool wasDragging = dragMode != notDragging;
     dragMode = getDragModeForMousePosition (mouseDownPosition);
+    dragScale = getDragScale (event.getModifiers());
 
     if (dragMode != notDragging)
     {
@@ -697,6 +809,16 @@ void Slider::mouseDrag (const MouseEvent& event)
     if (dragMode == notDragging)
         return;
 
+    // The fine drag modifier pressed or released goes on from the value the slider has, at the speed it now asks for
+    if (const auto scale = getDragScale (event.getModifiers()); ! exactlyEqual (scale, dragScale))
+    {
+        dragScale = scale;
+        mouseDragStartPosition = event.getPosition();
+        valueOnMouseDown = currentValue;
+        minValueOnMouseDown = minValue;
+        maxValueOnMouseDown = maxValue;
+    }
+
     updateValueFromMousePosition (event.getPosition(), dragMode); // Already returns Point<float>
 }
 
@@ -706,8 +828,7 @@ bool Slider::mouseWheel (const MouseEvent& event, const MouseWheelData& data)
         return false;
 
     const auto previousValue = getValue();
-    const double multiplier = event.getModifiers().isShiftDown() ? 0.001 : 0.01;
-    const double distance = (data.getDeltaX() + data.getDeltaY()) * multiplier * mouseDragSensitivity;
+    const double distance = (data.getDeltaX() + data.getDeltaY()) * 0.01 * getDragScale (event.getModifiers()) * mouseDragSensitivity;
 
     setValueNormalised (getValueNormalised() + distance);
     return getValue() != previousValue;
@@ -827,7 +948,7 @@ void Slider::sendRangeChanged (const NormalisableRange<double>& previousRange)
 
 void Slider::updateValueFromMousePosition (Point<float> mousePos, DragMode dragMode)
 {
-    const auto sliderBounds = getSliderBounds();
+    const auto sliderBounds = getTrackBounds();
 
     if (sliderBounds.isEmpty())
         return;
@@ -882,7 +1003,7 @@ void Slider::updateValueFromMousePosition (Point<float> mousePos, DragMode dragM
     if (totalRange <= 0.0f)
         return;
 
-    const double normalizedDelta = (mouseDelta / totalRange) * mouseDragSensitivity;
+    const double normalizedDelta = (mouseDelta / totalRange) * mouseDragSensitivity * dragScale;
 
     switch (dragMode)
     {
@@ -910,6 +1031,11 @@ void Slider::updateValueFromMousePosition (Point<float> mousePos, DragMode dragM
         default:
             break;
     }
+}
+
+double Slider::getDragScale (const KeyModifiers& modifiers) const
+{
+    return areModifiersDown (fineDragModifiers, modifiers) ? fineDragScale : 1.0;
 }
 
 bool Slider::updateValueFromKeypress (const KeyPress& key)
@@ -961,7 +1087,7 @@ double Slider::snapToLegalValue (double valueToSnap) const
 
 //==============================================================================
 
-Rectangle<float> Slider::getSliderBounds() const
+Rectangle<float> Slider::getTrackBounds() const
 {
     auto bounds = getLocalBounds();
 
@@ -1036,7 +1162,7 @@ Rectangle<float> Slider::getStepButtonBounds (int direction) const
     if (sliderType != IncDecButtons)
         return {};
 
-    auto bounds = getSliderBounds();
+    auto bounds = getTrackBounds();
 
     // On a line, the value rises to the right. One above the other, it rises upward
     if (bounds.getWidth() >= bounds.getHeight())
@@ -1049,14 +1175,28 @@ Rectangle<float> Slider::getStepButtonBounds (int direction) const
     return direction > 0 ? bounds.removeFromTop (size) : bounds.removeFromBottom (size);
 }
 
-Rectangle<float> Slider::getDecrementButtonBounds() const
+Rectangle<float> Slider::getDecrementBounds() const
 {
     return getStepButtonBounds (-1);
 }
 
-Rectangle<float> Slider::getIncrementButtonBounds() const
+Rectangle<float> Slider::getIncrementBounds() const
 {
     return getStepButtonBounds (1);
+}
+
+Rectangle<float> Slider::getTextBounds() const
+{
+    if (sliderType != IncDecButtons)
+        return {};
+
+    const auto track = getTrackBounds();
+    const auto decrement = getDecrementBounds();
+    const auto increment = getIncrementBounds();
+
+    return approximatelyEqual (decrement.getY(), increment.getY())
+             ? Rectangle<float> (decrement.getRight(), track.getY(), increment.getX() - decrement.getRight(), track.getHeight())
+             : Rectangle<float> (track.getX(), increment.getBottom(), track.getWidth(), decrement.getY() - increment.getBottom());
 }
 
 void Slider::stepValue (int direction)
@@ -1105,7 +1245,7 @@ Rectangle<float> Slider::getTextBoxBounds() const
 
 Rectangle<float> Slider::getThumbBoundsAt (double normalisedValue) const
 {
-    const auto track = getSliderBounds();
+    const auto track = getTrackBounds();
     const auto size = findPropertyAs<float> (SliderIds::thumbSize);
     const auto proportion = static_cast<float> (normalisedValue);
 
@@ -1165,7 +1305,7 @@ Slider::Thumb Slider::getHoveredThumb() const
 
 double Slider::getNormalisedValueAt (Point<float> position) const
 {
-    const auto track = getSliderBounds();
+    const auto track = getTrackBounds();
     const auto isVertical = isVerticalSlider (sliderType);
     const auto length = isVertical ? track.getHeight() : track.getWidth();
 
@@ -1231,7 +1371,7 @@ Slider::DragMode Slider::getDragModeForMousePosition (Point<float> mousePos) con
         case TwoValueVertical:
         {
             // Determine which thumb is closer to the mouse position
-            const auto sliderBounds = getSliderBounds();
+            const auto sliderBounds = getTrackBounds();
             const bool isHorizontal = (sliderType == TwoValueHorizontal);
 
             const float minPos = isHorizontal
@@ -1257,7 +1397,7 @@ Slider::DragMode Slider::getDragModeForMousePosition (Point<float> mousePos) con
 
 bool Slider::isMouseOverSliderArea (Point<float> mousePos) const
 {
-    const auto sliderBounds = getSliderBounds();
+    const auto sliderBounds = getTrackBounds();
     return sliderBounds.contains (mousePos);
 }
 

@@ -250,6 +250,7 @@
 #include "code/yup_SyntaxDefinition.cpp"
 #include "code/yup_CodeEditorScheme.cpp"
 #include "widgets/yup_TextEditor.cpp"
+#include "widgets/yup_InPlaceTextEditor.cpp"
 #include "widgets/yup_Label.cpp"
 #include "widgets/yup_Slider.cpp"
 #include "widgets/yup_ComboBox.cpp"

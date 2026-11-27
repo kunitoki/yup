@@ -44,7 +44,8 @@ namespace yup
 
     The models of one file share their meshes, their materials and their textures, in every
     `Model3D` of the same `Scene3D`. When the document tells that the file changed, the model is
-    loaded and instantiated again.
+    loaded and instantiated again. The file is parsed on a thread of the scene: the node shows
+    nothing, and has no instance, until its model is there (see SceneComponent::isLoading).
 
     A `Node3D` with a `node` written inside the model is bound to an entity of its instance, to
     move it or hide it (see SceneNodeComponent), and is bound again each time the model is
@@ -139,8 +140,8 @@ public:
         is instantiated: when the source, the scene or the file changes, and when the node gets
         another entity.
 
-        @returns The entity, or an invalid entity while the node is not in a scene or the model
-                 could not be loaded.
+        @returns The entity, or an invalid entity while the node is not in a scene, while the
+                 model is being loaded or when it could not be loaded.
     */
     Entity getInstance() const noexcept;
 

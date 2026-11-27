@@ -249,6 +249,15 @@ struct ComponentPropertyValueTraits<String>
 };
 
 template <>
+struct ComponentPropertyValueTraits<var>
+{
+    static constexpr auto type = ComponentProperty::Type::any;
+    static constexpr auto elementType = ComponentProperty::Type::any;
+    static var toVar (const var& v) { return v; }
+    static var fromVar (const var& v) { return v; }
+};
+
+template <>
 struct ComponentPropertyValueTraits<StringArray>
 {
     static constexpr auto type = ComponentProperty::Type::array;

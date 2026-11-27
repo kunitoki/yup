@@ -425,6 +425,7 @@ DataTreeSchema::Ptr YuiDocument::createSchema()
         props->setProperty ("class", makeSchemaProperty ("string", false, "Space-separated style classes."));
         props->setProperty ("palette", makeSchemaProperty ("string", false, "Scoped palette name or 'none'."));
         props->setProperty ("drawing", makeSchemaProperty ("string", false, "Instance drawing name or 'none'."));
+        props->setProperty ("onDoubleClick", makeSchemaProperty ("string", false, "Handler run when the component is double clicked, in place of what it does itself."));
 
         for (const auto* current = typeInfo; current != nullptr; current = current->getBaseTypeInfo())
         {

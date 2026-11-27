@@ -25,6 +25,7 @@ namespace yup
 {
 
 class YuiPropertyWatcher;
+class YuiDoubleClickWatcher;
 class YuiHandlerArguments;
 
 //==============================================================================
@@ -513,6 +514,8 @@ private:
     std::vector<Pending> pending;
     std::vector<Connection> connections;
     std::vector<std::unique_ptr<YuiPropertyWatcher>> watchers;
+    std::vector<std::unique_ptr<YuiDoubleClickWatcher>> doubleClickWatchers;
+    InPlaceTextEditor valueEditor;
     std::unique_ptr<TreeWatcher> treeWatcher;
     std::unique_ptr<ChangeUpdater> changeUpdater;
     std::map<String, Action> actions;

@@ -510,8 +510,8 @@ const ComponentTypeInfo& PopupMenu::getClassTypeInfo()
                                  .readOnly ("needsScrolling", &PopupMenu::needsScrolling, false, "Whether the menu holds more items than it shows at once.")
                                  .readOnly ("canScrollUp", &PopupMenu::canScrollUp, false, "Whether there are items above the ones shown.")
                                  .readOnly ("canScrollDown", &PopupMenu::canScrollDown, false, "Whether there are items below the ones shown.")
-                                 .readOnly ("scrollUpBounds", &PopupMenu::getScrollUpIndicatorBounds, {}, "The area telling that there are items above the ones shown.")
-                                 .readOnly ("scrollDownBounds", &PopupMenu::getScrollDownIndicatorBounds, {}, "The area telling that there are items below the ones shown.")
+                                 .readOnly ("scrollUpBounds", &PopupMenu::getScrollUpBounds, {}, "The area telling that there are items above the ones shown.")
+                                 .readOnly ("scrollDownBounds", &PopupMenu::getScrollDownBounds, {}, "The area telling that there are items below the ones shown.")
                                  .build();
 
     return info;
@@ -586,15 +586,7 @@ void PopupMenu::setupMenuItems()
                                                     : Font();
     const auto& itemFont = defaultFont;
     const auto shortcutFont = defaultFont.withHeight (defaultFont.getHeight() - 1.0f);
-    bool anyItemIsTicked = false;
-    for (const auto& item : items)
-    {
-        if (item->isTicked)
-        {
-            anyItemIsTicked = true;
-            break;
-        }
-    }
+    const bool anyItemIsTicked = isAnyItemTicked();
 
     const auto minimumWidth = static_cast<float> (jmax (0, options.minWidth.value_or (static_cast<int> (defaultMenuWidth))));
     const auto maximumWidth = static_cast<float> (jmax (static_cast<int> (minimumWidth),
@@ -770,7 +762,7 @@ int PopupMenu::getItemIndexAt (Point<float> position) const
     // Check if click is in scroll indicator areas
     if (showScrollIndicators)
     {
-        if (getScrollUpIndicatorBounds().contains (position) || getScrollDownIndicatorBounds().contains (position))
+        if (getScrollUpBounds().contains (position) || getScrollDownBounds().contains (position))
             return -1; // Click was on scroll indicators
     }
 
@@ -783,6 +775,73 @@ int PopupMenu::getItemIndexAt (Point<float> position) const
     }
 
     return -1;
+}
+
+const PopupMenu::Item* PopupMenu::findTextItem (int itemIndex) const
+{
+    if (! isPositiveAndBelow (itemIndex, getNumItems()))
+        return nullptr;
+
+    const auto& item = *items[static_cast<size_t> (itemIndex)];
+
+    return item.area.isEmpty() || item.isSeparator() || item.isCustomComponent() ? nullptr : std::addressof (item);
+}
+
+bool PopupMenu::isAnyItemTicked() const
+{
+    return std::any_of (items.begin(), items.end(), [] (const auto& item)
+    {
+        return item->isTicked;
+    });
+}
+
+Rectangle<float> PopupMenu::getItemTextBounds (int itemIndex) const
+{
+    const auto* item = findTextItem (itemIndex);
+    if (item == nullptr)
+        return {};
+
+    auto textBounds = item->area.reduced (horizontalTextPadding, 2.0f);
+
+    if (isAnyItemTicked())
+        textBounds = textBounds.withTrimmedLeft (tickedTextIndent);
+
+    if (item->shortcutKeyText.isNotEmpty())
+        textBounds = textBounds.withTrimmedRight (shortcutTextWidth);
+
+    if (item->isSubMenu())
+        textBounds = textBounds.withTrimmedRight (submenuArrowWidth);
+
+    return textBounds;
+}
+
+Rectangle<float> PopupMenu::getItemTickBounds (int itemIndex) const
+{
+    const auto* item = findTextItem (itemIndex);
+    if (item == nullptr || ! item->isTicked)
+        return {};
+
+    return Rectangle<float> (item->area.getX() + 4.0f, item->area.getCenterY() - 6.0f, 12.0f, 12.0f);
+}
+
+Rectangle<float> PopupMenu::getItemShortcutBounds (int itemIndex) const
+{
+    const auto* item = findTextItem (itemIndex);
+    if (item == nullptr || item->shortcutKeyText.isEmpty())
+        return {};
+
+    return Rectangle<float> (item->area.getRight() - shortcutTextWidth, item->area.getY() + 2.0f, 75.0f, item->area.getHeight() - 2.0f);
+}
+
+Rectangle<float> PopupMenu::getItemArrowBounds (int itemIndex) const
+{
+    const auto* item = findTextItem (itemIndex);
+    if (item == nullptr || ! item->isSubMenu())
+        return {};
+
+    const auto arrowHeight = jmin (12.0f, jmax (4.0f, item->area.getHeight() - 8.0f));
+
+    return Rectangle<float> (item->area.getRight() - 16.0f, item->area.getCenterY() - arrowHeight * 0.5f, 8.0f, arrowHeight);
 }
 
 //==============================================================================
@@ -1193,13 +1252,13 @@ void PopupMenu::mouseUp (const MouseEvent& event)
     // Scrolls on release: the press can reach the menu twice, through the global listener too
     if (showScrollIndicators)
     {
-        if (getScrollUpIndicatorBounds().contains (event.getPosition()))
+        if (getScrollUpBounds().contains (event.getPosition()))
         {
             scrollUp();
             return;
         }
 
-        if (getScrollDownIndicatorBounds().contains (event.getPosition()))
+        if (getScrollDownBounds().contains (event.getPosition()))
         {
             scrollDown();
             return;
@@ -2109,7 +2168,7 @@ Rectangle<float> PopupMenu::getMenuContentBounds() const
     return bounds;
 }
 
-Rectangle<float> PopupMenu::getScrollUpIndicatorBounds() const
+Rectangle<float> PopupMenu::getScrollUpBounds() const
 {
     if (! showScrollIndicators)
         return {};
@@ -2118,7 +2177,7 @@ Rectangle<float> PopupMenu::getScrollUpIndicatorBounds() const
     return bounds.removeFromTop (scrollIndicatorHeight);
 }
 
-Rectangle<float> PopupMenu::getScrollDownIndicatorBounds() const
+Rectangle<float> PopupMenu::getScrollDownBounds() const
 {
     if (! showScrollIndicators)
         return {};

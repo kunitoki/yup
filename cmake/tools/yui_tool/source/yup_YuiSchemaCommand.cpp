@@ -221,6 +221,18 @@ var describeYuiToolComponentType (const ComponentTypeInfo& info, bool includeInh
         }
     }
 
+    // The signal of every component, which the builder connects rather than a type declares
+    if (const auto& component = Component::getClassTypeInfo();
+        (&info == &component || (includeInherited && info.isSubtypeOf (component))) && listedSignals.insert ("onDoubleClick").second)
+    {
+        auto described = describeSignal ({ .name = "onDoubleClick", .description = "Emitted when the component is double clicked, in place of what it does itself on a double click" });
+
+        if (&info != &component)
+            described.getDynamicObject()->setProperty ("from", component.getTypeName().toString());
+
+        signals.add (described);
+    }
+
     auto* record = new DynamicObject();
     record->setProperty ("name", info.getTypeName().toString());
 

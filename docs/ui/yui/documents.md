@@ -294,6 +294,8 @@ emitted. It holds one call, or a block of calls run in order:
 
 ```yui
 TextButton { text: "Reset"; onClick: action ("reset"); }
+TextButton { text: "Mute"; onClick: set (params.mute, ! params.mute); }
+Label      { text: "Cutoff"; onDoubleClick: edit (params.cutoff); }
 Slider     { onValueChanged: action ("changed", "Cutoff", value); }
 Slider     { onValueChanged: (v) => root.onChanged (v * 100); }
 TextButton { onClick: { action ("save"); root.onDone (); } }
@@ -302,6 +304,13 @@ TextButton { onClick: { action ("save"); root.onDone (); } }
 - `action ("name", arguments...)` runs the function registered with
   `setAction`, passing the values of the arguments. With no arguments, the
   action receives the arguments of the signal instead.
+- `set (element.property, value)` writes a property, with no code in the
+  application: one of an element, as `knob.value` or `self.text`, or one of a
+  [model](#models), as `params.mute`. The value is an expression, converted to
+  the type of the property. A model takes the write as a gesture of its own,
+  so a host records it and it is undone in one step.
+- `edit (element.property)` opens a text editor to type the value of a
+  property, see [Editing a value as text](#editing-a-value-as-text).
 - `root.signal (arguments...)` or `id.signal (...)` emits a signal declared by
   a `component` block, converting the arguments to the types it declares.
 - `(a, b) => call` names the arguments of the signal, in order. The names hide
@@ -317,14 +326,24 @@ after loading.
 
 | Component      | Signal                  | Arguments          |
 |----------------|-------------------------|--------------------|
+| any            | `onDoubleClick`         |                    |
 | `TextButton`   | `onClick`               |                    |
 | `ToggleButton` | `onClick`               |                    |
 | `SwitchButton` | `onClick`               |                    |
 | `Slider`       | `onValueChanged`        | `value` (number)   |
 | `TextEditor`   | `onTextChange`          |                    |
+| `TextEditor`   | `onReturnKey`           |                    |
+| `TextEditor`   | `onEscapeKey`           |                    |
+| `TextEditor`   | `onFocusLost`           |                    |
 | `ComboBox`     | `onSelectedItemChanged` |                    |
 | `ListBox`      | `onSelectionChanged`    |                    |
 | `TabComponent` | `onTabChanged`          | `tab` (string, id) |
+
+`onDoubleClick` is a signal of every component. Its handler runs in place of
+what the component does itself on a double click, so a `Slider` with one no
+longer goes back to its default value, and it does not run while the component
+is disabled. A single line `TextEditor` keeps Return and Escape only while
+`onReturnKey` and `onEscapeKey` have a handler.
 
 `changed property: handler;` runs a handler whenever a property of the element
 changes, from the user, code or a binding, with the new value as its argument:
@@ -435,6 +454,76 @@ thread reach the UI on the editor's parameter dispatch. Writes and gestures on
 read-only parameters, such as meters, are ignored. Give a slider the range of its parameter with `minimum`,
 `maximum`, `interval` and `skew`; `minValue` and `maxValue` are the thumbs of a
 two-value slider, not its range.
+
+## Editing a value as text
+
+`edit (element.property)` in a handler opens a single line text editor over
+the component the handler is on, to type the value of a property: a number, an
+integer or a string, of an element or of a [model](#models). With
+`onDoubleClick` it makes a knob and its labels editable, with no code in the
+application:
+
+```yui
+component Knob : Column {
+    property label: string;
+    property scale: number = 1;
+    property alias value <=> dial.value;
+
+    Label  { text: root.label; onDoubleClick: readout.edit (dial.value); }
+    Slider { id: dial; sliderType: rotaryVerticalDrag;
+             onDoubleClick: readout.edit (dial.value, dial.value * root.scale, input / root.scale); }
+    Label  { id: readout; text: format ("%.0f", dial.value * root.scale); onDoubleClick: edit (dial.value); }
+}
+
+Knob { label: "MIX"; scale: 100; value <=> params.mix; }
+```
+
+- `edit (element.property)` opens the editor over the component the handler
+  is on, and `id.edit (element.property)` over another one, as `readout`
+  above. A signal named `edit` that a `component` block declares is still
+  emitted by `id.edit (...)`.
+- The editor opens with the text of the value selected. That is the text the
+  model shows the value with when the property is linked to one that has
+  texts of its own, as `params.mix` is through `root.value` above, and the
+  value with no zero after it otherwise.
+- `edit (element.property, shown, parsed)` gives both: `shown` is the text, or
+  the number, the editor opens with, and `parsed` the value of what was typed.
+  `parsed` reads `text`, what was typed, and `input`, the number it starts
+  with: `"440 Hz"` gives 440.
+- Return and a press anywhere else commit, as does the editor losing the
+  keyboard focus. Escape cancels. A text left as it opened, and one with no
+  number to read, write nothing.
+- The value is written through the property, so a slider keeps it in its range
+  and on its steps as it does a drag, and a model takes it as one gesture.
+- Nothing opens while the component holding the property is disabled.
+
+One editor is open at a time, and it closes when the document is loaded again.
+It is a `TextEditor` of class `edit`, styled as the others unless a rule says
+otherwise:
+
+```yui
+style {
+    TextEditor.edit { backgroundColor: palette.surface; cornerRadius: 2; }
+}
+```
+
+An `AudioParameterBindingProvider` shows and reads a value with
+`AudioParameter::convertToString` and `convertFromString`, so the editor of a
+parameter opens with its unit. Another provider does the same by overriding
+`BindingProvider::getTextForValue` and `getValueForText`.
+
+A slider has what goes with it. `dragSensitivity` is how far a drag moves the
+value: 1 crosses the range in the length of the slider, and a rotary slider
+made in C++ has 0.3. While the `fineDragModifier` key is held (`none`,
+`shift`, `ctrl`, `alt` or `command`, `shift` by default) a drag and the wheel
+are `fineDragScale` times as fast, 0.1 by default. A click with the
+`resetModifier` key, `alt` by default, brings `defaultValue` back, which a
+double click no longer does on a slider with an `onDoubleClick` handler:
+
+```yui
+Slider { sliderType: rotaryVerticalDrag; dragSensitivity: 0.3; fineDragScale: 0.1; fineDragModifier: shift;
+         resetModifier: alt; defaultValue: 0.5; }
+```
 
 ## Setting up components from C++
 
@@ -585,6 +674,33 @@ Row {
     ToggleButton { text: "STEP"; radioGroup: 1; checked <=> mod.step; }
 }
 ```
+
+Buttons that stand for the values of one property share it instead. Each has a
+`value`, and links its `selection` to the property: it is checked while the
+selection is its value, and a click selects that value. They are exclusive
+whatever their parents, and none needs a `checked` of its own to bind:
+
+```yui
+Row {
+    ToggleButton { text: "LFO";  value: 1; selection <=> mod.source; }
+    ToggleButton { text: "STEP"; value: 2; selection <=> mod.source; }
+}
+
+Row {
+    repeat note in 1 .. 13 {
+        ToggleButton { value: note; selection <=> params.rootNote; offValue: 0; }
+    }
+}
+```
+
+- A value is a number, a text or a boolean. Numbers are compared by what they
+  are worth: `2` is `2.0`.
+- A click on the button that is checked leaves it checked. With an
+  `offValue` it selects that value instead, so no button is left checked.
+- The buttons follow the property whoever changes it: another button, a
+  handler calling `set (mod.source, 2)`, a preset or a host.
+- Don't set `checked` or a `radioGroup` on a button that has a value: the
+  selection decides.
 
 A `Slider` of type `incDecButtons` is a stepper: a button at each end with the
 value between them, on a line when it is wider than tall and one above the

@@ -676,6 +676,7 @@ TEST_F (SceneMaterialComponentTests, TexturesAreReadThroughTheDocumentAndShared)
     // A file that changed is read again, by every material made from it
     const auto before = material->baseColorTexture;
     document.notifyAssetChanged ("wood.png");
+    finishLoading (document);
 
     ASSERT_NE (material->baseColorTexture, nullptr);
     EXPECT_NE (material->baseColorTexture, before);
@@ -703,6 +704,7 @@ TEST_F (SceneMaterialComponentTests, ATextureThatCanNotBeLoadedIsReported)
                                                  "    }\n"
                                                  "}");
 
+    finishLoading (document);
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
 
     expectDiagnostic (document, "Material3D.baseColorTexture: the file 'nowhere.png' can't be read");

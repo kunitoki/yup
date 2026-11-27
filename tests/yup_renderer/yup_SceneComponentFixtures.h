@@ -94,9 +94,37 @@ protected:
     static void load (YuiDocument& document, const String& text)
     {
         const auto result = document.loadFromString (text);
+        finishLoading (document);
 
         ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
         EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+    }
+
+    /** Waits for the files the scenes of a document are still loading: what a test reads of a model, of a texture or of
+        an environment is there once this returns, as it is in an application once its message loop has run.
+    */
+    static void finishLoading (const YuiDocument& document)
+    {
+        std::vector<WeakReference<Component>> scenes;
+
+        const std::function<void (Component*)> collect = [&scenes, &collect] (Component* component)
+        {
+            if (component == nullptr)
+                return;
+
+            if (dynamic_cast<SceneComponent*> (component) != nullptr)
+                scenes.emplace_back (component);
+
+            for (int index = 0; index < component->getNumChildComponents(); ++index)
+                collect (component->getChildComponent (index));
+        };
+
+        collect (document.getRoot());
+
+        // Kept weakly: who hears about what a file has wrong may destroy a scene
+        for (const auto& scene : scenes)
+            if (auto* view = dynamic_cast<SceneComponent*> (scene.get()))
+                view->finishLoading();
     }
 
     /** Returns the first diagnostic of a document holding a text, or nullptr. */

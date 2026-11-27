@@ -237,7 +237,7 @@ TEST_F (ScrollBarTests, MouseDownOnThumbStartsDragging)
     scrollBar->setCurrentRange (0.0, 100.0);
     scrollBar->resized();
 
-    auto thumbBounds = scrollBar->getThumbBoundsForRendering();
+    auto thumbBounds = scrollBar->getThumbBounds();
     auto center = thumbBounds.getCenter();
 
     MouseEvent event (MouseEvent::leftButton, KeyModifiers(), center);
@@ -252,7 +252,7 @@ TEST_F (ScrollBarTests, MouseUpStopsDragging)
     scrollBar->setCurrentRange (0.0, 100.0);
     scrollBar->resized();
 
-    auto thumbBounds = scrollBar->getThumbBoundsForRendering();
+    auto thumbBounds = scrollBar->getThumbBounds();
     auto center = thumbBounds.getCenter();
 
     MouseEvent downEvent (MouseEvent::leftButton, KeyModifiers(), center);
@@ -270,7 +270,7 @@ TEST_F (ScrollBarTests, MouseDragMovesThumb)
     scrollBar->setCurrentRange (0.0, 100.0);
     scrollBar->resized();
 
-    auto thumbBounds = scrollBar->getThumbBoundsForRendering();
+    auto thumbBounds = scrollBar->getThumbBounds();
     auto center = thumbBounds.getCenter();
 
     MouseEvent downEvent (MouseEvent::leftButton, KeyModifiers(), center);
@@ -290,7 +290,7 @@ TEST_F (ScrollBarTests, MouseEnterSetsHoverState)
     scrollBar->setCurrentRange (0.0, 100.0);
     scrollBar->resized();
 
-    auto thumbBounds = scrollBar->getThumbBoundsForRendering();
+    auto thumbBounds = scrollBar->getThumbBounds();
     auto center = thumbBounds.getCenter();
 
     MouseEvent event (MouseEvent::leftButton, KeyModifiers(), center);
@@ -305,7 +305,7 @@ TEST_F (ScrollBarTests, MouseExitClearsHoverState)
     scrollBar->setCurrentRange (0.0, 100.0);
     scrollBar->resized();
 
-    auto thumbBounds = scrollBar->getThumbBoundsForRendering();
+    auto thumbBounds = scrollBar->getThumbBounds();
     auto center = thumbBounds.getCenter();
 
     MouseEvent enterEvent (MouseEvent::leftButton, KeyModifiers(), center);
@@ -341,7 +341,7 @@ TEST_F (ScrollBarTests, ThumbBoundsAreValid)
     scrollBar->setCurrentRange (0.0, 100.0);
     scrollBar->resized();
 
-    auto thumbBounds = scrollBar->getThumbBoundsForRendering();
+    auto thumbBounds = scrollBar->getThumbBounds();
 
     EXPECT_FALSE (thumbBounds.isEmpty());
     EXPECT_GT (thumbBounds.getWidth(), 0.0f);
@@ -352,7 +352,7 @@ TEST_F (ScrollBarTests, TrackBoundsAreValid)
 {
     scrollBar->resized();
 
-    auto trackBounds = scrollBar->getTrackBoundsForRendering();
+    auto trackBounds = scrollBar->getTrackBounds();
 
     EXPECT_FALSE (trackBounds.isEmpty());
 }
@@ -363,12 +363,12 @@ TEST_F (ScrollBarTests, ThumbBoundsChangeWithPosition)
     scrollBar->setCurrentRange (0.0, 100.0);
     scrollBar->resized();
 
-    auto bounds1 = scrollBar->getThumbBoundsForRendering();
+    auto bounds1 = scrollBar->getThumbBounds();
 
     scrollBar->setCurrentRangeStart (500.0, dontSendNotification);
     scrollBar->resized();
 
-    auto bounds2 = scrollBar->getThumbBoundsForRendering();
+    auto bounds2 = scrollBar->getThumbBounds();
 
     EXPECT_NE (bounds1.getY(), bounds2.getY());
 }
@@ -379,11 +379,11 @@ TEST_F (ScrollBarTests, ThumbSizeScalesWithContentRatio)
 
     scrollBar->setCurrentRange (0.0, 100.0);
     scrollBar->resized();
-    auto smallRangeBounds = scrollBar->getThumbBoundsForRendering();
+    auto smallRangeBounds = scrollBar->getThumbBounds();
 
     scrollBar->setCurrentRange (0.0, 500.0);
     scrollBar->resized();
-    auto largeRangeBounds = scrollBar->getThumbBoundsForRendering();
+    auto largeRangeBounds = scrollBar->getThumbBounds();
 
     EXPECT_LT (smallRangeBounds.getHeight(), largeRangeBounds.getHeight());
 }
@@ -459,7 +459,7 @@ TEST_F (ScrollBarTests, HorizontalOrientationWorks)
     scrollBar->setCurrentRange (0.0, 100.0);
     scrollBar->resized();
 
-    auto thumbBounds = scrollBar->getThumbBoundsForRendering();
+    auto thumbBounds = scrollBar->getThumbBounds();
 
     EXPECT_FALSE (thumbBounds.isEmpty());
     EXPECT_GT (thumbBounds.getWidth(), 0.0f);
@@ -473,12 +473,12 @@ TEST_F (ScrollBarTests, HorizontalThumbMoves)
     scrollBar->setCurrentRange (0.0, 100.0);
     scrollBar->resized();
 
-    auto bounds1 = scrollBar->getThumbBoundsForRendering();
+    auto bounds1 = scrollBar->getThumbBounds();
 
     scrollBar->setCurrentRangeStart (500.0, dontSendNotification);
     scrollBar->resized();
 
-    auto bounds2 = scrollBar->getThumbBoundsForRendering();
+    auto bounds2 = scrollBar->getThumbBounds();
 
     EXPECT_NE (bounds1.getX(), bounds2.getX());
 }

@@ -241,11 +241,21 @@ public:
     const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
     //==============================================================================
-    /** @internal */
-    Rectangle<float> getThumbBoundsForRendering() const { return thumbBounds; }
-    /** @internal */
-    Rectangle<float> getTrackBoundsForRendering() const { return getTrackBounds(); }
+    /** Returns the area the thumb moves in, in the coordinates of the bar.
 
+        It runs along the whole bar, is as thick as getScrollBarWidth() and is centered across the bar.
+    */
+    Rectangle<float> getTrackBounds() const;
+
+    /** Returns the area of the thumb along getTrackBounds(), before the inset of its style.
+
+        The thumb takes of the track what the visible range takes of the whole one, and no less than twice
+        getScrollBarWidth(). It is what the theme paints and what a press grabs: a press on the track
+        beside it scrolls there.
+    */
+    Rectangle<float> getThumbBounds() const { return thumbBounds; }
+
+    //==============================================================================
     /** @internal */
     void paint (Graphics& g) override;
     /** @internal */
@@ -267,8 +277,7 @@ private:
     //==============================================================================
     void updateThumbBounds();
     void updateVisibility();
-    Rectangle<float> getThumbBounds() const;
-    Rectangle<float> getTrackBounds() const;
+    Rectangle<float> calculateThumbBounds() const;
     bool isThumbHovered (Point<float> position) const;
     double pixelToPosition (float pixel) const;
     float positionToPixel (double position) const;

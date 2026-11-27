@@ -32,8 +32,6 @@ struct LabelIds
     static inline const Identifier text { "text" };
     static inline const Identifier strokeWidth { "strokeWidth" };
     static inline const Identifier justification { "justification" };
-    static inline const Identifier textPart { "text" };
-    static inline const Identifier textOutlinePart { "textOutline" };
 };
 
 } // namespace
@@ -45,6 +43,8 @@ const Identifier Label::Style::textStrokeColorId { "labelTextStrokeColorId" };
 const Identifier Label::Style::backgroundColorId { "labelBackgroundColorId" };
 const Identifier Label::Style::outlineColorId { "labelOutlineColorId" };
 const Identifier Label::Style::textHeightProportionId { "labelTextHeightProportionId" };
+const Identifier Label::Style::textPartId { "text" };
+const Identifier Label::Style::textOutlinePartId { "textOutline" };
 
 //==============================================================================
 
@@ -73,8 +73,8 @@ const ComponentTypeInfo& Label::getClassTypeInfo()
                                        { "bottomRight", Justification::bottomRight } },
                                      [] (const Label& l) { return l.getJustification().getFlags(); },
                                      [] (Label& l, Justification::Flags f) { l.setJustification (f); })
-                                 .fixedPart (LabelIds::textPart, "The text as the label laid it out, filled with the fill color.")
-                                 .fixedPart (LabelIds::textOutlinePart, "The outline of the text, stroked with the stroke color and width.")
+                                 .fixedPart (Style::textPartId, "The text as the label laid it out, filled with the fill color.")
+                                 .fixedPart (Style::textOutlinePartId, "The outline of the text, stroked with the stroke color and width.")
                                  .build();
 
     return info;

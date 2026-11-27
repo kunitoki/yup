@@ -785,7 +785,7 @@ public:
 
     //==============================================================================
     /** @internal Returns the rectangle of the text area (used by the theme for painting). */
-    Rectangle<float> getTextArea() const;
+    Rectangle<float> getTextBounds() const;
 
     /** @internal Returns the height of a single line of text. */
     float getLineHeight() const;

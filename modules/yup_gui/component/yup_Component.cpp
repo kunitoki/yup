@@ -3528,7 +3528,19 @@ void Component::internalMouseDoubleClick (const MouseEvent& event)
 
     auto bailOutChecker = BailOutChecker (this);
 
-    mouseDoubleClick (event);
+    // A listener taking the double click has it in place of the component
+    bool isTaken = false;
+
+    componentListeners.callChecked (bailOutChecker, [&] (ComponentListener& listener)
+    {
+        isTaken = listener.componentDoubleClicked (*this, event) || isTaken;
+    });
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    if (! isTaken)
+        mouseDoubleClick (event);
 
     if (bailOutChecker.shouldBailOut())
         return;

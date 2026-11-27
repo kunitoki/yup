@@ -96,6 +96,21 @@ TEST_F (PitchWheelComponentTest, SetValueClampsToRange)
     EXPECT_DOUBLE_EQ (-1.0, wheel->getValue());
 }
 
+TEST_F (PitchWheelComponentTest, TheNormalizedValueIsTheValueAlongItsRange)
+{
+    // At rest the wheel is in the middle of its travel
+    EXPECT_DOUBLE_EQ (0.5, wheel->getNormalizedValue());
+
+    wheel->setValue (-1.0);
+    EXPECT_DOUBLE_EQ (0.0, wheel->getNormalizedValue());
+
+    wheel->setValue (0.5);
+    EXPECT_DOUBLE_EQ (0.75, wheel->getNormalizedValue());
+
+    wheel->setValue (1.0);
+    EXPECT_DOUBLE_EQ (1.0, wheel->getNormalizedValue());
+}
+
 TEST_F (PitchWheelComponentTest, SetValueWithNotificationCallback)
 {
     int callCount = 0;

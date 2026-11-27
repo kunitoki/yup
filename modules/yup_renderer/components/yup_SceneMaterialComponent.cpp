@@ -182,10 +182,25 @@ void SceneMaterialComponent::updateTexture (size_t slot)
     if (texturePaths[slot].isEmpty())
         return;
 
-    if (const auto loaded = view->loadTexture (texturePaths[slot], texture.isSrgb); loaded.wasOk())
-        material.get()->*texture.texture = loaded.getReference();
+    const auto loaded = view->loadTexture (texturePaths[slot], texture.isSrgb);
+
+    // Being loaded: the scene tells when the texture is there
+    if (! loaded.has_value())
+        return;
+
+    if (loaded->wasOk())
+        material.get()->*texture.texture = loaded->getReference();
     else
-        view->reportProblem (*this, texture.property, loaded.getErrorMessage());
+        view->reportProblem (*this, texture.property, loaded->getErrorMessage());
+}
+
+bool SceneMaterialComponent::isUsingAsset (const String& path) const
+{
+    // A shader that is still to be looked for may be the one of any file
+    if (shaderName.isNotEmpty() && (shaderSheet == nullptr || shaderSheet->findShader (shaderName).getProperty ("material").toString() == path))
+        return true;
+
+    return std::find (texturePaths.begin(), texturePaths.end(), path) != texturePaths.end();
 }
 
 void SceneMaterialComponent::assetChanged (const String& path)

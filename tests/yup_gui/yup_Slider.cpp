@@ -342,6 +342,29 @@ TEST_F (SliderTest, MouseDragSensitivity)
     EXPECT_DOUBLE_EQ (0.1, slider->getMouseDragSensitivity());
 }
 
+TEST_F (SliderTest, TheDragPropertiesAreReflected)
+{
+    EXPECT_DOUBLE_EQ (0.1, slider->getFineDragScale());
+    EXPECT_EQ (slider->getFineDragModifiers(), KeyModifiers (KeyModifiers::shiftMask));
+    EXPECT_EQ (slider->getResetModifiers(), KeyModifiers (KeyModifiers::altMask));
+    EXPECT_EQ (slider->getProperty ("fineDragModifier").toString(), "shift");
+    EXPECT_EQ (slider->getProperty ("resetModifier").toString(), "alt");
+
+    slider->setProperty ("dragSensitivity", 0.3);
+    slider->setProperty ("fineDragScale", 0.25);
+    slider->setProperty ("fineDragModifier", "command");
+    slider->setProperty ("resetModifier", "none");
+
+    EXPECT_DOUBLE_EQ (0.3, slider->getMouseDragSensitivity());
+    EXPECT_DOUBLE_EQ (0.25, slider->getFineDragScale());
+    EXPECT_EQ (slider->getFineDragModifiers(), KeyModifiers (KeyModifiers::commandMask));
+    EXPECT_EQ (slider->getResetModifiers(), KeyModifiers());
+
+    // A name that is none of a key leaves the key as it is
+    slider->setProperty ("fineDragModifier", "hyper");
+    EXPECT_EQ (slider->getFineDragModifiers(), KeyModifiers (KeyModifiers::commandMask));
+}
+
 //==============================================================================
 TEST_F (SliderTest, VelocityModeParameters)
 {
@@ -583,8 +606,8 @@ protected:
 
 TEST_F (SliderStepperTest, HasAButtonAtEachEndWithTheValueBetweenThem)
 {
-    const auto decrement = stepper.getDecrementButtonBounds();
-    const auto increment = stepper.getIncrementButtonBounds();
+    const auto decrement = stepper.getDecrementBounds();
+    const auto increment = stepper.getIncrementBounds();
 
     EXPECT_FALSE (decrement.isEmpty());
     EXPECT_FALSE (increment.isEmpty());
@@ -595,8 +618,8 @@ TEST_F (SliderStepperTest, HasAButtonAtEachEndWithTheValueBetweenThem)
     // A slider of another type has none
     Slider linear (Slider::LinearHorizontal);
     linear.setBounds (0.0f, 0.0f, 200.0f, 30.0f);
-    EXPECT_TRUE (linear.getDecrementButtonBounds().isEmpty());
-    EXPECT_TRUE (linear.getIncrementButtonBounds().isEmpty());
+    EXPECT_TRUE (linear.getDecrementBounds().isEmpty());
+    EXPECT_TRUE (linear.getIncrementBounds().isEmpty());
 }
 
 TEST_F (SliderStepperTest, TwoQuickPressesOnAButtonAreTwoSteps)
@@ -604,10 +627,10 @@ TEST_F (SliderStepperTest, TwoQuickPressesOnAButtonAreTwoSteps)
     stepper.setDefaultValue (2.0);
 
     // The second press steps as the first did: the double click it makes does not bring the default value back
-    pointer.doubleClick (stepper.getIncrementButtonBounds().getCenter());
+    pointer.doubleClick (stepper.getIncrementBounds().getCenter());
     EXPECT_DOUBLE_EQ (stepper.getValue(), 7.0);
 
-    pointer.doubleClick (stepper.getDecrementButtonBounds().getCenter());
+    pointer.doubleClick (stepper.getDecrementBounds().getCenter());
     EXPECT_DOUBLE_EQ (stepper.getValue(), 5.0);
 
     // Between the buttons it still does, as on any slider
@@ -619,8 +642,8 @@ TEST_F (SliderStepperTest, KeepsTheThicknessOfAButtonInATallerArea)
 {
     stepper.setBounds (0.0f, 0.0f, 200.0f, 120.0f);
 
-    const auto decrement = stepper.getDecrementButtonBounds();
-    const auto increment = stepper.getIncrementButtonBounds();
+    const auto decrement = stepper.getDecrementBounds();
+    const auto increment = stepper.getIncrementBounds();
 
     // The buttons don't grow with the area: they keep their size, in the middle of it
     EXPECT_FLOAT_EQ (decrement.getHeight(), 28.0f);
@@ -631,9 +654,29 @@ TEST_F (SliderStepperTest, KeepsTheThicknessOfAButtonInATallerArea)
 
     // One above the other in a narrow area, they keep their width instead
     stepper.setBounds (0.0f, 0.0f, 120.0f, 200.0f);
-    EXPECT_FLOAT_EQ (stepper.getIncrementButtonBounds().getWidth(), 28.0f);
-    EXPECT_FLOAT_EQ (stepper.getIncrementButtonBounds().getCenterX(), 60.0f);
-    EXPECT_LT (stepper.getIncrementButtonBounds().getBottom(), stepper.getDecrementButtonBounds().getY());
+    EXPECT_FLOAT_EQ (stepper.getIncrementBounds().getWidth(), 28.0f);
+    EXPECT_FLOAT_EQ (stepper.getIncrementBounds().getCenterX(), 60.0f);
+    EXPECT_LT (stepper.getIncrementBounds().getBottom(), stepper.getDecrementBounds().getY());
+}
+
+TEST_F (SliderStepperTest, TheValueIsShownInWhatTheButtonsLeaveBetweenThem)
+{
+    // On a line, from a button to the other and as high as they are
+    EXPECT_EQ (stepper.getTextBounds(), Rectangle<float> (28.0f, 2.0f, 144.0f, 26.0f));
+    EXPECT_FLOAT_EQ (stepper.getTextBounds().getX(), stepper.getDecrementBounds().getRight());
+    EXPECT_FLOAT_EQ (stepper.getTextBounds().getRight(), stepper.getIncrementBounds().getX());
+    EXPECT_TRUE (stepper.getTrackBounds().contains (stepper.getTextBounds()));
+
+    // One above the other, under the one raising the value and as wide as they are
+    stepper.setBounds (0.0f, 0.0f, 120.0f, 200.0f);
+    EXPECT_EQ (stepper.getTextBounds(), Rectangle<float> (46.0f, 30.0f, 28.0f, 140.0f));
+    EXPECT_FLOAT_EQ (stepper.getTextBounds().getY(), stepper.getIncrementBounds().getBottom());
+    EXPECT_FLOAT_EQ (stepper.getTextBounds().getBottom(), stepper.getDecrementBounds().getY());
+
+    // A slider of another type shows no value
+    Slider linear (Slider::LinearHorizontal);
+    linear.setBounds (0.0f, 0.0f, 200.0f, 30.0f);
+    EXPECT_TRUE (linear.getTextBounds().isEmpty());
 }
 
 //==============================================================================
@@ -665,14 +708,14 @@ TEST_F (SliderTwoValueTest, TellsWhereItsValuesAreAndLeavesRoomForItsThumbs)
     EXPECT_DOUBLE_EQ (static_cast<double> (slider.getProperty (Identifier ("maxNormalized"))), 0.75);
 
     // A thumb at an end of the range is whole inside the slider
-    const auto track = slider.getSliderBounds();
+    const auto track = slider.getTrackBounds();
     EXPECT_FLOAT_EQ (track.getX(), 10.0f);
     EXPECT_FLOAT_EQ (track.getRight(), 210.0f);
 }
 
 TEST_F (SliderTwoValueTest, EachThumbIsDraggedOnItsOwnAndStopsAtTheOther)
 {
-    const auto track = slider.getSliderBounds();
+    const auto track = slider.getTrackBounds();
     const auto at = [&track] (double normalized)
     {
         return Point<float> (track.getX() + static_cast<float> (normalized) * track.getWidth(), track.getCenterY());
@@ -729,8 +772,8 @@ TEST_F (SliderTwoValueTest, TellsTheThumbUnderThePointerAndTheOneDragged)
 
 TEST_F (SliderStepperTest, AButtonStepsByTheInterval)
 {
-    const auto decrement = stepper.getDecrementButtonBounds().getCenter();
-    const auto increment = stepper.getIncrementButtonBounds().getCenter();
+    const auto decrement = stepper.getDecrementBounds().getCenter();
+    const auto increment = stepper.getIncrementBounds().getCenter();
 
     pointer.click (increment);
     EXPECT_DOUBLE_EQ (stepper.getValue(), 6.0);
@@ -755,7 +798,7 @@ TEST_F (SliderStepperTest, AButtonStepsByAHundredthOfTheRangeWithNoInterval)
     stepper.setRange (0.0, 200.0);
     stepper.setValue (50.0);
 
-    pointer.click (stepper.getIncrementButtonBounds().getCenter());
+    pointer.click (stepper.getIncrementBounds().getCenter());
     EXPECT_NEAR (stepper.getValue(), 52.0, 1.0e-9);
 }
 
@@ -763,7 +806,7 @@ TEST_F (SliderStepperTest, TellsWhichButtonIsPressed)
 {
     EXPECT_EQ (stepper.getPressedStep(), 0);
 
-    pointer.moveTo (stepper.getIncrementButtonBounds().getCenter());
+    pointer.moveTo (stepper.getIncrementBounds().getCenter());
     pointer.press();
     EXPECT_EQ (stepper.getPressedStep(), 1);
     EXPECT_FALSE (stepper.isCurrentlyBeingDragged());
@@ -771,7 +814,7 @@ TEST_F (SliderStepperTest, TellsWhichButtonIsPressed)
     pointer.release();
     EXPECT_EQ (stepper.getPressedStep(), 0);
 
-    pointer.moveTo (stepper.getDecrementButtonBounds().getCenter());
+    pointer.moveTo (stepper.getDecrementBounds().getCenter());
     pointer.press();
     EXPECT_EQ (stepper.getPressedStep(), -1);
     pointer.release();
@@ -780,7 +823,7 @@ TEST_F (SliderStepperTest, TellsWhichButtonIsPressed)
 #if YUP_MODAL_LOOPS_PERMITTED
 TEST_F (SliderStepperTest, AButtonHeldKeepsStepping)
 {
-    pointer.moveTo (stepper.getIncrementButtonBounds().getCenter());
+    pointer.moveTo (stepper.getIncrementBounds().getCenter());
     pointer.press();
     EXPECT_DOUBLE_EQ (stepper.getValue(), 6.0);
 
@@ -797,7 +840,7 @@ TEST_F (SliderStepperTest, AButtonHeldKeepsStepping)
 
 TEST_F (SliderStepperTest, AButtonHeldStopsSteppingWhenTheStepperIsDisabled)
 {
-    pointer.moveTo (stepper.getIncrementButtonBounds().getCenter());
+    pointer.moveTo (stepper.getIncrementBounds().getCenter());
     pointer.press();
     EXPECT_DOUBLE_EQ (stepper.getValue(), 6.0);
 
@@ -812,7 +855,7 @@ TEST_F (SliderStepperTest, AButtonHeldStopsSteppingWhenTheStepperIsDisabled)
 
 TEST_F (SliderStepperTest, AButtonHeldIsReleasedWhenTheStepperIsDisabledOrHidden)
 {
-    pointer.moveTo (stepper.getIncrementButtonBounds().getCenter());
+    pointer.moveTo (stepper.getIncrementBounds().getCenter());
 
     pointer.press();
     ASSERT_EQ (stepper.getPressedStep(), 1);
@@ -863,11 +906,136 @@ protected:
     PointerSimulator pointer { panel };
 };
 
+TEST_F (SliderLinearTest, TheFineDragModifierSlowsTheDragAndGoesOnFromTheValueWhenItChanges)
+{
+    const auto track = slider.getTrackBounds();
+    const KeyModifiers fine (KeyModifiers::shiftMask);
+
+    const auto dragTo = [&] (float x, KeyModifiers modifiers)
+    {
+        slider.mouseDrag (MouseEvent (MouseEvent::leftButton, modifiers, Point<float> (x, 20.0f)));
+    };
+
+    slider.setValue (0.5);
+
+    const auto start = slider.getThumbBounds().getCenter();
+    const auto tenth = track.getWidth() * 0.1f;
+
+    slider.mouseDown (MouseEvent (MouseEvent::leftButton, KeyModifiers(), start));
+
+    dragTo (start.getX() + tenth, {});
+    EXPECT_NEAR (slider.getValue(), 0.6, 1e-4);
+
+    // The key pressed during the drag leaves the value where it is, then moves it a tenth as far
+    dragTo (start.getX() + tenth, fine);
+    EXPECT_NEAR (slider.getValue(), 0.6, 1e-4);
+
+    dragTo (start.getX() + 2.0f * tenth, fine);
+    EXPECT_NEAR (slider.getValue(), 0.61, 1e-4);
+
+    // Released, the drag is as fast as it was, from the value it reached
+    dragTo (start.getX() + 2.0f * tenth, {});
+    EXPECT_NEAR (slider.getValue(), 0.61, 1e-4);
+
+    dragTo (start.getX() + 3.0f * tenth, {});
+    EXPECT_NEAR (slider.getValue(), 0.71, 1e-4);
+
+    slider.mouseUp (MouseEvent (MouseEvent::noButtons, KeyModifiers(), Point<float> (start.getX() + 3.0f * tenth, 20.0f)));
+
+    // The scale and the key are those the slider is given, and no key is no fine drag
+    slider.setFineDragScale (0.5);
+    slider.setFineDragModifiers (KeyModifiers::altMask);
+    slider.setResetModifiers ({});
+    slider.setValue (0.5);
+
+    slider.mouseDown (MouseEvent (MouseEvent::leftButton, KeyModifiers (KeyModifiers::altMask), start));
+    dragTo (start.getX() + tenth, KeyModifiers::altMask);
+    EXPECT_NEAR (slider.getValue(), 0.55, 1e-4);
+
+    dragTo (start.getX() + tenth, fine);
+    dragTo (start.getX() + 2.0f * tenth, fine);
+    EXPECT_NEAR (slider.getValue(), 0.65, 1e-4);
+
+    slider.mouseUp (MouseEvent (MouseEvent::noButtons, KeyModifiers(), start));
+}
+
+TEST_F (SliderLinearTest, TheFineDragModifierSlowsTheWheelByTheFineDragScale)
+{
+    const auto middle = slider.getLocalBounds().getCenter();
+    const MouseWheelData turn (0.0f, 10.0f);
+
+    slider.mouseWheel (MouseEvent (MouseEvent::noButtons, KeyModifiers(), middle), turn);
+    EXPECT_NEAR (slider.getValue(), 0.1, 1e-6);
+
+    slider.mouseWheel (MouseEvent (MouseEvent::noButtons, KeyModifiers (KeyModifiers::shiftMask), middle), turn);
+    EXPECT_NEAR (slider.getValue(), 0.11, 1e-6);
+
+    slider.setFineDragScale (0.5);
+    slider.mouseWheel (MouseEvent (MouseEvent::noButtons, KeyModifiers (KeyModifiers::shiftMask), middle), turn);
+    EXPECT_NEAR (slider.getValue(), 0.16, 1e-6);
+}
+
+TEST_F (SliderLinearTest, AClickWithTheResetModifierBringsTheDefaultValueBackAndStartsNoDrag)
+{
+    slider.setDefaultValue (0.25);
+    slider.setValue (0.75);
+
+    int dragsStarted = 0;
+    slider.onDragStart = [&dragsStarted] (const MouseEvent&) { ++dragsStarted; };
+
+    pointer.moveTo (slider.getThumbBounds().getCenter());
+    pointer.press (MouseEvent::leftButton, KeyModifiers::altMask);
+    EXPECT_DOUBLE_EQ (slider.getValue(), 0.25);
+    EXPECT_FALSE (slider.isCurrentlyBeingDragged());
+    EXPECT_EQ (dragsStarted, 0);
+
+    pointer.moveTo ({ 150.0f, 20.0f });
+    EXPECT_DOUBLE_EQ (slider.getValue(), 0.25);
+    pointer.release();
+
+    // With another key, or none, the click with the first one is a press as any other
+    slider.setResetModifiers (KeyModifiers::commandMask);
+    slider.setValue (0.75);
+
+    pointer.moveTo (slider.getThumbBounds().getCenter());
+    pointer.press (MouseEvent::leftButton, KeyModifiers::altMask);
+    EXPECT_DOUBLE_EQ (slider.getValue(), 0.75);
+    EXPECT_TRUE (slider.isCurrentlyBeingDragged());
+    pointer.release();
+
+    pointer.press (MouseEvent::leftButton, KeyModifiers::commandMask);
+    EXPECT_DOUBLE_EQ (slider.getValue(), 0.25);
+    pointer.release();
+}
+
+TEST_F (SliderLinearTest, ADoubleClickAListenerTakesDoesNotBringTheDefaultValueBack)
+{
+    struct TakingListener : ComponentListener
+    {
+        bool componentDoubleClicked (Component&, const MouseEvent&) override { return true; }
+    };
+
+    slider.setDefaultValue (0.25);
+    slider.setValue (0.75);
+
+    // A press on the thumb leaves the value where it is
+    const auto thumb = slider.getThumbBounds().getCenter();
+
+    TakingListener taking;
+    slider.addComponentListener (&taking);
+    pointer.doubleClick (thumb);
+    EXPECT_DOUBLE_EQ (slider.getValue(), 0.75);
+
+    slider.removeComponentListener (&taking);
+    pointer.doubleClick (thumb);
+    EXPECT_DOUBLE_EQ (slider.getValue(), 0.25);
+}
+
 TEST_F (SliderLinearTest, TheThumbIsCenteredWhereTheValueIsAlongTheTrack)
 {
     slider.setValue (0.25, dontSendNotification);
 
-    const auto track = slider.getSliderBounds();
+    const auto track = slider.getTrackBounds();
     const auto thumb = slider.getThumbBounds();
 
     EXPECT_FLOAT_EQ (thumb.getCenterX(), track.getX() + 0.25f * track.getWidth());
@@ -879,14 +1047,14 @@ TEST_F (SliderLinearTest, TheThumbIsCenteredWhereTheValueIsAlongTheTrack)
     // It is as large as it is styled
     slider.setProperty (Identifier ("thumbSize"), 24.0);
     EXPECT_FLOAT_EQ (slider.getThumbBounds().getWidth(), 24.0f);
-    EXPECT_FLOAT_EQ (slider.getThumbBounds().getCenterX(), slider.getSliderBounds().getX() + 0.25f * slider.getSliderBounds().getWidth());
+    EXPECT_FLOAT_EQ (slider.getThumbBounds().getCenterX(), slider.getTrackBounds().getX() + 0.25f * slider.getTrackBounds().getWidth());
 
     // On a vertical slider it rises with the value
     Slider vertical (Slider::LinearVertical);
     vertical.setBounds (0.0f, 0.0f, 40.0f, 200.0f);
     vertical.setValue (0.25, dontSendNotification);
-    EXPECT_FLOAT_EQ (vertical.getThumbBounds().getCenterX(), vertical.getSliderBounds().getCenterX());
-    EXPECT_FLOAT_EQ (vertical.getThumbBounds().getCenterY(), vertical.getSliderBounds().getBottom() - 0.25f * vertical.getSliderBounds().getHeight());
+    EXPECT_FLOAT_EQ (vertical.getThumbBounds().getCenterX(), vertical.getTrackBounds().getCenterX());
+    EXPECT_FLOAT_EQ (vertical.getThumbBounds().getCenterY(), vertical.getTrackBounds().getBottom() - 0.25f * vertical.getTrackBounds().getHeight());
 
     // A slider that is not linear has no such thumb
     Slider dial (Slider::Rotary);
@@ -914,7 +1082,7 @@ TEST_F (SliderLinearTest, APressOnTheTrackBringsTheThumbUnderThePointer)
 TEST_F (SliderLinearTest, TheThumbIsGrabbedByWhatOfItIsOutsideTheTrack)
 {
     // At the lowest value the thumb is around the start of the track: from 2 to 18, the track starting at 10
-    ASSERT_LT (slider.getThumbBounds().getX(), slider.getSliderBounds().getX());
+    ASSERT_LT (slider.getThumbBounds().getX(), slider.getTrackBounds().getX());
 
     pointer.moveTo ({ 5.0f, 20.0f });
     EXPECT_EQ (slider.getHoveredThumb(), Slider::Thumb::value);
@@ -1010,25 +1178,25 @@ TEST_F (SliderTest, TheTrackLeavesRoomForTheThumbAsLargeAsItIsStyled)
     horizontal.setBounds (0, 0, 200, 40);
 
     // The thumb is drawn around both ends of the track: with the size it has by default the track is where it was
-    EXPECT_FLOAT_EQ (horizontal.getSliderBounds().getX(), 10.0f);
-    EXPECT_FLOAT_EQ (horizontal.getSliderBounds().getRight(), 190.0f);
+    EXPECT_FLOAT_EQ (horizontal.getTrackBounds().getX(), 10.0f);
+    EXPECT_FLOAT_EQ (horizontal.getTrackBounds().getRight(), 190.0f);
 
     // A larger one takes the track further in, so it stays inside the slider at both ends
     horizontal.setProperty (Identifier ("thumbSize"), 30.0);
-    EXPECT_FLOAT_EQ (horizontal.getSliderBounds().getX(), 15.0f);
-    EXPECT_FLOAT_EQ (horizontal.getSliderBounds().getRight(), 185.0f);
+    EXPECT_FLOAT_EQ (horizontal.getTrackBounds().getX(), 15.0f);
+    EXPECT_FLOAT_EQ (horizontal.getTrackBounds().getRight(), 185.0f);
 
     Slider vertical (Slider::LinearVertical);
     vertical.setBounds (0, 0, 40, 200);
     vertical.setProperty (Identifier ("thumbSize"), 30.0);
-    EXPECT_FLOAT_EQ (vertical.getSliderBounds().getY(), 15.0f);
-    EXPECT_FLOAT_EQ (vertical.getSliderBounds().getBottom(), 185.0f);
+    EXPECT_FLOAT_EQ (vertical.getTrackBounds().getY(), 15.0f);
+    EXPECT_FLOAT_EQ (vertical.getTrackBounds().getBottom(), 185.0f);
 
     // A slider too low for the thumb it is drawn with keeps it inside its ends too
     Slider low (Slider::LinearHorizontal);
     low.setBounds (0, 0, 200, 10);
-    EXPECT_FLOAT_EQ (low.getSliderBounds().getX(), 8.0f);
-    EXPECT_FLOAT_EQ (low.getSliderBounds().getRight(), 192.0f);
+    EXPECT_FLOAT_EQ (low.getTrackBounds().getX(), 8.0f);
+    EXPECT_FLOAT_EQ (low.getTrackBounds().getRight(), 192.0f);
 }
 
 //==============================================================================
@@ -1135,4 +1303,44 @@ TEST_F (SliderGpuTest, TheThumbTakesItsPressedColorWhileItIsDragged)
 
     slider.mouseUp (MouseEvent (MouseEvent::noButtons, KeyModifiers(), thumb));
     EXPECT_EQ (thumbColor(), idle);
+}
+
+TEST_F (SliderGpuTest, TheValueOfAStepperIsPaintedInItsTextBounds)
+{
+    Slider stepper (Slider::IncDecButtons);
+    stepper.setBounds (0.0f, 0.0f, 120.0f, 32.0f);
+    stepper.setRange (0.0, 10.0, 1.0);
+
+    const auto paintedWith = [&stepper] (double value)
+    {
+        stepper.setValue (value, dontSendNotification);
+        return stepper.snapshotToImage (*gpuContext);
+    };
+
+    const auto one = paintedWith (1.0);
+    const auto eight = paintedWith (8.0);
+    ASSERT_TRUE (one.isValid());
+    ASSERT_TRUE (eight.isValid());
+
+    // Another value is another text: the pixels it changes are where the stepper tells its text is, and nowhere else
+    const auto textBounds = stepper.getTextBounds();
+    int numChangedInside = 0;
+    int numChangedOutside = 0;
+
+    for (int y = 0; y < one.getHeight(); ++y)
+    {
+        for (int x = 0; x < one.getWidth(); ++x)
+        {
+            if (one.getPixelColor (x, y) == eight.getPixelColor (x, y))
+                continue;
+
+            if (textBounds.contains (static_cast<float> (x) + 0.5f, static_cast<float> (y) + 0.5f))
+                ++numChangedInside;
+            else
+                ++numChangedOutside;
+        }
+    }
+
+    EXPECT_GT (numChangedInside, 0);
+    EXPECT_EQ (numChangedOutside, 0);
 }

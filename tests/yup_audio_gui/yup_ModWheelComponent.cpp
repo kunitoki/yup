@@ -86,6 +86,17 @@ TEST_F (ModWheelComponentTest, SetValueClampsToRange)
     EXPECT_DOUBLE_EQ (0.0, wheel->getValue());
 }
 
+TEST_F (ModWheelComponentTest, TheNormalizedValueIsTheValueAlongItsRange)
+{
+    EXPECT_DOUBLE_EQ (0.0, wheel->getNormalizedValue());
+
+    wheel->setValue (0.25);
+    EXPECT_DOUBLE_EQ (0.25, wheel->getNormalizedValue());
+
+    wheel->setValue (1.0);
+    EXPECT_DOUBLE_EQ (1.0, wheel->getNormalizedValue());
+}
+
 TEST_F (ModWheelComponentTest, SetValueWithNotificationCallback)
 {
     int callCount = 0;

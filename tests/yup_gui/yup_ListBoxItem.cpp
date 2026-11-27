@@ -266,7 +266,7 @@ TEST_F (ListBoxItemTests, TextBoundsAreValid)
     item->setText ("Test");
     item->resized();
 
-    auto textBounds = item->getTextBoundsForRendering();
+    auto textBounds = item->getTextBounds();
     EXPECT_FALSE (textBounds.isEmpty());
 }
 
@@ -277,7 +277,7 @@ TEST_F (ListBoxItemTests, IconBoundsAreValidWithIcon)
     item->resized();
 
     // A square image keeps a square icon area.
-    auto iconBounds = item->getIconBoundsForRendering();
+    auto iconBounds = item->getIconBounds();
     EXPECT_FALSE (iconBounds.isEmpty());
     EXPECT_FLOAT_EQ (iconBounds.getWidth(), iconBounds.getHeight());
 }
@@ -290,11 +290,11 @@ TEST_F (ListBoxItemTests, LayoutChangesWithIconPosition)
 
     item->setIconPosition (ListBoxItem::IconPosition::left);
     item->resized();
-    auto boundsLeft = item->getTextBoundsForRendering();
+    auto boundsLeft = item->getTextBounds();
 
     item->setIconPosition (ListBoxItem::IconPosition::right);
     item->resized();
-    auto boundsRight = item->getTextBoundsForRendering();
+    auto boundsRight = item->getTextBounds();
 
     // Text bounds should differ based on icon position
     EXPECT_TRUE (boundsLeft.getX() != boundsRight.getX() || boundsLeft.getY() != boundsRight.getY());
@@ -308,11 +308,11 @@ TEST_F (ListBoxItemTests, LayoutChangesWithVerticalIconPosition)
 
     item->setIconPosition (ListBoxItem::IconPosition::above);
     item->resized();
-    auto boundsAbove = item->getTextBoundsForRendering();
+    auto boundsAbove = item->getTextBounds();
 
     item->setIconPosition (ListBoxItem::IconPosition::below);
     item->resized();
-    auto boundsBelow = item->getTextBoundsForRendering();
+    auto boundsBelow = item->getTextBounds();
 
     // Text bounds should differ based on icon position
     EXPECT_NE (boundsAbove.getY(), boundsBelow.getY());
@@ -383,7 +383,7 @@ TEST_F (ListBoxItemTests, TextAndIconTogether)
 
     EXPECT_EQ ("Item with Icon", item->getText());
     EXPECT_TRUE (item->getIconImage().isValid());
-    EXPECT_FALSE (item->getIconBoundsForRendering().isEmpty());
+    EXPECT_FALSE (item->getIconBounds().isEmpty());
 }
 
 TEST_F (ListBoxItemTests, AllIconPositions)

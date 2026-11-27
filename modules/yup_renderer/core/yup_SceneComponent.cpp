@@ -37,7 +37,52 @@ struct SceneComponentIds
     static inline const Identifier tier { "tier" };
     static inline const Identifier samples { "samples" };
     static inline const Identifier bloom { "bloom" };
+    static inline const Identifier environment { "environment" };
+    static inline const Identifier environmentIntensity { "environmentIntensity" };
+    static inline const Identifier environmentVisible { "environmentVisible" };
+    static inline const Identifier loading { "loading" };
 };
+
+/* Whether a glTF file names a WebP image, by its extension, its type or its bytes. libwebp, as it is built here, fills the
+   tables its decoders share with no lock: such a model is parsed on the message thread, as every image is decoded today. */
+bool isSceneModelNamingWebp (const MemoryBlock& bytes)
+{
+    const std::string_view text (static_cast<const char*> (bytes.getData()), bytes.getSize());
+
+    return text.find ("webp") != std::string_view::npos || text.find ("WEBP") != std::string_view::npos;
+}
+
+/* Whether an image is one libwebp or libtiff decodes. The PixarLog codec of libtiff writes to statics too: both are
+   decoded on the message thread. */
+bool isSceneImageSharingItsDecoder (const MemoryBlock& bytes)
+{
+    ImageFormatManager formats;
+    formats.registerDefaultFormats (ImageFormatType::webp | ImageFormatType::tiff);
+
+    return formats.createReaderFor (new MemoryInputStream (bytes, false)) != nullptr;
+}
+
+/* The light a panorama surrounds a scene with: its columns go around the vertical axis and its rows from the zenith to the
+   nadir. Its colors, sRGB encoded as those of the interface are, become linear light. */
+EnvironmentMap::Ptr makeSceneEnvironment (const Image& panorama)
+{
+    const auto width = panorama.getWidth();
+    const auto height = panorama.getHeight();
+
+    const auto radiance = [&panorama, width, height] (const Vector3<float>& direction)
+    {
+        const auto at = EnvironmentMap::getTextureCoordinates (direction);
+        const auto color = panorama.getPixelColor (jlimit (0, width - 1, static_cast<int> (at.getX() * static_cast<float> (width))),
+                                                   jlimit (0, height - 1, static_cast<int> (at.getY() * static_cast<float> (height))));
+
+        return Vector3<float> (lightingSrgbToLinear (color.getRedFloat()),
+                               lightingSrgbToLinear (color.getGreenFloat()),
+                               lightingSrgbToLinear (color.getBlueFloat()));
+    };
+
+    // Sampled no finer than the image is, nor than an environment made by code
+    return new EnvironmentMap (radiance, jlimit (8, EnvironmentMap::defaultWidth, nextPowerOfTwo (width)));
+}
 
 /* The first active camera below a component, depth first, whose entity is in a scene and is not the one going. */
 SceneCameraComponent* findActiveSceneCamera (const Component& parent, const Scene& scene, const Entity& leaving)
@@ -177,25 +222,12 @@ struct SceneComponent::DocumentLink final : ComponentDocument::Listener
 
     void documentLoaded (ComponentDocument&) override
     {
-        // The values of the load are in: the meshes they describe are built, the nodes find the one that shows the components
-        // inside them, and what is wrong is told with the rest. Who hears about a problem may destroy the scene
         const BailOutChecker checker (&owner);
+        owner.contentLoaded();
 
-        owner.lastPick.reset();
-        owner.releaseLeavingNodes();
-
+        // Once the materials have looked for their shader in the stylesheet of the load
         if (! checker.shouldBailOut())
-            owner.updateMeshes();
-
-        if (! checker.shouldBailOut())
-            owner.updateSurfaces();
-
-        // The frames resolve the shaders of the materials: done here too, for what prevents one to be told with the load
-        if (! checker.shouldBailOut())
-            owner.updateAnimatedComponents (0.0);
-
-        if (! checker.shouldBailOut())
-            owner.sendProblems();
+            owner.forgetUnusedAssets();
     }
 
     void documentAssetChanged (ComponentDocument&, const String& path) override
@@ -204,6 +236,83 @@ struct SceneComponent::DocumentLink final : ComponentDocument::Listener
     }
 
     SceneComponent& owner;
+};
+
+//==============================================================================
+/* The thread of a scene: it runs what is slow of the loads it is given, one after the other, and has the scene keep what
+   each one made. */
+struct SceneComponent::Loader final
+    : Thread
+    , AsyncUpdater
+{
+    /* What is slow of a load, which returns what keeps its result: the message thread calls that. */
+    using Task = std::packaged_task<std::function<void()>()>;
+
+    /* A file being loaded. */
+    struct Load
+    {
+        String path;                             // The one its users are told
+        std::future<std::function<void()>> kept; // Ready once the thread has run its task
+    };
+
+    explicit Loader (SceneComponent& ownerToTell)
+        : Thread ("Scene3D loader")
+        , owner (ownerToTell)
+    {
+    }
+
+    ~Loader() override
+    {
+        // The task being run is waited for, the ones that are not started are dropped
+        stopThread (-1);
+    }
+
+    void add (Task task)
+    {
+        {
+            const ScopedLock sl (lock);
+            tasks.push (std::move (task));
+        }
+
+        notify();
+    }
+
+    void run() override
+    {
+        while (! threadShouldExit())
+        {
+            Task task;
+
+            {
+                const ScopedLock sl (lock);
+
+                if (! tasks.empty())
+                {
+                    task = std::move (tasks.front());
+                    tasks.pop();
+                }
+            }
+
+            if (! task.valid())
+            {
+                wait (-1);
+                continue;
+            }
+
+            task();
+            triggerAsyncUpdate();
+        }
+    }
+
+    void handleAsyncUpdate() override
+    {
+        owner.keepLoaded();
+    }
+
+    SceneComponent& owner;
+    CriticalSection lock;
+    std::queue<Task> tasks;  // Under the lock: given by the message thread, taken by this one
+    std::vector<Load> loads; // Of the message thread alone, in the order they were asked for
 };
 
 //==============================================================================
@@ -272,7 +381,9 @@ void SceneComponent::setScene (Scene::Ptr newScene)
                                                             { &SceneComponentIds::ambient, settings.ambientColor != shown.ambientColor },
                                                             { &SceneComponentIds::exposure, settings.exposure != shown.exposure },
                                                             { &SceneComponentIds::toneMapping, settings.toneMapping != shown.toneMapping },
-                                                            { &SceneComponentIds::defaultLight, settings.useDefaultLight != shown.useDefaultLight } };
+                                                            { &SceneComponentIds::defaultLight, settings.useDefaultLight != shown.useDefaultLight },
+                                                            { &SceneComponentIds::environmentIntensity, settings.environmentIntensity != shown.environmentIntensity },
+                                                            { &SceneComponentIds::environmentVisible, settings.environmentVisible != shown.environmentVisible } };
 
     for (const auto& [property, isChanged] : features)
     {
@@ -316,6 +427,10 @@ void SceneComponent::sceneChanged()
 
     updateActiveCamera();
     SceneMaterialComponent::updateHost (*this);
+
+    // The image the component was given lights the scene it shows
+    if (! checker.shouldBailOut() && environment.isNotEmpty())
+        updateEnvironment();
 }
 
 void SceneComponent::watchScene()
@@ -507,52 +622,105 @@ ComponentDocument* SceneComponent::findDocument()
 
 //==============================================================================
 
-ResultValue<GltfModel> SceneComponent::loadModel (const String& path)
+template <class Key, class Value, class Load>
+std::optional<ResultValue<Value>> SceneComponent::loadAsset (std::map<Key, std::optional<ResultValue<Value>>>& kept, const Key& key, const String& path, bool canUseWorker, Load load)
+{
+    if (canUseWorker && loader == nullptr)
+        loader = std::make_unique<Loader> (*this);
+
+    // Where no thread can be started, as in a page that is not cross-origin isolated, the file is loaded here
+    if (! canUseWorker || ! (loader->isThreadRunning() || loader->startThread()))
+        return kept.insert_or_assign (key, load()).first->second;
+
+    kept.insert_or_assign (key, std::nullopt);
+
+    Loader::Task task ([&kept, key, load = std::move (load)]
+    {
+        return std::function<void()> ([&kept, key, result = load()]() mutable
+        {
+            kept.insert_or_assign (key, std::move (result));
+        });
+    });
+
+    loader->loads.push_back (Loader::Load { path, task.get_future() });
+    loader->add (std::move (task));
+
+    // The `loading` state is told by the message loop: who asked for the file is in the middle of using it
+    loader->triggerAsyncUpdate();
+
+    return std::nullopt;
+}
+
+template <class Key, class Value, class Load>
+void SceneComponent::reloadAsset (std::map<Key, std::optional<ResultValue<Value>>>& kept, const Key& key, Load load)
+{
+    auto previous = kept.extract (key);
+
+    // Read again at once, and shown as it was until the thread has loaded it: nothing goes missing meanwhile
+    if (! previous.empty() && ! load().has_value())
+        kept.insert_or_assign (key, std::move (previous.mapped()));
+}
+
+template <class Key, class Value, class Make>
+std::optional<ResultValue<Value>> SceneComponent::loadImage (std::map<Key, std::optional<ResultValue<Value>>>& kept, const Key& key, const String& path, Make make)
+{
+    if (const auto found = kept.find (key); found != kept.end())
+        return found->second;
+
+    // Followed before reading, to be told when the file changes
+    findDocument();
+    auto bytes = ComponentDocument::readAssetFor (this, path);
+
+    if (! bytes.has_value())
+        return kept.insert_or_assign (key, ResultValue<Value>::fail ("the file '" + path + "' can't be read")).first->second;
+
+    const auto canUseWorker = ! isSceneImageSharingItsDecoder (*bytes);
+
+    return loadAsset (kept, key, path, canUseWorker, [bytes = std::move (*bytes), make = std::move (make)]() -> ResultValue<Value>
+    {
+        auto image = Image::loadFromData (bytes.asBytes());
+
+        if (image.failed())
+            return makeResultValueFail (image.getErrorMessage());
+
+        return makeResultValueOk (make (std::move (image.getReference())));
+    });
+}
+
+std::optional<ResultValue<GltfModel>> SceneComponent::loadModel (const String& path)
 {
     if (const auto found = models.find (path); found != models.end())
         return found->second;
 
     // Followed before reading, to be told when the file changes
     findDocument();
-    const auto bytes = ComponentDocument::readAssetFor (this, path);
+    auto bytes = ComponentDocument::readAssetFor (this, path);
+
+    if (! bytes.has_value())
+        return models.insert_or_assign (path, ResultValue<GltfModel>::fail ("the file '" + path + "' can't be read")).first->second;
 
     // What a .gltf keeps in other files is read next to it, when the document has files
     const auto file = ComponentDocument::getAssetFileFor (this, path);
+    const auto folder = file != File() ? file.getParentDirectory() : File();
+    const auto canUseWorker = ! isSceneModelNamingWebp (*bytes);
 
-    auto model = bytes.has_value() ? GltfModel::loadFromData (bytes->asBytes(), file != File() ? file.getParentDirectory() : File())
-                                   : ResultValue<GltfModel>::fail ("the file '" + path + "' can't be read");
-
-    return models.emplace (path, std::move (model)).first->second;
+    return loadAsset (models, path, path, canUseWorker, [bytes = std::move (*bytes), folder]
+    {
+        return GltfModel::loadFromData (bytes.asBytes(), folder);
+    });
 }
 
-ResultValue<Texture::Ptr> SceneComponent::loadTexture (const String& path, bool isSrgb)
+std::optional<ResultValue<Texture::Ptr>> SceneComponent::loadTexture (const String& path, bool isSrgb)
 {
-    const auto key = std::make_pair (path, isSrgb);
-
-    if (const auto found = textures.find (key); found != textures.end())
-        return found->second;
-
-    findDocument();
-
-    const auto makeTexture = [&]() -> ResultValue<Texture::Ptr>
+    return loadImage (textures, std::make_pair (path, isSrgb), path, [isSrgb] (Image image)
     {
-        const auto bytes = ComponentDocument::readAssetFor (this, path);
-        if (! bytes.has_value())
-            return makeResultValueFail ("the file '" + path + "' can't be read");
-
-        auto image = Image::loadFromData (bytes->asBytes());
-        if (image.failed())
-            return makeResultValueFail (image.getErrorMessage());
-
         // As the textures of a glTF model are sampled when it says nothing
         GpuSamplerDesc sampler (GpuFilter::linear, GpuWrapMode::repeat);
         sampler.mipmapFilter = GpuFilter::linear;
         sampler.maxAnisotropy = 16;
 
-        return makeResultValueOk (Texture::Ptr (new Texture (std::move (image.getReference()), sampler, isSrgb)));
-    };
-
-    return textures.emplace (key, makeTexture()).first->second;
+        return Texture::Ptr (new Texture (std::move (image), sampler, isSrgb));
+    });
 }
 
 ResultValue<MaterialShader::Ptr> SceneComponent::loadMaterialShader (const String& path)
@@ -598,6 +766,182 @@ ResultValue<MaterialShader::Ptr> SceneComponent::loadMaterialShader (const Strin
     return materialShaders.emplace (path, makeShader()).first->second;
 }
 
+void SceneComponent::setEnvironment (const String& newPath)
+{
+    if (environment == newPath)
+        return;
+
+    environment = newPath;
+
+    // What prevents reading the image is reported, and can reach a listener that destroys the scene
+    const BailOutChecker checker (this);
+    updateEnvironment();
+
+    if (! checker.shouldBailOut())
+        featureChanged (SceneComponentIds::environment);
+}
+
+void SceneComponent::updateEnvironment()
+{
+    clearProblems (*this, SceneComponentIds::environment);
+
+    EnvironmentMap::Ptr map;
+    String problem;
+
+    if (environment.isNotEmpty())
+    {
+        const auto loaded = loadImage (environments, environment, environment, [] (Image panorama)
+        {
+            return makeSceneEnvironment (panorama);
+        });
+
+        // Being loaded: the scene keeps the environment it has, and is told when the image is there
+        if (! loaded.has_value())
+            return;
+
+        if (loaded->wasOk())
+            map = loaded->getReference();
+        else
+            problem = loaded->getErrorMessage();
+    }
+
+    // A scene that never had an environment is given no node to have none
+    if (map != nullptr)
+        getOrCreateScene().getRoot().getOrAttach<EnvironmentNode>().map = map;
+    else if (auto* node = scene != nullptr ? scene->getRoot().get<EnvironmentNode>() : nullptr)
+        node->map = nullptr;
+
+    repaintScene();
+
+    // Told last: who hears about it may destroy the scene
+    if (problem.isNotEmpty())
+        reportProblem (*this, SceneComponentIds::environment, problem);
+}
+
+//==============================================================================
+
+bool SceneComponent::isLoading() const noexcept
+{
+    return loader != nullptr && ! loader->loads.empty();
+}
+
+void SceneComponent::finishLoading()
+{
+    if (! isLoading())
+        return;
+
+    // The users of a file that is kept may ask for others, and who hears about what it has wrong may destroy the scene
+    const BailOutChecker checker (this);
+
+    while (! checker.shouldBailOut() && isLoading())
+    {
+        loader->loads.front().kept.wait();
+        keepLoaded();
+    }
+
+    if (! checker.shouldBailOut())
+        contentLoaded();
+}
+
+void SceneComponent::keepLoaded()
+{
+    // Who hears about the state, or about what a file has wrong, may destroy the scene
+    const BailOutChecker checker (this);
+
+    // Told before the files that are there are kept: what read the state since has read it as it is told now
+    tellLoading();
+
+    if (checker.shouldBailOut())
+        return;
+
+    StringArray paths;
+
+    for (auto load = loader->loads.begin(); load != loader->loads.end();)
+    {
+        if (load->kept.wait_for (std::chrono::seconds (0)) != std::future_status::ready)
+        {
+            ++load;
+            continue;
+        }
+
+        load->kept.get()();
+        paths.addIfNotAlreadyThere (load->path);
+        load = loader->loads.erase (load);
+    }
+
+    // As when a file changes: a node on its way to another parent comes back with entities made again, from the
+    // files that are there by then
+    if (! paths.isEmpty())
+        releaseLeavingNodes();
+
+    for (const auto& path : paths)
+    {
+        if (checker.shouldBailOut())
+            return;
+
+        tellAssetUsers (path);
+    }
+
+    if (! checker.shouldBailOut())
+        tellLoading();
+}
+
+void SceneComponent::tellLoading()
+{
+    // Told last: who hears about it may destroy the scene
+    if (std::exchange (isLoadingTold, isLoading()) != isLoading())
+        notifyPropertyChanged (SceneComponentIds::loading);
+}
+
+void SceneComponent::contentLoaded()
+{
+    // The values of a load are in, or the files it named: the meshes they describe are built, the nodes find the one
+    // that shows the components inside them, and what is wrong is told with the rest. Who hears about a problem may
+    // destroy the scene
+    const BailOutChecker checker (this);
+
+    lastPick.reset();
+    releaseLeavingNodes();
+
+    if (! checker.shouldBailOut())
+        updateMeshes();
+
+    if (! checker.shouldBailOut())
+        updateSurfaces();
+
+    // The frames resolve the shaders of the materials: done here too, for what prevents one to be told with the load
+    if (! checker.shouldBailOut())
+        updateAnimatedComponents (0.0);
+
+    if (! checker.shouldBailOut())
+        sendProblems();
+}
+
+void SceneComponent::forgetUnusedAssets()
+{
+    std::vector<WeakReference<Component>> users;
+    findSceneAssetUsers (*this, users);
+
+    const auto isUnused = [this, &users] (const String& path)
+    {
+        return path != environment && std::none_of (users.begin(), users.end(), [&path] (const WeakReference<Component>& user)
+        {
+            if (const auto* model = dynamic_cast<const SceneModelComponent*> (user.get()))
+                return model->getSource() == path;
+
+            const auto* material = dynamic_cast<const SceneMaterialComponent*> (user.get());
+            return material != nullptr && material->isUsingAsset (path);
+        });
+    };
+
+    // A file being loaded is left to its thread: it is forgotten by the next load, once it is there
+    std::erase_if (models, [&isUnused] (const auto& kept) { return kept.second.has_value() && isUnused (kept.first); });
+    std::erase_if (textures, [&isUnused] (const auto& kept) { return kept.second.has_value() && isUnused (kept.first.first); });
+    std::erase_if (environments, [&isUnused] (const auto& kept) { return kept.second.has_value() && isUnused (kept.first); });
+    std::erase_if (materialShaders, [&isUnused] (const auto& kept) { return isUnused (kept.first); });
+    std::erase_if (compiledMaterials, [&isUnused] (const auto& compiled) { return isUnused (compiled.first); });
+}
+
 void SceneComponent::reportProblem (const DataTree& element, const Identifier& property, const String& message)
 {
     // Where the problems of the components go, see sendProblem(): the document finds where the element is written
@@ -615,10 +959,36 @@ void SceneComponent::assetChanged (const String& path)
     if (checker.shouldBailOut())
         return;
 
-    // Forgotten before anything asks for it again: the first to ask reads the file, the others share what it read
-    models.erase (path);
-    textures.erase (std::make_pair (path, true));
-    textures.erase (std::make_pair (path, false));
+    // Told before a file being loaded is let go of: what read the state since has read it as it is told now
+    tellLoading();
+
+    if (checker.shouldBailOut())
+        return;
+
+    const auto isOfFile = [&path] (const Loader::Load& load)
+    {
+        return load.path == path;
+    };
+
+    // What the thread makes of the file as it was is dropped when it comes
+    if (loader != nullptr)
+        std::erase_if (loader->loads, isOfFile);
+
+    reloadAsset (models, path, [&]
+    {
+        return loadModel (path);
+    });
+
+    for (const auto isSrgb : { true, false })
+    {
+        reloadAsset (textures, std::make_pair (path, isSrgb), [&]
+        {
+            return loadTexture (path, isSrgb);
+        });
+    }
+
+    // Forgotten before anything asks for it again: the scene keeps the environment it has until it has asked, and got it
+    environments.erase (path);
 
     // A material shader is kept by the path of its source, whichever of its files changed: that one, or one of its two variants
     for (const auto* suffix : { "", ".raster.ysl", ".full.ysl" })
@@ -632,10 +1002,22 @@ void SceneComponent::assetChanged (const String& path)
         compiledMaterials.erase (source);
     }
 
+    // The users of a file its thread has are told once it is there, as they are when it is first loaded
+    if (loader == nullptr || std::none_of (loader->loads.begin(), loader->loads.end(), isOfFile))
+        tellAssetUsers (path);
+
+    if (! checker.shouldBailOut())
+        tellLoading();
+}
+
+void SceneComponent::tellAssetUsers (const String& path)
+{
     // Found before any of them is told: one telling what is wrong with its file may be heard by something that
     // destroys the others, or takes them away
     std::vector<WeakReference<Component>> users;
     findSceneAssetUsers (*this, users);
+
+    const BailOutChecker checker (this);
 
     for (const auto& user : users)
     {
@@ -644,6 +1026,10 @@ void SceneComponent::assetChanged (const String& path)
         else if (auto* model = dynamic_cast<SceneModelComponent*> (user.get()))
             model->assetChanged (path);
     }
+
+    // The scene reads the image of its environment itself
+    if (! checker.shouldBailOut() && path == environment)
+        updateEnvironment();
 }
 
 GpuPlatform SceneComponent::findGraphicsApi()
@@ -1038,6 +1424,34 @@ const ComponentTypeInfo& SceneComponent::getClassTypeInfo()
                                      SceneRenderer().getSampleCount(),
                                      "The MSAA samples per pixel of the raster tier, rounded down to a power of two the device supports. 1 turns multisampling off.")
                                  .property (SceneComponentIds::bloom, [] (const SceneComponent& view) { return view.renderer.getRenderSettings().bloom; }, [] (SceneComponent& view, bool bloom) { view.setRenderSetting (&RenderSettings::bloom, bloom, SceneComponentIds::bloom); }, RenderSettings().bloom, "Whether the bright highlights glow, where the device can draw it.")
+                                 .property (SceneComponentIds::environment, &SceneComponent::getEnvironment, &SceneComponent::setEnvironment, String(), "The path of a panorama lighting the scene, twice as wide as it is high: the surfaces reflect it and receive its diffuse light.")
+                                 .styleableProperty (
+                                     SceneComponentIds::environmentIntensity,
+                                     [] (const SceneComponent& view) { return view.getSettings().environmentIntensity; },
+                                     [] (SceneComponent& view, float intensity)
+                                     {
+                                         if (view.getSettings().environmentIntensity == jmax (0.0f, intensity))
+                                             return;
+
+                                         view.getOrCreateScene().getRoot().getOrAttach<EnvironmentNode>().intensity = jmax (0.0f, intensity);
+                                         view.featureChanged (SceneComponentIds::environmentIntensity);
+                                     },
+                                     SceneSettings().environmentIntensity,
+                                     "The multiplier applied to the light of the environment.")
+                                 .styleableProperty (
+                                     SceneComponentIds::environmentVisible,
+                                     [] (const SceneComponent& view) { return view.getSettings().environmentVisible; },
+                                     [] (SceneComponent& view, bool isVisible)
+                                     {
+                                         if (view.getSettings().environmentVisible == isVisible)
+                                             return;
+
+                                         view.getOrCreateScene().getRoot().getOrAttach<EnvironmentNode>().visible = isVisible;
+                                         view.featureChanged (SceneComponentIds::environmentVisible);
+                                     },
+                                     SceneSettings().environmentVisible,
+                                     "Whether the environment is drawn behind the scene, instead of the background color.")
+                                 .state (SceneComponentIds::loading, &SceneComponent::isLoading, false, "Whether a file of the scene is being loaded.")
                                  .build();
 
     return info;

@@ -147,7 +147,7 @@
     },
     "functions": {
       "patterns": [
-        { "name": "support.function.builtin.yui", "match": "\\b(?:sin|cos|tan|asin|acos|atan2|atan|sqrt|pow|exp|log2|log10|log|abs|floor|ceil|round|trunc|sign|fmod|min|max|clamp|lerp|mix|map|smoothstep|hypot|deg|rad|len|format|rgba|rgb|hsla|hsl|polar|linearGradient|radialGradient|angularGradient|action|point|size|rect|line|path|dash|transform|color|font|cubicBezier|hue-rotate|drop-shadow)\\b(?=\\s*\\()" },
+        { "name": "support.function.builtin.yui", "match": "\\b(?:sin|cos|tan|asin|acos|atan2|atan|sqrt|pow|exp|log2|log10|log|abs|floor|ceil|round|trunc|sign|fmod|min|max|clamp|lerp|mix|map|smoothstep|hypot|deg|rad|len|format|rgba|rgb|hsla|hsl|polar|linearGradient|radialGradient|angularGradient|action|set|edit|point|size|rect|line|path|dash|transform|color|font|cubicBezier|hue-rotate|drop-shadow)\\b(?=\\s*\\()" },
         { "name": "entity.name.function.yui", "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=\\s*\\()" }
       ]
     },

@@ -40,10 +40,12 @@ struct TreeViewRowIds
     static inline const Identifier textBounds { "textBounds" };
     static inline const Identifier indentSize { "indentSize" };
     static inline const Identifier indentGuidesVisible { "indentGuidesVisible" };
-    static inline const Identifier icon { "icon" };
 };
 
 } // namespace
+
+//==============================================================================
+const Identifier TreeViewRow::Style::iconPartId { "icon" };
 
 //==============================================================================
 const ComponentTypeInfo& TreeViewRow::getClassTypeInfo()
@@ -62,7 +64,7 @@ const ComponentTypeInfo& TreeViewRow::getClassTypeInfo()
                                  .readOnly (TreeViewRowIds::textBounds, &TreeViewRow::getTextBounds, {}, "The area of the text of the row's item.")
                                  .readOnly (TreeViewRowIds::indentSize, [] (const TreeViewRow& r) { return r.getOwnerView() != nullptr ? r.getOwnerView()->getIndentSize() : 0.0f; }, 0.0, "How far the tree indents each level of depth.")
                                  .readOnly (TreeViewRowIds::indentGuidesVisible, [] (const TreeViewRow& r) { return r.getOwnerView() != nullptr && r.getOwnerView()->areIndentGuidesVisible(); }, false, "Whether the tree shows a guide for each level of depth.")
-                                 .part (TreeViewRowIds::icon, &TreeViewRow::getIconBounds, "The icon of the row's item, as the item paints it.")
+                                 .part (Style::iconPartId, &TreeViewRow::getIconBounds, "The icon of the row's item, as the item paints it.")
                                  .build();
 
     return info;

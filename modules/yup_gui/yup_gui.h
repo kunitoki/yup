@@ -222,6 +222,7 @@ class DeferredReplayer;
 #include "code/yup_CodeEditorScheme.h"
 #include "code/yup_CodeEditor.h"
 #include "widgets/yup_TextEditor.h"
+#include "widgets/yup_InPlaceTextEditor.h"
 #include "widgets/yup_Label.h"
 #include "code/yup_CodeFindBar.h"
 #include "widgets/yup_Slider.h"
