@@ -425,12 +425,12 @@ bool SceneMaterialComponent::refreshShader (double elapsedSeconds, std::vector<S
     const auto* document = ComponentDocument::findFor (this);
 
     auto sheet = context != nullptr ? context->getStyleSheet() : StyleSheet::Ptr();
-    const auto load = document != nullptr ? document->getSourceMap() : nullptr;
+    const auto load = document != nullptr ? document->getLoadGeneration() : uint32 (0);
 
     // Looked for again when the material names another shader, is given to another entity, is styled by another stylesheet
     // or is told that a file changed. And once after each load of its document, which forgets what it was told, for what
-    // still stands to be told again: the source map is another one for each load
-    if (sheet != shaderSheet || load != shaderLoad.lock())
+    // still stands to be told again: the load generation is another one for each load
+    if (sheet != shaderSheet || load != shaderLoad)
     {
         shaderLoad = load;
         rendererProblem.clear();

@@ -848,9 +848,9 @@ Result YuiDocument::handleLiveTreeMutation()
         }
     }
 
-    // The problems told so far are forgotten, and a component with some to tell again knows it by the stylesheet or the
-    // source map being another one (see getSourceMap). A stylesheet that still reads the same is therefore kept when
-    // there is a map to give another one of, and made again when there is none
+    // The problems told so far are forgotten, which the load generation tells a component with some to tell again. A
+    // stylesheet that still reads the same is kept when there is a source map, which is then another one (see
+    // getSourceMap), and made again when there is none
     const auto style = readStyle (tree, sourceMap, sourceMap != nullptr);
 
     if (! style.has_value())
@@ -875,6 +875,7 @@ Result YuiDocument::handleLiveTreeMutation()
 
     styleSheet = style->sheet;
     styleSource = style->source;
+    advanceLoadGeneration();
     auto& root = *builder.getRoot();
     root.setStyleSheet (styleSheet);
 
@@ -935,6 +936,7 @@ void YuiDocument::resetState()
     styleSource = {};
     diagnostics.clear();
     lastLoadSucceeded = false;
+    advanceLoadGeneration();
 }
 
 void YuiDocument::clear()

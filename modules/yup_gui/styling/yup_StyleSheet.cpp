@@ -445,25 +445,8 @@ std::optional<DataTreeDiagnostic> StyleSheet::addElements (const DataTree& paren
     const auto collectDeclaredProperties = [this] (const DataTree& container)
     {
         for (const auto& child : container)
-        {
-            if (child.getType().toString() != "property")
-                continue;
-
-            const auto rawName = child.getProperty ("name").toString().trim();
-            const auto dot = rawName.indexOfChar ('.');
-            const Identifier unqualified (dot >= 0 ? rawName.substring (dot + 1) : rawName);
-            const auto propTypeName = child.getProperty ("type").toString().trim();
-
-            if (unqualified.isValid() && propTypeName.isNotEmpty())
-            {
-                declaredProperties.try_emplace (unqualified, ComponentProperty {
-                    .name = unqualified,
-                    .type = ComponentProperty::getTypeFromName (propTypeName),
-                    .elementType = ComponentProperty::getElementTypeFromName (propTypeName),
-                    .isInherited = true
-                });
-            }
-        }
+            if (const auto declared = readDeclaredProperty (child))
+                declaredProperties.try_emplace (declared->name, *declared);
     };
 
     for (const auto& element : parent)
@@ -663,6 +646,26 @@ bool StyleSheet::isStyleElement (const DataTree& element) noexcept
 std::optional<DataTreeDiagnostic> StyleSheet::readPaletteElement (const DataTree& element, Palettes& palettes)
 {
     return readPalette (element, palettes);
+}
+
+std::optional<ComponentProperty> StyleSheet::readDeclaredProperty (const DataTree& element)
+{
+    if (element.getType().toString() != "property")
+        return std::nullopt;
+
+    const auto rawName = element.getProperty ("name").toString().trim();
+    const auto name = rawName.substring (rawName.indexOfChar ('.') + 1);
+    const auto typeName = element.getProperty ("type").toString().trim();
+
+    if (name.isEmpty() || typeName.isEmpty())
+        return std::nullopt;
+
+    return ComponentProperty {
+        .name = Identifier (name),
+        .type = ComponentProperty::getTypeFromName (typeName),
+        .elementType = ComponentProperty::getElementTypeFromName (typeName),
+        .isInherited = true
+    };
 }
 
 const ThemePalette* StyleSheet::PaletteVersions::find (ThemePalette::Mode mode) const noexcept

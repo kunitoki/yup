@@ -55,6 +55,12 @@ Only the `Yui*` classes are specific to `.yui`, and they are the
 `yup_gui_markup` module. Everything else on this page is part of `yup_gui`: a
 hand-written C++ tree can take a stylesheet, drawings and a `BindingGraph` too.
 
+The two modules meet at the tree of a document: `yup_gui` reads its styles,
+its drawings, its shaders and the types of the properties it declares, while
+`yup_gui_markup` turns the text into that tree and the tree into components.
+The grammar of `yup_gui_markup`, which `YuiDocument::createSchema()`
+describes, says what each element may hold.
+
 ## Properties, the shared language
 
 Every layer talks to components through named, typed properties. A component's
@@ -104,7 +110,8 @@ classDiagram
 - Type infos chain to their base, so a `Row` has every property of `FlexBox`,
   `Layout` and `Component`. Type selectors and the builder walk the same chain.
 - `ComponentTypeRegistry` maps the `.yui` type names to type infos and creates
-  instances from them.
+  instances from them. It points at the type infos, which live as long as the
+  process or are taken out with `unregisterType` before they go.
 - A component returns its class type info, unless `setTypeInfo` gave it one of
   its own. Composite components and the document root (for tokens) use this to
   add properties at runtime.

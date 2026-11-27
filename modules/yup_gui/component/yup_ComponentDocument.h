@@ -92,7 +92,7 @@ public:
     virtual std::shared_ptr<const DataTreeSourceMap> getSourceMap() const = 0;
 
     /** Returns the function finding the components and the models an expression names, as the
-        values of the document find them.
+        values of the document find them. It must not be called once the document is destroyed.
     */
     virtual DrawingScope::ComponentResolver getComponentResolver() const = 0;
 
@@ -104,15 +104,16 @@ public:
     */
     virtual void reportDiagnostic (DataTreeDiagnostic diagnostic, const Component* subject = nullptr) = 0;
 
-    /** Returns a number that changes each time the document forgets the problems it listed.
+    /** Returns a number that changes with each load of the document, and each time its interface
+        is built again for a change of what it was loaded from.
 
-        A load forgets them, and so does building the interface again for a change of what it was
-        loaded from: what the components told with @ref reportDiagnostic is listed no more. A
-        component with something wrong keeps the number it told it under, and compares it when it
-        next can, at each of its frames for one, to tell again what is still wrong.
+        The document forgets the problems it listed then: what a component told with
+        @ref reportDiagnostic is listed no more. A component with something wrong keeps the
+        number it told it under, and compares it when it next can, at each of its frames for one,
+        to tell again what is still wrong.
 
-        The number is 0 until the document first loads. A load that fails, which keeps the
-        interface there was, leaves it as it is.
+        The number is 0 for a new document. A load or a build that fails keeps the interface
+        there was, and leaves the number as it is.
     */
     uint32 getLoadGeneration() const noexcept { return loadGeneration; }
 

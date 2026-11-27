@@ -47,6 +47,14 @@ void ComponentTypeRegistry::registerDefaultTypes (std::initializer_list<std::ref
         types.try_emplace (typeInfo.getTypeName(), &typeInfo);
 }
 
+void ComponentTypeRegistry::unregisterType (const ComponentTypeInfo& typeInfo)
+{
+    const ScopedLock sl (lock);
+
+    if (const auto found = types.find (typeInfo.getTypeName()); found != types.end() && found->second == &typeInfo)
+        types.erase (found);
+}
+
 const ComponentTypeInfo* ComponentTypeRegistry::findType (const Identifier& typeName) const
 {
     const ScopedLock sl (lock);

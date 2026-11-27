@@ -273,8 +273,8 @@ public:
     const std::vector<DataTreeDiagnostic>& getDiagnostics() const noexcept { return diagnostics; }
 
     /** Returns the builder that created the components, to read what it built: the element a
-        component came from, the component of an element and its bindings (see
-        YuiBuilder::findElementFor).
+        component came from (see YuiBuilder::findElementFor), the component of an element and
+        the bindings.
 
         What changes the builder goes through the document: @ref setAction, @ref setModel,
         @ref setInitializer, @ref reportDiagnostic and @ref getBindings.
@@ -295,19 +295,27 @@ public:
         written at, which is how a development tool jumps from a component to its markup.
 
         Each load gives another map. So does each time the interface is built again for a
-        change of the tree that keeps the stylesheet (see @ref getTree): the problems listed
-        so far are forgotten then too, and either the map or the stylesheet being another one
-        tells a component to tell its own again.
+        change of the tree that keeps the stylesheet (see @ref getTree). What tells a component
+        that the problems listed so far are forgotten is @ref getLoadGeneration.
     */
     std::shared_ptr<const DataTreeSourceMap> getSourceMap() const noexcept override { return sourceMap; }
 
-    /** Returns the resolver finding the components and the models of the document (see YuiBuilder::getComponentResolver). */
+    /** Returns the resolver finding the components and the models of the document (see YuiBuilder::getComponentResolver).
+
+        It finds those of the interface loaded at the time it is called, and must not be called
+        once the document is destroyed.
+    */
     DrawingScope::ComponentResolver getComponentResolver() const override { return builder.getComponentResolver(); }
 
     /** Adds a problem to the diagnostics, as the ones the bindings meet after a load are.
 
         This is how a component tells what is wrong with one of its values. Nothing is added while
         the document loads, nor after a load that failed.
+
+        What is added is forgotten by the next load, and the next time the interface is built
+        again for a change of the tree (see @ref getTree). Once one of them succeeds,
+        @ref getLoadGeneration is another number, for the component to tell again what is still
+        wrong.
 
         @param diagnostic  The problem, located with the source map of the document.
         @param subject     The component the problem is about, or nullptr. A diagnostic with no

@@ -803,30 +803,16 @@ void YuiBuilder::collectStyleDeclarations (const DataTree& parent)
     {
         for (const auto& child : container)
         {
-            if (child.getType().toString() != "property")
+            const auto property = StyleSheet::readDeclaredProperty (child);
+
+            if (! property.has_value())
                 continue;
 
-            const auto rawName = child.getProperty ("name").toString().trim();
-            const auto dot = rawName.indexOfChar ('.');
-            const Identifier unqualified (dot >= 0 ? rawName.substring (dot + 1) : rawName);
-            const auto propTypeName = child.getProperty ("type").toString().trim();
+            const auto [declared, isNew] = declaredProperties.try_emplace (property->name, *property);
 
-            if (unqualified.isValid() && propTypeName.isNotEmpty())
-            {
-                const auto type = ComponentProperty::getTypeFromName (propTypeName);
-                const auto elementType = ComponentProperty::getElementTypeFromName (propTypeName);
-
-                const auto [declared, isNew] = declaredProperties.try_emplace (unqualified, ComponentProperty {
-                    .name = unqualified,
-                    .type = type,
-                    .elementType = elementType,
-                    .isInherited = true
-                });
-
-                // The first declaration of a name is the one read, whatever declares it again
-                if (! isNew && (declared->second.type != type || declared->second.elementType != elementType))
-                    report ("The property '" + unqualified.toString() + "' is already declared with another type", child);
-            }
+            // The first declaration of a name is the one read, whatever declares it again
+            if (! isNew && (declared->second.type != property->type || declared->second.elementType != property->elementType))
+                report ("The property '" + property->name.toString() + "' is already declared with another type", child);
         }
     };
 

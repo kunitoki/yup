@@ -221,6 +221,19 @@ public:
     */
     static std::optional<DataTreeDiagnostic> readPaletteElement (const DataTree& element, Palettes& palettes);
 
+    /** Reads what a `property` element declares: its name and its type.
+
+        This is the `property name: type;` a style, rule, drawing, shader, tokens or component
+        block holds, which types a custom property for what reads it. A name written with a
+        qualifier, as `Slider.thumbColor`, declares the name after it.
+
+        @param element  The element to read.
+
+        @returns The property, inherited by the components inside the one it is set on, or
+                 nothing for an element that is no `property`, or that has no name or no type.
+    */
+    static std::optional<ComponentProperty> readDeclaredProperty (const DataTree& element);
+
     //==============================================================================
     /** Returns the rules of the sheet, in source order. */
     const std::vector<Rule>& getRules() const noexcept { return rules; }

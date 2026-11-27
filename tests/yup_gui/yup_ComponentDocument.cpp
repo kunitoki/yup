@@ -71,6 +71,7 @@ protected:
 
         void reportDiagnostic (DataTreeDiagnostic, const Component* = nullptr) override {}
 
+        using ComponentDocument::advanceLoadGeneration;
         using ComponentDocument::attachToRoot;
         using ComponentDocument::notifyDocumentAssetChanged;
         using ComponentDocument::notifyDocumentLoaded;
@@ -230,6 +231,33 @@ TEST_F (ComponentDocumentTests, TellsItsListenersUntilTheyAreRemoved)
 
     EXPECT_EQ (recorder.loaded.size(), 1u);
     EXPECT_EQ (recorder.changed.joinIntoString (", "), "fx/crt.frag");
+}
+
+TEST_F (ComponentDocumentTests, TheLoadGenerationIsAnotherOneEachTimeTheDocumentAdvancesIt)
+{
+    Component root ("root");
+    Component child ("child");
+    root.addChildComponent (child);
+
+    FakeDocument document (root);
+
+    // What a component compares to know that the problems it told are forgotten
+    const auto* found = ComponentDocument::findFor (&child);
+    ASSERT_EQ (found, &document);
+    EXPECT_EQ (found->getLoadGeneration(), 0u);
+
+    // Telling the listeners is not what changes it
+    document.notifyDocumentLoaded();
+    document.notifyDocumentAssetChanged ("fx/crt.frag");
+    EXPECT_EQ (found->getLoadGeneration(), 0u);
+
+    document.advanceLoadGeneration();
+    const auto first = found->getLoadGeneration();
+    EXPECT_NE (first, 0u);
+
+    document.advanceLoadGeneration();
+    EXPECT_NE (found->getLoadGeneration(), first);
+    EXPECT_NE (found->getLoadGeneration(), 0u);
 }
 
 TEST_F (ComponentDocumentTests, FindsTheFileOfAnAssetThroughTheDocumentOfAComponentAndByItselfWithoutOne)

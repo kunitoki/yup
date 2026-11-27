@@ -34,7 +34,9 @@ namespace yup
     applications register their own types the same way.
 
     Entries point at the shared, statically owned ComponentTypeInfo returned by each
-    type's Component::getTypeInfo(), so the registry never owns the infos.
+    type's Component::getTypeInfo(), so the registry never owns the infos. A type info
+    that does not live as long as the process is removed with unregisterType() before
+    it goes.
 
     @see ComponentTypeInfo, Component::getTypeInfo
 
@@ -56,6 +58,9 @@ public:
     */
     void registerType (const ComponentTypeInfo& typeInfo);
 
+    /** Deleted: the registry would point at a temporary once it is gone. */
+    void registerType (const ComponentTypeInfo&&) = delete;
+
     /** Registers a type info unless one is registered under its type name already.
 
         @param typeInfo    The type info to register. It must outlive the registry entry.
@@ -63,6 +68,9 @@ public:
         @see registerDefaultTypes
     */
     void registerDefaultType (const ComponentTypeInfo& typeInfo);
+
+    /** Deleted: the registry would point at a temporary once it is gone. */
+    void registerDefaultType (const ComponentTypeInfo&&) = delete;
 
     /** Registers type infos, each unless one is registered under its type name already, locking the
         registry once for them all.
@@ -78,6 +86,17 @@ public:
         @param typeInfos    The type infos to register. They must outlive their registry entries.
     */
     void registerDefaultTypes (std::initializer_list<std::reference_wrapper<const ComponentTypeInfo>> typeInfos);
+
+    /** Removes a type info from the registry.
+
+        This is for a type info that does not live as long as the process, such as the one of a
+        library that is unloaded or of a test, which is removed before it goes. The entry of its
+        type name is removed only when it is this very type info: another one registered under
+        the name since stays.
+
+        @param typeInfo    The type info to remove, registered or not.
+    */
+    void unregisterType (const ComponentTypeInfo& typeInfo);
 
     /** Finds a registered type info by name, or nullptr when it is not registered. */
     const ComponentTypeInfo* findType (const Identifier& typeName) const;

@@ -331,7 +331,11 @@ public:
     */
     void refreshThemePalettes();
 
-    /** Returns a resolver looking up components and models in the top-level document scope. */
+    /** Returns a resolver looking up components and models in the top-level document scope.
+
+        The function refers to the builder: it finds what is built at the time it is called, and
+        must not be called once the builder is destroyed.
+    */
     DrawingScope::ComponentResolver getComponentResolver() const;
 
 private:

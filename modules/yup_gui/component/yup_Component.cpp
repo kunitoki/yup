@@ -1702,10 +1702,20 @@ const NamedValueSet& Component::getProperties() const
 
 void Component::paint (Graphics& g)
 {
-    if (auto style = ApplicationTheme::findComponentStyle (*this))
+    auto painter = style;
+
+    if (painter == nullptr)
+    {
+        if (const auto generation = ApplicationTheme::getLastGeneration(); std::exchange (cachedThemeStyleGeneration, generation) != generation)
+            cachedThemeStyle = ApplicationTheme::findComponentStyle (*this);
+
+        painter = cachedThemeStyle;
+    }
+
+    if (painter != nullptr)
     {
         if (auto theme = ApplicationTheme::getGlobalTheme())
-            style->paint (g, *theme, *this);
+            painter->paint (g, *theme, *this);
 
         return;
     }
@@ -2124,6 +2134,7 @@ void Component::setTypeInfo (const ComponentTypeInfo* newTypeInfo)
         return;
 
     instanceTypeInfo = newTypeInfo;
+    cachedThemeStyleGeneration = 0; // The theme may have another style for the type
 
     markStyleDirty();
 }

@@ -462,6 +462,81 @@ TEST_F (ApplicationThemeTest, AComponentIsPaintedWithTheStyleOfItsClassOrTheOneS
     EXPECT_EQ (numPaints, 1);
 }
 
+TEST_F (ApplicationThemeTest, AComponentIsPaintedWithTheStyleTheThemeHasWhenItIsPainted)
+{
+    struct Base : Component
+    {
+    };
+
+    struct Derived : Base
+    {
+    };
+
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    auto renderer = context->makeRenderer (32, 32);
+    Graphics g (*context, *renderer);
+
+    StringArray painted;
+
+    const auto sliderStyle = [&painted] (const String& name)
+    {
+        return ComponentStyle::createStyle<Slider> ([&painted, name] (Graphics&, const ApplicationTheme&, const Slider&)
+        {
+            painted.add (name);
+        });
+    };
+
+    // Tells what painted a component, which keeps what it found the time before
+    const auto paintedBy = [&painted, &g] (Component& component)
+    {
+        painted.clear();
+        component.paint (g);
+        return painted.joinIntoString (", ");
+    };
+
+    Slider slider (Slider::LinearHorizontal);
+    slider.setOpaque (false);
+    EXPECT_EQ (paintedBy (slider), "");
+
+    theme->setComponentStyle<Slider> (sliderStyle ("first"));
+    EXPECT_EQ (paintedBy (slider), "first");
+    EXPECT_EQ (paintedBy (slider), "first");
+
+    theme->setComponentStyle<Slider> (sliderStyle ("second"));
+    EXPECT_EQ (paintedBy (slider), "second");
+
+    theme->setComponentStyle<Slider> (nullptr);
+    EXPECT_EQ (paintedBy (slider), "");
+
+    // Another theme being the global one
+    ApplicationTheme::Ptr other = new ApplicationTheme();
+    other->setComponentStyle<Slider> (sliderStyle ("other"));
+
+    ApplicationTheme::setGlobalTheme (other);
+    EXPECT_EQ (paintedBy (slider), "other");
+
+    ApplicationTheme::setGlobalTheme (theme);
+    EXPECT_EQ (paintedBy (slider), "");
+
+    // And another type given to the component, with the theme as it was: a class that tells no type is not known
+    // to derive from one with a style
+    theme->setComponentStyle<Base> (ComponentStyle::createStyle<Base> ([&painted] (Graphics&, const ApplicationTheme&, const Base&)
+    {
+        painted.add ("base");
+    }));
+
+    Derived derived;
+    derived.setOpaque (false);
+    EXPECT_EQ (paintedBy (derived), "");
+
+    const auto baseType = ComponentTypeBuilder<Base> (Identifier ("Base")).build();
+    derived.setTypeInfo (std::addressof (baseType));
+    EXPECT_EQ (paintedBy (derived), "base");
+
+    derived.setTypeInfo (nullptr);
+    EXPECT_EQ (paintedBy (derived), "");
+}
+
 TEST_F (ApplicationThemeTest, NoStyleOfAClassIsFoundWithoutAGlobalTheme)
 {
     ComponentStyle::Ptr classStyle = new MockComponentStyle();

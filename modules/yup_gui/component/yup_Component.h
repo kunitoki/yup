@@ -2462,6 +2462,7 @@ private:
     ComponentListenerList componentListeners;
     Array<FrameAttachment*> frameAttachments;
     ComponentStyle::Ptr style;
+    ComponentStyle::Ptr cachedThemeStyle;
     std::unique_ptr<ThemePalette> palette;
     std::unique_ptr<StyleState> styleState;
     std::unique_ptr<StyleContext> styleContext;
@@ -2484,6 +2485,7 @@ private:
     static constexpr int maximumDirtyRectangles = 8;
     GpuCanvas::Ptr presentedCanvas;
     uint32 canvasThemeGeneration = 0;
+    uint32 cachedThemeStyleGeneration = 0;
     float contentScale = 1.0f;
     uint8 opacity = 255;
     bool suppressChildBoundsChanged = false;

@@ -1848,6 +1848,41 @@ TEST_F (YuiDocumentTests, TheSchemaDescribesTheGrammarAndTheComponentTypes)
     EXPECT_DOUBLE_EQ (document.findById<Slider> ("knob")->getValue(), 2.5);
 }
 
+TEST_F (YuiDocumentTests, TheGrammarHoldsTheElementsADrawingIsMadeOf)
+{
+    const auto schema = YuiDocument::createSchema();
+    ASSERT_NE (schema, nullptr);
+
+    // What compiles a drawing describes its elements, some of them more than once
+    StringArray described;
+
+    for (const auto& element : DrawingStyle::getElementDescriptions())
+        described.addIfNotAlreadyThere (element.type);
+
+    // What the grammar lets a drawing hold, directly or through what it holds
+    StringArray held;
+    StringArray holders ("drawing");
+
+    while (! holders.isEmpty())
+    {
+        const auto children = schema->getChildConstraints (Identifier (holders[0])).allowedTypes;
+        holders.remove (0);
+
+        for (const auto& type : children)
+            if (held.addIfNotAlreadyThere (type))
+                holders.add (type);
+    }
+
+    for (const auto& type : described)
+    {
+        EXPECT_TRUE (schema->hasNodeType (Identifier (type))) << "The grammar has no element '" << type << "', which a drawing is made of";
+        EXPECT_TRUE (held.contains (type)) << "The grammar lets no drawing hold a '" << type << "', which a drawing is made of";
+    }
+
+    for (const auto& type : held)
+        EXPECT_TRUE (described.contains (type)) << "The grammar lets a drawing hold a '" << type << "', which no drawing is made of";
+}
+
 TEST_F (YuiDocumentTests, AChangeInsideAComponentOrTokensBlockKeepsTheStyleSheetUnlessItDeclaresOtherProperties)
 {
     const auto text = [] (const String& tokens, const String& declared, const String& caption, const String& classes)
@@ -1941,8 +1976,8 @@ TEST_F (YuiDocumentTests, AChangeOfTheTreeKeepsTheStyleSheetAndItsTransitionsWhe
     context.refresh (0.25);
     EXPECT_DOUBLE_EQ (glow (*knob), 2.5);
 
-    // The problems are forgotten and told again where they are written. The map is another one, which is how a
-    // component with a problem of its own knows it has to tell it again while the stylesheet is the same
+    // The problems are forgotten and told again where they are written, and the map is another one. The load generation
+    // is how a component with a problem of its own knows it has to tell it again while the stylesheet is the same
     ASSERT_TRUE (document.getSourceMap() != nullptr);
     EXPECT_TRUE (document.getSourceMap() != map);
     EXPECT_EQ (findSliderProblem(), 4);
@@ -2010,7 +2045,7 @@ TEST_F (YuiDocumentTests, AChangeOfTheTreeMakesTheStyleSheetAgainWhenItReadsSome
     declaration.beginTransaction().setProperty ("value", "0.25");
     EXPECT_FALSE (keepsTheStyleSheet());
 
-    // An element added leaves no map to tell a build from the one before: the stylesheet is made again whatever changes
+    // An element added leaves no map, and the stylesheet is then made again whatever changes
     tree.getChildWithName ("Component").beginTransaction().addChild (DataTree ("Label"));
     EXPECT_FALSE (keepsTheStyleSheet());
     EXPECT_TRUE (document.getSourceMap() == nullptr);
@@ -2024,5 +2059,69 @@ TEST_F (YuiDocumentTests, AChangeOfTheTreeMakesTheStyleSheetAgainWhenItReadsSome
 
     document.getTree().getChildWithName ("component").getChildWithName ("Column").getChildWithName ("Label").beginTransaction().setProperty ("text", "\"four\"");
     EXPECT_TRUE (keepsTheStyleSheet());
+}
+
+TEST_F (YuiDocumentTests, TheLoadGenerationIsAnotherOneAfterEachLoadAndEachBuildForAChangeOfTheTree)
+{
+    DataTree tree ("sequencer");
+    tree.beginTransaction().setProperty ("length", 1);
+
+    DataTreeBindingProvider sequencer (tree, nullptr);
+
+    YuiDocument document;
+    document.setModel ("seq", sequencer);
+
+    auto last = document.getLoadGeneration();
+    EXPECT_EQ (last, 0u);
+
+    // Tells whether the generation is another one than the last time it was asked
+    const auto isAnotherOne = [&document, &last]
+    {
+        const auto previous = std::exchange (last, document.getLoadGeneration());
+        return last != previous;
+    };
+
+    const String text ("Row { id: row; Label { id: caption; text: \"a\"; } repeat i in 0 .. seq.length { Label {} } }");
+
+    // Each load gives another one, also the load of the text that is loaded, which keeps the stylesheet
+    ASSERT_TRUE (document.loadFromString (text).wasOk());
+    EXPECT_TRUE (isAnotherOne());
+
+    const auto sheet = document.getStyleSheet();
+    ASSERT_TRUE (document.loadFromString (text).wasOk());
+    EXPECT_EQ (document.getStyleSheet(), sheet);
+    EXPECT_TRUE (isAnotherOne());
+
+    // So does the interface built again for a change of the tree, once it is: a change that leaves the elements where
+    // they are, then one that does not
+    auto row = document.getTree().getChild (0);
+    row.getChild (0).beginTransaction().setProperty ("text", "\"b\"");
+    EXPECT_FALSE (isAnotherOne());
+
+    document.applyPendingChanges();
+    EXPECT_EQ (document.findById<Label> ("caption")->getText(), "b");
+    EXPECT_TRUE (isAnotherOne());
+
+    row.beginTransaction().addChild (DataTree ("Label"));
+    document.applyPendingChanges();
+    EXPECT_EQ (document.findById ("row")->getNumChildComponents(), 3);
+    EXPECT_TRUE (isAnotherOne());
+
+    // It stays when nothing is loaded or built, and for the range of a repeat, which forgets nothing of what was told
+    document.applyPendingChanges();
+    document.reportDiagnostic ({ .message = "told since the load" });
+    EXPECT_FALSE (isAnotherOne());
+
+    tree.beginTransaction().setProperty ("length", 2);
+    document.applyPendingChanges();
+    EXPECT_EQ (document.findById ("row")->getNumChildComponents(), 4);
+    EXPECT_FALSE (isAnotherOne());
+
+    // A load that fails keeps the interface, and the generation
+    EXPECT_TRUE (document.loadFromString ("Row {").failed());
+    EXPECT_FALSE (isAnotherOne());
+
+    document.clear();
+    EXPECT_TRUE (isAnotherOne());
 }
 
