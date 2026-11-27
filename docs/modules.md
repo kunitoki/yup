@@ -265,6 +265,21 @@ flowchart LR
     classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
 ```
 
+### yup_artboard
+
+[Rive artboards](ui/artboard.md) as components: `ArtboardFile` loads a `.riv`,
+`Artboard` plays it with its state machines, `ArtboardNode` reaches its nodes
+and `ArtboardViewModel` / `ArtboardViewModelInstance` drive its data bindings.
+It is opt-in: an interface without Rive content needs `yup_gui` only.
+
+```mermaid
+flowchart LR
+    yup_artboard:::self --> yup_gui
+    yup_artboard --> rive:::ext
+    classDef self fill:#005aff,color:#fff,stroke:#003db3;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
+
 ### yup_audio_gui
 
 Audio-specific GUI components - waveforms, meters, spectrum analyzers, and
@@ -538,6 +553,8 @@ flowchart TD
     gui --> graphics
 
     markup[yup_gui_markup] --> gui
+
+    artboard[yup_artboard] --> gui
 
     three[yup_3d] --> rhi
     three --> graphics

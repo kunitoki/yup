@@ -46,8 +46,8 @@ set (base_modules yup::yup_core yup::yup_events yup::yup_graphics yup::yup_gui l
 set (audio_modules yup::yup_audio_devices yup::yup_audio_gui pffft_library)
 
 graphics_demo (AI MODULES yup::yup_ai)
-graphics_demo (Artboard RESOURCES rive)
-graphics_demo (ArtboardLayout RESOURCES rive)
+graphics_demo (Artboard MODULES yup::yup_artboard RESOURCES rive)
+graphics_demo (ArtboardLayout MODULES yup::yup_artboard RESOURCES rive)
 graphics_demo (AudioFile MODULES ${audio_modules} bungee_library dr_libs flac_library hmp3_library libvorbis opus_library)
 graphics_demo (Clipboard)
 graphics_demo (ColorLab)

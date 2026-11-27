@@ -7,7 +7,7 @@ paint through the [graphics](../graphics/index.md) stack.
   <img class="rounded" src="../_static/images/yup_widgets.jpg" alt="The widgets of the default theme, in the graphics example" width="640">
 </p>
 
-**Modules covered:** `yup_gui`, `yup_gui_markup`, `yup_events`, `yup_audio_gui`.
+**Modules covered:** `yup_gui`, `yup_gui_markup`, `yup_artboard`, `yup_events`, `yup_audio_gui`.
 
 ```{warning}
 **Work in progress.** This area is still being written. Concept guides for

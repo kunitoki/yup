@@ -23,11 +23,6 @@
 
 #include "yup_Application.cpp"
 #include "yup_ApplicationTheme.cpp"
-#include "yup_Artboard.cpp"
-#include "yup_ArtboardFile.cpp"
-#include "yup_ArtboardNode.cpp"
-#include "yup_ArtboardViewModel.cpp"
-#include "yup_ArtboardViewModelInstance.cpp"
 #include "yup_CodeDocument.cpp"
 #include "yup_CodeEditor.cpp"
 #include "yup_CodeEditorScheme.cpp"

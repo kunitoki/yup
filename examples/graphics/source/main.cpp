@@ -24,6 +24,9 @@
 #include <yup_graphics/yup_graphics.h>
 #include <yup_gui/yup_gui.h>
 
+#if YUP_MODULE_AVAILABLE_yup_artboard
+#include <yup_artboard/yup_artboard.h>
+#endif
 #if YUP_MODULE_AVAILABLE_yup_audio_devices
 #include <yup_audio_devices/yup_audio_devices.h>
 #endif

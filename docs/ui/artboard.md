@@ -11,6 +11,21 @@ classes cooperate:
 - `ArtboardViewModelInstance` — a live set of values for that schema, bound to
   an artboard to drive its data bindings.
 
+**Modules covered:** `yup_artboard`, on top of `yup_gui`. It is opt-in: add the
+module to your target and include its header, which brings `yup_gui` along:
+
+```cmake
+yup_standalone_app (
+    # ...
+    MODULES
+        yup::yup_gui
+        yup::yup_artboard)
+```
+
+```cpp
+#include <yup_artboard/yup_artboard.h>
+```
+
 <p align="center">
   <img class="rounded" src="../_static/images/yup_rive_artboard.jpg" alt="A Rive artboard, in the graphics example" width="640">
 </p>

@@ -58,12 +58,6 @@
 
 #include <rive/rive.h>
 
-namespace rive::cmd
-{
-class DeferredSession;
-class DeferredReplayer;
-} // namespace rive::cmd
-
 //==============================================================================
 /** Config: YUP_EMBED_DEFAULT_THEME_TEXT_SERIF_FONT
 
@@ -243,11 +237,6 @@ class DeferredReplayer;
 #include "widgets/yup_TabButton.h"
 #include "widgets/yup_TabBar.h"
 #include "widgets/yup_TabComponent.h"
-#include "artboard/yup_ArtboardViewModel.h"
-#include "artboard/yup_ArtboardViewModelInstance.h"
-#include "artboard/yup_ArtboardFile.h"
-#include "artboard/yup_ArtboardNode.h"
-#include "artboard/yup_Artboard.h"
 #include "windowing/yup_DocumentWindow.h"
 #include "dialogs/yup_FileChooser.h"
 

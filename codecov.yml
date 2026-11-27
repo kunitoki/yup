@@ -18,6 +18,7 @@ coverage:
           - yup_3d
           - yup_ai
           - yup_animation
+          - yup_artboard
           - yup_audio_basics
           - yup_audio_devices
           - yup_audio_formats
@@ -50,6 +51,7 @@ coverage:
 flags:
   yup_3d:                    { paths: [modules/yup_3d/], carryforward: true }
   yup_animation:             { paths: [modules/yup_animation/], carryforward: true }
+  yup_artboard:              { paths: [modules/yup_artboard/], carryforward: true }
   yup_audio_basics:          { paths: [modules/yup_audio_basics/], carryforward: true }
   yup_audio_devices:         { paths: [modules/yup_audio_devices/], carryforward: true }
   yup_audio_formats:         { paths: [modules/yup_audio_formats/], carryforward: true }

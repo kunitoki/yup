@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-#include <yup_gui/yup_gui.h>
+#include <yup_artboard/yup_artboard.h>
 
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
