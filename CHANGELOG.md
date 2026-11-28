@@ -49,6 +49,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added `AudioProcessorBase::infiniteTailSamples`, the value `getTailSamples()` returns for a tail that never ends. VST3, AU and AUv3 plugins now report it to the host as an infinite tail, AUv3 plugins notify the host when the tail changes, and the AU host reads the tail of the plugins it loads and reports its changes (it always returned 0).
 - `yup_gui` is now an optional dependency of `yup_audio_plugin_host`: without it plugins are still scanned, loaded and processed, and instances report no editor. See the new headless audio page of the documentation.
 - Fixed LV2 plugins blocking the audio thread: `run()` try-locks the process lock like the other wrappers, no longer reserves the parameter change buffer on its first call and no longer calls the parameter listeners when the host sets a value. Suspended LV2 plugins now output silence instead of passing their input through.
+- Fixed LV2 plugins crashing the host after it unloaded them once a `Timer` had run (in the processor or the editor): each instance now holds a `ScopedYupInitialiser_GUI` like the other wrappers, so YUP and its timer thread shut down with the last instance.
 
 ### Core
 

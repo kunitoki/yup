@@ -38,7 +38,8 @@ public:
     {
         valueChanged = 1 << 0,
         gestureBegan = 1 << 1,
-        gestureEnded = 1 << 2
+        gestureEnded = 1 << 2,
+        valueFromPlugin = 1 << 3
     };
 
     void resize (int newSize)
