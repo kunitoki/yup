@@ -1930,8 +1930,8 @@ void YuiBuilder::applyLink (Component& component, const Value& link, Scope& scop
     const auto& sourceProperty = split->second;
 
     auto* model = dynamic_cast<BindingModel*> (source);
-    if (model != nullptr && source->getTypeInfo().findProperty (sourceProperty) == nullptr)
-        model->refreshProperties();
+    if (model != nullptr)
+        model->ensureProperty (sourceProperty);
 
     if (source->getTypeInfo().findProperty (sourceProperty) == nullptr)
     {
@@ -2052,8 +2052,8 @@ void YuiBuilder::connectHandler (Component& component, const ComponentSignal& si
         const auto path = detail::splitYuiPath (named.getName());
         auto* target = resolve (scope, path->first, &component);
 
-        if (auto* model = dynamic_cast<BindingModel*> (target); model != nullptr && model->getTypeInfo().findProperty (path->second) == nullptr)
-            model->refreshProperties();
+        if (auto* model = dynamic_cast<BindingModel*> (target))
+            model->ensureProperty (path->second);
 
         const auto* property = target != nullptr ? target->getTypeInfo().findProperty (path->second) : nullptr;
 

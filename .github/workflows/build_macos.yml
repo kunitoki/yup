@@ -26,6 +26,9 @@ on:
 
 env:
   ACTION_RUNNER: github-actions
+  CCACHE_SIZE_TESTS: '{"Debug": "800M", "Release": "200M"}'
+  CCACHE_SIZE_EXAMPLES: '{"graphics": "400M", "plugin": "200M", "console": "25M"}'
+  CCACHE_SIZE_EXAMPLE: 150M
 
 jobs:
   configure:
@@ -37,12 +40,13 @@ jobs:
       CMAKE_OBJCXX_COMPILER_LAUNCHER: ccache
     steps:
     - uses: actions/checkout@v7
-    - uses: hendrikmuhs/ccache-action@v1.2
+    - uses: ./.github/actions/ccache
       with:
         key: macos-configure
+        max-size: 100M
     - name: Configure
       run: |
-        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build \
+        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -C ${{ github.workspace }}/.github/ci_settings.cmake \
           -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON -DYUP_TEST_MODULES="${{ inputs.test_modules }}"
     - name: Build SDL
       run: |
@@ -71,10 +75,10 @@ jobs:
       CMAKE_OBJCXX_COMPILER_LAUNCHER: ccache
     steps:
     - uses: actions/checkout@v7
-    - uses: hendrikmuhs/ccache-action@v1.2
+    - uses: ./.github/actions/ccache
       with:
         key: macos-tests-${{ matrix.config }}
-        max-size: 1G
+        max-size: ${{ fromJson(env.CCACHE_SIZE_TESTS)[matrix.config] }}
     - uses: actions/cache/restore@v5
       id: cache-restore
       with:
@@ -83,7 +87,7 @@ jobs:
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
       run: |
-        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build \
+        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -C ${{ github.workspace }}/.github/ci_settings.cmake \
           -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON -DYUP_TEST_MODULES="${{ inputs.test_modules }}"
     - run: cmake --build ${{ runner.workspace }}/build --config ${{ matrix.config }} --target yup_tests
     - name: Run tests
@@ -109,9 +113,10 @@ jobs:
       CMAKE_OBJCXX_COMPILER_LAUNCHER: ccache
     steps:
     - uses: actions/checkout@v7
-    - uses: hendrikmuhs/ccache-action@v1.2
+    - uses: ./.github/actions/ccache
       with:
         key: macos-example-${{ matrix.example }}
+        max-size: ${{ fromJson(env.CCACHE_SIZE_EXAMPLES)[matrix.example] || env.CCACHE_SIZE_EXAMPLE }}
     - uses: actions/cache/restore@v5
       id: cache-restore
       with:
@@ -120,7 +125,7 @@ jobs:
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
       run: |
-        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build \
+        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -C ${{ github.workspace }}/.github/ci_settings.cmake \
           -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON -DYUP_TEST_MODULES="${{ inputs.test_modules }}"
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --target ${{ fromJson(inputs.example_targets)[matrix.example] }}
     - run: cmake --build ${{ runner.workspace }}/build --config Release --target ${{ fromJson(inputs.example_targets)[matrix.example] }}

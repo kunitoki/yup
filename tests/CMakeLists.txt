@@ -250,6 +250,9 @@ yup_standalone_app (
         ${target_modules}
         ${target_gtest_modules})
 
+# The GoogleTest runner is the same for every test runner: compiled once here, they only define the entry point
+yup_add_test_runner (${runtime_target_name})
+
 # ==== One test runner per module, all built by the yup_tests target and run by ctest
 if (YUP_TEST_LINK_JOBS GREATER 0)
     set_property (GLOBAL APPEND PROPERTY JOB_POOLS ${target_name}_link=${YUP_TEST_LINK_JOBS})
@@ -314,8 +317,6 @@ foreach (module ${target_test_modules})
     target_sources (${module_target_name} PRIVATE ${sources} ${imported_sources})
     source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources} ${imported_sources})
     set_source_files_properties (${imported_sources} PROPERTIES HEADER_FILE_ONLY TRUE)
-
-    yup_add_test_runner (${module_target_name})
 
     set_target_properties (${module_target_name} PROPERTIES
         XCODE_SCHEME_ARGUMENTS "--gtest_filter=*"

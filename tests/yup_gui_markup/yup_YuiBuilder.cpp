@@ -763,6 +763,44 @@ TEST_F (YuiBuilderTests, BuildsALayoutContainerThatPositionsItsChildren)
     EXPECT_EQ (right->getBounds(), Rectangle<float> (70.0f, 0.0f, 50.0f, 40.0f));
 }
 
+TEST_F (YuiBuilderTests, AContainerFitsItsContentAndTheOneAroundItFollows)
+{
+    YuiBuilder builder;
+    const auto result = builder.build (parse (R"yui(
+        Column {
+            id: panel; width: 200; height: 100; align: start;
+            Row {
+                id: bar; fitContent: true; padding: 4; gap: 8;
+                Label { preferredWidth: 56; preferredHeight: 24; }
+                Label { id: last; preferredWidth: 56; preferredHeight: 24; }
+            }
+            Row {
+                id: tall; fitContent: true; fitWidth: false; preferredWidth: 150;
+                Label { preferredWidth: 30; preferredHeight: 16; }
+            }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
+
+    auto* bar = builder.findById ("bar");
+    auto* tall = builder.findById ("tall");
+    auto* last = builder.findById ("last");
+    ASSERT_NE (bar, nullptr);
+    ASSERT_NE (tall, nullptr);
+    ASSERT_NE (last, nullptr);
+
+    // The column gives each row the size it fitted, and the second one the width it was given
+    EXPECT_EQ (bar->getBounds(), Rectangle<float> (0.0f, 0.0f, 128.0f, 32.0f));
+    EXPECT_EQ (tall->getBounds(), Rectangle<float> (0.0f, 32.0f, 150.0f, 16.0f));
+
+    // A child that asks for another size is fitted again, and what is below moves
+    last->setProperty (Identifier ("preferredHeight"), 40.0);
+
+    EXPECT_EQ (bar->getBounds(), Rectangle<float> (0.0f, 0.0f, 128.0f, 48.0f));
+    EXPECT_EQ (tall->getBounds(), Rectangle<float> (0.0f, 48.0f, 150.0f, 16.0f));
+}
+
 TEST_F (YuiBuilderTests, KeepsPropertiesUpToDateWithBindings)
 {
     YuiBuilder builder;
@@ -1928,6 +1966,87 @@ TEST_F (YuiBuilderTests, AHandlerSetsAPropertyOfAModelAsAGestureOfItsOwn)
     EXPECT_FLOAT_EQ (static_cast<float> (provider.gain), 0.25f);
     EXPECT_FLOAT_EQ (static_cast<float> (knob->getValue()), 0.25f);
     EXPECT_EQ (provider.gestures.joinIntoString (", "), "begin gain, end gain");
+}
+
+TEST_F (YuiBuilderTests, ALinkAHandlerAndAnExpressionFindAPropertyTheProviderDoesNotList)
+{
+    // Lists nothing, and finds its one value when it is asked for by name
+    struct FindByNameProvider : RecordingProvider
+    {
+        std::vector<Property> getProperties() const override { return {}; }
+
+        std::optional<Property> findProperty (const Identifier& name) const override
+        {
+            if (name == Identifier ("gain"))
+                return Property { name, ComponentProperty::Type::number };
+
+            return std::nullopt;
+        }
+    };
+
+    const auto build = [] (YuiBuilder& builder, const char* element)
+    {
+        return builder.build (parse (String ("Component { ") + element + " }"));
+    };
+
+    // Each of the three alone, so that none finds what another one asked for
+    {
+        FindByNameProvider provider;
+        YuiBuilder builder;
+        builder.setModel ("synth", provider);
+
+        ASSERT_TRUE (build (builder, "Slider { id: knob; value <=> synth.gain; }").wasOk());
+        EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
+
+        auto* knob = builder.findById<Slider> ("knob");
+        ASSERT_NE (knob, nullptr);
+        EXPECT_FLOAT_EQ (static_cast<float> (knob->getValue()), 0.5f);
+
+        knob->setValue (0.75);
+        EXPECT_FLOAT_EQ (static_cast<float> (provider.gain), 0.75f);
+    }
+
+    {
+        FindByNameProvider provider;
+        YuiBuilder builder;
+        builder.setModel ("synth", provider);
+
+        ASSERT_TRUE (build (builder, "TextButton { id: full; onClick: set (synth.gain, 1); }").wasOk());
+        EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
+
+        auto* full = builder.findById<TextButton> ("full");
+        ASSERT_NE (full, nullptr);
+
+        full->onClick();
+        EXPECT_FLOAT_EQ (static_cast<float> (provider.gain), 1.0f);
+    }
+
+    {
+        FindByNameProvider provider;
+        YuiBuilder builder;
+        builder.setModel ("synth", provider);
+
+        ASSERT_TRUE (build (builder, "Label { id: readout; text: format (\"%.2f\", synth.gain); }").wasOk());
+        EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
+
+        auto* readout = builder.findById<Label> ("readout");
+        ASSERT_NE (readout, nullptr);
+        EXPECT_EQ (readout->getText(), "0.50");
+
+        provider.setValue (Identifier ("gain"), 0.25);
+        EXPECT_EQ (readout->getText(), "0.25");
+    }
+
+    // What the provider does not find is told as it was
+    {
+        FindByNameProvider provider;
+        YuiBuilder builder;
+        builder.setModel ("synth", provider);
+
+        ASSERT_TRUE (build (builder, "Slider { value <=> synth.drive; }").wasOk());
+        ASSERT_EQ (builder.getDiagnostics().size(), 1u);
+        EXPECT_EQ (builder.getDiagnostics().front().message, "Slider.value: Model has no property 'drive'");
+    }
 }
 
 TEST_F (YuiBuilderTests, AHandlerSetsAPropertyOfAnElementFromItsArgumentsAndTheIndexOfItsRepeat)

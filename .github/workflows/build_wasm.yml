@@ -28,6 +28,9 @@ env:
     libxrandr-dev libxrender-dev libglu1-mesa-dev mesa-common-dev
   EM_VERSION: 4.0.21
   EMCC_SKIP_SANITY_CHECK: 1
+  CCACHE_SIZE_TESTS: '{"Debug": "225M", "Release": "75M"}'
+  CCACHE_SIZE_EXAMPLES: '{"graphics": "200M", "console": "25M"}'
+  CCACHE_SIZE_EXAMPLE: 100M
 
 jobs:
   build_tests:
@@ -42,10 +45,10 @@ jobs:
     steps:
     - uses: actions/checkout@v7
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - uses: hendrikmuhs/ccache-action@v1.2
+    - uses: ./.github/actions/ccache
       with:
         key: wasm-tests-${{ matrix.config }}
-        max-size: 1G
+        max-size: ${{ fromJson(env.CCACHE_SIZE_TESTS)[matrix.config] }}
     - name: Setup emsdk
       uses: mymindstorm/setup-emsdk@v16
       with:
@@ -53,7 +56,7 @@ jobs:
         actions-cache-folder: emsdk-cache
     - name: Configure
       run: |
-        emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build \
+        emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -C ${{ github.workspace }}/.github/ci_settings.cmake \
           -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=OFF -DYUP_TEST_MODULES="${{ inputs.test_modules }}"
     - run: cmake --build ${{ runner.workspace }}/build --config ${{ matrix.config }} --target yup_tests
     - run: ctest --test-dir ${{ runner.workspace }}/build/tests -C ${{ matrix.config }} --output-on-failure
@@ -70,15 +73,18 @@ jobs:
     steps:
     - uses: actions/checkout@v7
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - uses: hendrikmuhs/ccache-action@v1.2
+    - uses: ./.github/actions/ccache
       with:
         key: wasm-example-${{ matrix.example }}
+        max-size: ${{ fromJson(env.CCACHE_SIZE_EXAMPLES)[matrix.example] || env.CCACHE_SIZE_EXAMPLE }}
     - name: Setup emsdk
       uses: mymindstorm/setup-emsdk@v16
       with:
         version: ${{ env.EM_VERSION }}
         actions-cache-folder: emsdk-cache
     - name: Configure
-      run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_BUILD_TESTS=OFF -DYUP_BUILD_EXAMPLES=ON
+      run: |
+        emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -C ${{ github.workspace }}/.github/ci_settings.cmake \
+          -DYUP_BUILD_TESTS=OFF -DYUP_BUILD_EXAMPLES=ON
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --target ${{ fromJson(inputs.example_targets)[matrix.example] }}
     - run: cmake --build ${{ runner.workspace }}/build --config Release --target ${{ fromJson(inputs.example_targets)[matrix.example] }}

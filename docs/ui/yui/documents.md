@@ -422,6 +422,12 @@ survive any reload, even one that creates the components again, and changes
 made to the tree by anything else, such as undo or loading a preset, show up in
 the UI immediately.
 
+A provider can also expose values it does not list, such as the ones it only
+finds by name or makes when they are first asked for. A link, a handler or an
+expression naming `params.cutoff` asks the provider's `findProperty` for
+`cutoff` when `getProperties` does not list it, and the model keeps what it
+finds from then on.
+
 A press on a component linked to the model starts a *gesture*, which ends on
 release. Any other change, from the keyboard, the mouse wheel or code, is a
 gesture of its own. `DataTreeBindingProvider` starts a new undo transaction for

@@ -297,6 +297,7 @@ All codesigning options are macOS-only and have no effect on other platforms.
 | `OPTIONS` | list | - | Additional compile options applied to all format targets. |
 | `LINK_OPTIONS` | list | - | Additional linker options applied to all format targets. |
 | `ADDITIONAL_LIBRARIES` | list | - | Extra libraries to link into all format targets (in addition to `MODULES`). |
+| `PRECOMPILE_HEADERS` | list | - | Headers to precompile for the plugin's C++ sources, see [Precompiled headers](#precompiled-headers). |
 
 ---
 
@@ -330,6 +331,7 @@ also be used independently for non-plugin GUI applications.
 | `COMPILE_OPTIONS` | list | - | Additional compile options. |
 | `MODULES` | list | - | YUP and thirdparty module dependencies, with or without the `yup::` prefix (e.g. `yup::yup_gui yup::libpng`). |
 | `SOURCES` | list | - | Additional source files. |
+| `PRECOMPILE_HEADERS` | list | - | Headers to precompile for the target's C++ sources, see [Precompiled headers](#precompiled-headers). |
 | `LINK_OPTIONS` | list | - | Additional linker options. |
 | `BUNDLE_RESOURCES` | list | - | Files to bundle for runtime access via `File::getSpecialLocation (File::bundleDirectory)`, as `"local/path@relative/dest"` pairs. See `yup_add_bundled_resources()` below. |
 
@@ -338,6 +340,28 @@ also be used independently for non-plugin GUI applications.
 `TARGET_APP_NAMESPACE` (as `<namespace>.<TARGET_NAME>`). Unlike `yup_audio_plugin`
 it has **no** `TARGET_APP_ID` argument.
 ```
+
+#### Precompiled headers
+
+A source including `<yup_gui/yup_gui.h>` spends most of its compile time parsing it. With
+`PRECOMPILE_HEADERS` the listed headers are parsed once for the C++ sources of the target, which
+pays off from a handful of sources on and when editing one of them:
+
+```cmake
+yup_standalone_app (
+    TARGET_NAME my_app
+    TARGET_VERSION "1.0.0"
+    PRECOMPILE_HEADERS
+        <yup_gui/yup_gui.h>
+    MODULES
+        yup::yup_gui)
+```
+
+List them in angle brackets or as absolute paths, and prefer the headers that rarely change:
+every source is recompiled when one of them does. The precompiled header takes about 100 MB for
+each build configuration. The YUP and thirdparty modules compiled into the target never use it, and
+setting [`CMAKE_DISABLE_PRECOMPILE_HEADERS`](https://cmake.org/cmake/help/latest/variable/CMAKE_DISABLE_PRECOMPILE_HEADERS.html)
+turns it off, for example on a build server using a compiler cache.
 
 ##### Emscripten / WebAssembly
 
@@ -656,7 +680,8 @@ The runner is shipped as source (under `cmake/tools/test_runner`) and compiled
 into each test executable rather than linked as a prebuilt module. The helper
 compiles the runner into `<target_name>`, exposes the `<yup_test_runner.h>`
 header on its include path, and links the GoogleTest / GoogleMock targets when
-they are available.
+they are available. Test executables sharing a `TARGET_STATIC_LIBRARY` add the
+runner to that library instead, where it is compiled once for all of them.
 
 The target must already link the YUP modules the runner needs (`yup_gui` on
 desktop, `yup_events` on Emscripten). Define the entry point in one of the

@@ -77,11 +77,35 @@ component LabeledKnob : Column {
 
 ### Shared container properties
 
-Every layout container inherits `padding` and `gap` from `LayoutComponent`:
+Every layout container inherits `padding`, `gap`, `fitContent`, `fitWidth`
+and `fitHeight` from `LayoutComponent`:
 
 - `padding`: a single number (`12`) or a string of 1, 2 or 4 edge values in CSS
   top-right-bottom-left order (`"8 16"`, `"4 8 12 8"`).
 - `gap`: spacing in logical pixels between adjacent items or tracks.
+- `fitContent`: `true` makes the container as large as its children need, plus
+  its padding. It measures its visible children, each at its `preferredWidth`
+  and `preferredHeight` or, without them, at its current size, with their
+  margins and the gap, and sets the result as its own preferred size, which the
+  layout it is in gives it. Fitting containers inside one another measure from
+  the innermost out. `Row`, `Column` and `FlexBox` (as one line) and `Stack`
+  fit; a `Grid` keeps its size.
+- `fitWidth`, `fitHeight`: which sizes `fitContent` fits, both `true` by
+  default. With `fitWidth: false` a container keeps its `preferredWidth` and
+  fits only its height.
+
+```yui
+Row {
+    fitContent: true;
+    padding: 4;
+    gap: 8;
+    TextButton { text: "Play"; preferredWidth: 56; preferredHeight: 24; }
+    TextButton { text: "Stop"; preferredWidth: 56; preferredHeight: 24; }
+}
+```
+
+A widget does not measure its text or its drawing: give the children a
+preferred size, or a size of their own, for a container to fit them.
 
 ### `FlexBox`, `Row` and `Column`
 

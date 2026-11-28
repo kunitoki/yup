@@ -42,7 +42,12 @@ void BindingModel::refreshProperties()
     if (provider == nullptr)
         return;
 
-    const auto exposed = provider->getProperties();
+    auto exposed = provider->getProperties();
+
+    for (const auto& found : foundByName)
+        if (std::none_of (exposed.begin(), exposed.end(), [&found] (const auto& listed) { return listed.name == found.name; }))
+            exposed.push_back (found);
+
     const auto& reflected = info->getOwnProperties();
 
     // What reads the model holds on to its type info, which is only made again for other properties or other types
@@ -53,6 +58,24 @@ void BindingModel::refreshProperties()
 
     if (! isUpToDate)
         info = std::make_unique<ComponentTypeInfo> (Identifier ("Model"), nullptr, makeProperties (exposed));
+}
+
+bool BindingModel::ensureProperty (const Identifier& name)
+{
+    if (info->findProperty (name) != nullptr)
+        return true;
+
+    if (provider == nullptr)
+        return false;
+
+    auto found = provider->findProperty (name);
+    if (! found.has_value())
+        return false;
+
+    foundByName.push_back (std::move (*found));
+    refreshProperties();
+
+    return info->findProperty (name) != nullptr;
 }
 
 void BindingModel::trackGestures (Component& component, const Identifier& property)

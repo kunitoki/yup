@@ -39,9 +39,9 @@ protected:
         for (int i = 0; i < numWorkers; ++i)
             workers.emplace_back ([&latch, &done, i]
             {
-                for (volatile int spin = 0; spin < 1000 * (i + 1); spin = spin + 1)
-                {
-                }
+                for (volatile int spin = 0; spin < 1000 * (i + 1);)
+                    spin = spin + 1;
+
                 latch.countDown();
                 ++done;
             });
@@ -95,9 +95,8 @@ TEST_F (CountDownLatchTests, AddCountBeforeDispatchingWorkKeepsTheWaiterBlocked)
     {
         latch.addCount (1);
 
-        for (volatile int spin = 0; spin < 100000; spin = spin + 1)
-        {
-        }
+        for (volatile int spin = 0; spin < 100000;)
+            spin = spin + 1;
 
         workDone.store (true);
         latch.countDown(); // 2 -> 1: the waiter must still be blocked

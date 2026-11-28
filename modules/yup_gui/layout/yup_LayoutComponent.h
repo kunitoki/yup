@@ -34,8 +34,8 @@ namespace yup
     `gridArea`, ...) through the helpers here. A @ref ScopedLayoutBatch makes many such changes
     cost one layout.
 
-    Its own properties are `padding`, the space kept inside its bounds, and `gap`, the space kept
-    between the children.
+    Its own properties are `padding`, the space kept inside its bounds, `gap`, the space kept
+    between the children, and `fitContent`, which sizes it to its children.
 
     @see FlexBoxComponent, GridComponent, StackComponent
 
@@ -51,6 +51,9 @@ public:
         //! Container properties
         static const Identifier paddingId;
         static const Identifier gapId;
+        static const Identifier fitContentId;
+        static const Identifier fitWidthId;
+        static const Identifier fitHeightId;
         static const Identifier directionId;
         static const Identifier wrapId;
         static const Identifier justifyId;
@@ -106,6 +109,28 @@ public:
 
     /** Returns the space kept between the children. */
     float getGap() const;
+
+    /** Makes the container as large as its children need, plus its padding.
+
+        The container measures its visible children, each at its preferred size or, without one, at
+        its current size, with their margins and the gap, and sets the result as its own
+        `preferredWidth` and `preferredHeight`, which the layout it is in then gives it. Fitting
+        containers inside one another measure from the innermost out.
+
+        A FlexBoxComponent measures its children as one line and a StackComponent takes the largest
+        of them. A GridComponent keeps its size.
+
+        @see setFitAxes
+    */
+    void setFitContent (bool shouldFitContent);
+
+    /** Returns true when the container sizes itself to its children. */
+    bool getFitContent() const;
+
+    /** Sets which of its sizes a fitting container fits, both by default: the other one keeps the
+        preferred size it was given.
+    */
+    void setFitAxes (bool shouldFitWidth, bool shouldFitHeight);
 
     //==============================================================================
     /** Lays the children out again. Called automatically when anything affecting the layout changes.
@@ -212,8 +237,22 @@ protected:
     /** Splits a track or area list on whitespace and commas. */
     static StringArray splitTokens (const String& text);
 
+    //==============================================================================
+    /** Returns the size the children need, without the padding, or nothing for a container that
+        can't tell it, which then keeps its size when it is asked to fit its content.
+    */
+    virtual std::optional<Size<float>> measureContent() const { return std::nullopt; }
+
+    /** Returns the size a child takes when its container is measured: its preferred size or,
+        without one, its current size, with its margins.
+    */
+    static Size<float> getMeasuredItemSize (const Component& child);
+
 private:
+    void fitToContent();
+
     bool isPerformingLayout = false;
+    bool isLayoutPending = false;
     bool isLayoutHeld = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LayoutComponent)

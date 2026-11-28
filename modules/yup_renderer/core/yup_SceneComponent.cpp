@@ -1649,6 +1649,9 @@ bool SceneComponent::updateAnimatedComponents (double elapsedSeconds)
         shown->update (elapsedSeconds);
     }
 
+    if (checker.shouldBailOut())
+        return false;
+
     updateCompiledMaterials();
 
     if (checker.shouldBailOut())

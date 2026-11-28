@@ -23,7 +23,7 @@
 function (_yup_emscripten_get_compile_settings enable_webgpu output_definitions output_options)
     set (definitions "")
     set (options
-        $<$<CONFIG:DEBUG>:-O0 -g>
+        $<$<CONFIG:DEBUG>:-O0>
         $<$<CONFIG:RELEASE>:-O3>
         -fexceptions
         -msimd128

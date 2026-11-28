@@ -99,6 +99,32 @@ protected:
         NamedValueSet values;
     };
 
+    /** A provider listing nothing: its values are found by their name only, as those of a provider with many of
+        them, or making them when they are first asked for, are. */
+    class FindByNameProvider final : public BindingProvider
+    {
+    public:
+        std::vector<Property> getProperties() const override { return {}; }
+
+        std::optional<Property> findProperty (const Identifier& name) const override
+        {
+            if (values.contains (name))
+                return Property { name, ComponentProperty::Type::number };
+
+            return std::nullopt;
+        }
+
+        var getValue (const Identifier& name) const override { return values.getWithDefault (name, {}); }
+
+        void setValue (const Identifier& name, const var& value) override
+        {
+            if (values.set (name, value))
+                notifyValueChanged (name);
+        }
+
+        NamedValueSet values { { Identifier ("tempo"), 120.0 } };
+    };
+
     class PressableControl final : public Component
     {
     public:
@@ -252,4 +278,25 @@ TEST_F (BindingModelTests, MakesItsTypeInfoAgainWhenThePropertiesOrTheirTypesDif
     model.refreshProperties();
 
     EXPECT_NE (&model.getTypeInfo(), info);
+}
+
+TEST_F (BindingModelTests, AsksTheProviderForAPropertyItDoesNotList)
+{
+    FindByNameProvider provider;
+    BindingModel model (provider);
+
+    EXPECT_FALSE (model.getTypeInfo().hasProperty (Identifier ("tempo")));
+    EXPECT_FALSE (model.ensureProperty (Identifier ("missing")));
+    EXPECT_FALSE (model.getTypeInfo().hasProperty (Identifier ("missing")));
+
+    EXPECT_TRUE (model.ensureProperty (Identifier ("tempo")));
+    ASSERT_NE (model.getTypeInfo().findProperty (Identifier ("tempo")), nullptr);
+    EXPECT_EQ (model.getTypeInfo().findProperty (Identifier ("tempo"))->type, ComponentProperty::Type::number);
+    EXPECT_DOUBLE_EQ (static_cast<double> (model.getProperty (Identifier ("tempo"))), 120.0);
+
+    // It is kept with the ones the provider lists, and the type info with it
+    const auto* info = &model.getTypeInfo();
+    model.refreshProperties();
+    EXPECT_TRUE (model.ensureProperty (Identifier ("tempo")));
+    EXPECT_EQ (&model.getTypeInfo(), info);
 }

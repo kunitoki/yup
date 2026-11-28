@@ -163,3 +163,122 @@ TEST_F (FlexBoxComponentTests, ColumnDirectionCanBeOverriddenByStyleSheet)
     EXPECT_EQ (first.getBounds(), Rectangle<float> (0.0f, 0.0f, 50.0f, 40.0f));
     EXPECT_EQ (second.getBounds(), Rectangle<float> (50.0f, 0.0f, 50.0f, 40.0f));
 }
+
+TEST_F (FlexBoxComponentTests, FitsARowToItsChildren)
+{
+    RowComponent row;
+    row.addAndMakeVisible (first);
+    row.addAndMakeVisible (second);
+
+    first.setProperty (Identifier ("preferredWidth"), 30.0);
+    first.setProperty (Identifier ("preferredHeight"), 20.0);
+    second.setProperty (Identifier ("preferredWidth"), 40.0);
+    second.setProperty (Identifier ("preferredHeight"), 10.0);
+    second.setProperty (Identifier ("margin"), 2.0);
+
+    row.setGap (5.0f);
+    row.setPadding (EdgeSpacing<float> (4.0f));
+    row.setFitContent (true);
+
+    EXPECT_FLOAT_EQ (row.findPropertyAs<float> (Identifier ("preferredWidth")), 4.0f + 30.0f + 5.0f + 44.0f + 4.0f);
+    EXPECT_FLOAT_EQ (row.findPropertyAs<float> (Identifier ("preferredHeight")), 4.0f + 20.0f + 4.0f);
+}
+
+TEST_F (FlexBoxComponentTests, FitsNestedContainersFromTheInnermostOut)
+{
+    ColumnComponent column;
+    RowComponent row;
+    column.addAndMakeVisible (row);
+    row.addAndMakeVisible (first);
+    row.addAndMakeVisible (second);
+
+    for (auto* child : { &first, &second })
+    {
+        child->setProperty (Identifier ("preferredWidth"), 50.0);
+        child->setProperty (Identifier ("preferredHeight"), 30.0);
+    }
+
+    column.setPadding (EdgeSpacing<float> (10.0f));
+    column.setFitContent (true);
+    row.setFitContent (true);
+
+    EXPECT_FLOAT_EQ (column.findPropertyAs<float> (Identifier ("preferredWidth")), 120.0f);
+    EXPECT_FLOAT_EQ (column.findPropertyAs<float> (Identifier ("preferredHeight")), 50.0f);
+
+    column.setBounds (0, 0, 120, 50);
+
+    EXPECT_EQ (row.getBounds(), Rectangle<float> (10.0f, 10.0f, 100.0f, 30.0f));
+    EXPECT_EQ (second.getBounds(), Rectangle<float> (50.0f, 0.0f, 50.0f, 30.0f));
+}
+
+TEST_F (FlexBoxComponentTests, FitsAgainWhenAChildIsHidden)
+{
+    RowComponent row;
+    row.addAndMakeVisible (first);
+    row.addAndMakeVisible (second);
+
+    first.setProperty (Identifier ("preferredWidth"), 30.0);
+    second.setProperty (Identifier ("preferredWidth"), 40.0);
+    row.setFitContent (true);
+
+    second.setVisible (false);
+
+    EXPECT_FLOAT_EQ (row.findPropertyAs<float> (Identifier ("preferredWidth")), 30.0f);
+}
+
+TEST_F (FlexBoxComponentTests, FitsNestedContainersBuiltInABatch)
+{
+    RowComponent outer;
+    ColumnComponent inner;
+    Component third { "third" };
+
+    {
+        const LayoutComponent::ScopedLayoutBatch batch;
+
+        outer.setFitContent (true);
+        inner.setFitContent (true);
+        outer.addAndMakeVisible (first);
+        outer.addAndMakeVisible (inner);
+        inner.addAndMakeVisible (second);
+        inner.addAndMakeVisible (third);
+
+        for (auto* child : { &first, &second, &third })
+        {
+            child->setProperty (Identifier ("preferredWidth"), 40.0);
+            child->setProperty (Identifier ("preferredHeight"), 30.0);
+        }
+    }
+
+    EXPECT_FLOAT_EQ (outer.findPropertyAs<float> (Identifier ("preferredWidth")), 80.0f);
+    EXPECT_FLOAT_EQ (outer.findPropertyAs<float> (Identifier ("preferredHeight")), 60.0f);
+
+    outer.setBounds (0, 0, 80, 60);
+
+    EXPECT_EQ (inner.getBounds(), Rectangle<float> (40.0f, 0.0f, 40.0f, 60.0f));
+    EXPECT_EQ (third.getBounds(), Rectangle<float> (0.0f, 30.0f, 40.0f, 30.0f));
+}
+
+TEST_F (FlexBoxComponentTests, FitsOnlyTheAxesItIsAskedTo)
+{
+    RowComponent row;
+    row.addAndMakeVisible (first);
+    row.addAndMakeVisible (second);
+
+    first.setProperty (Identifier ("preferredWidth"), 30.0);
+    first.setProperty (Identifier ("preferredHeight"), 20.0);
+    second.setProperty (Identifier ("preferredWidth"), 40.0);
+    second.setProperty (Identifier ("preferredHeight"), 10.0);
+
+    row.setProperty (Identifier ("preferredWidth"), 100.0);
+    row.setFitAxes (false, true);
+    row.setFitContent (true);
+
+    EXPECT_FLOAT_EQ (row.findPropertyAs<float> (Identifier ("preferredWidth")), 100.0f);
+    EXPECT_FLOAT_EQ (row.findPropertyAs<float> (Identifier ("preferredHeight")), 20.0f);
+
+    // Its width stays when the children it would fit to are hidden
+    first.setVisible (false);
+    second.setVisible (false);
+
+    EXPECT_FLOAT_EQ (row.findPropertyAs<float> (Identifier ("preferredWidth")), 100.0f);
+}

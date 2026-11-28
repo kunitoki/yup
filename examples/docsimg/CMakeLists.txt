@@ -37,6 +37,8 @@ yup_standalone_app (
     TARGET_APP_NAMESPACE "org.yup"
     DEFINITIONS
         "YUP_DOCSIMG_PATH=\"${CMAKE_CURRENT_LIST_DIR}\""
+    PRECOMPILE_HEADERS
+        <yup_gui/yup_gui.h>
     MODULES
         yup::yup_core
         yup::yup_events

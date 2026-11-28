@@ -131,6 +131,26 @@ void FlexBoxComponent::performLayout (Rectangle<float> area)
     flexBox.performLayout (area);
 }
 
+std::optional<Size<float>> FlexBoxComponent::measureContent() const
+{
+    const auto direction = getDirection();
+    const bool isRow = direction == FlexBox::Direction::row || direction == FlexBox::Direction::rowReverse;
+    const auto children = getLayoutChildren();
+
+    // One line, as if the children did not wrap: their sum along the direction, the largest of them across it
+    float along = getGap() * static_cast<float> (jmax (0, static_cast<int> (children.size()) - 1));
+    float across = 0.0f;
+
+    for (const auto* child : children)
+    {
+        const auto size = getMeasuredItemSize (*child);
+        along += isRow ? size.getWidth() : size.getHeight();
+        across = jmax (across, isRow ? size.getHeight() : size.getWidth());
+    }
+
+    return isRow ? Size<float> (along, across) : Size<float> (across, along);
+}
+
 //==============================================================================
 
 const ComponentTypeInfo& RowComponent::getClassTypeInfo()

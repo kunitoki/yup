@@ -59,3 +59,21 @@ TEST_F (StackComponentTests, AlignsASizedChild)
 
     EXPECT_EQ (first.getBounds(), Rectangle<float> (80.0f, 20.0f, 20.0f, 10.0f));
 }
+
+TEST_F (StackComponentTests, FitsToItsLargestChild)
+{
+    StackComponent stack;
+    stack.addAndMakeVisible (first);
+    stack.addAndMakeVisible (second);
+
+    first.setProperty (Identifier ("preferredWidth"), 60.0);
+    first.setProperty (Identifier ("preferredHeight"), 10.0);
+    second.setProperty (Identifier ("preferredWidth"), 20.0);
+    second.setProperty (Identifier ("preferredHeight"), 30.0);
+
+    stack.setPadding (EdgeSpacing<float> (5.0f));
+    stack.setFitContent (true);
+
+    EXPECT_FLOAT_EQ (stack.findPropertyAs<float> (Identifier ("preferredWidth")), 70.0f);
+    EXPECT_FLOAT_EQ (stack.findPropertyAs<float> (Identifier ("preferredHeight")), 40.0f);
+}

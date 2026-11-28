@@ -75,6 +75,20 @@ public:
     */
     void refreshProperties();
 
+    /** Makes sure the model has a property, asking the provider for one it does not list.
+
+        A provider may expose more values than BindingProvider::getProperties() lists, such as the
+        ones it only finds by name or makes when they are first asked for. The provider is asked
+        with BindingProvider::findProperty(), and what it finds is kept with the listed ones from
+        then on. Links, handlers and expressions call this for a property the model does not have,
+        so `params.cutoff` binds when `cutoff` is not among the listed properties.
+
+        @param name  The property to look for.
+
+        @returns true when the model has the property.
+    */
+    bool ensureProperty (const Identifier& name);
+
     /** Bridges `pressed` state changes on @p component to gesture begin/end calls for @p property. */
     void trackGestures (Component& component, const Identifier& property);
 
@@ -102,6 +116,7 @@ private:
 
     BindingProvider* provider = nullptr;
     std::unique_ptr<ComponentTypeInfo> info;
+    std::vector<BindingProvider::Property> foundByName;
     std::vector<Tracked> tracked;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BindingModel)

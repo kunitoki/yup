@@ -59,10 +59,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: hendrikmuhs/ccache-action@v1.2
+      - uses: ./.github/actions/ccache
         with:
           key: yui-tool
-          max-size: 1G
+          max-size: 250M
 
       - name: Build the tool
         run: |
