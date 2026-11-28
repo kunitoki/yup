@@ -871,14 +871,59 @@ class AUInstance : public AudioPluginInstance, private AudioParameter::Listener
         if (unit == nullptr)
             return nullptr;
 
-        AudioBusLayout busLayout = makeBusLayout(desc, acd.componentType);
+        auto loadedDesc = desc;
 
-        auto instance = std::make_unique<AUInstance>(desc, unit, std::move(busLayout));
+        if (acd.componentType == kAudioUnitType_MIDIProcessor && loadedDesc.numOutputChannels <= 0)
+            loadedDesc.numOutputChannels = getBusChannelCount(unit, kAudioUnitScope_Output);
+
+        if ((acd.componentType == kAudioUnitType_MusicDevice || acd.componentType == kAudioUnitType_MIDIProcessor)
+            && loadedDesc.numInputChannels <= 0)
+            loadedDesc.numInputChannels = getBusChannelCount(unit, kAudioUnitScope_Input);
+
+        if (loadedDesc.numMidiOutputPorts <= 0 && hasMidiOutput(unit))
+            loadedDesc.numMidiOutputPorts = 1;
+
+        AudioBusLayout busLayout = makeBusLayout(loadedDesc, acd.componentType);
+
+        auto instance = std::make_unique<AUInstance>(loadedDesc, unit, std::move(busLayout));
         instance->setNonRealtime(context.isNonRealtime);
         return instance;
     }
 
    private:
+    /** Whether the AU names MIDI outputs (kAudioUnitProperty_MIDIOutputCallbackInfo), which an instrument may have */
+    static bool hasMidiOutput(AudioUnit unit)
+    {
+        CFArrayRef names = nullptr;
+        UInt32 size = sizeof(names);
+
+        if (AudioUnitGetProperty(unit, kAudioUnitProperty_MIDIOutputCallbackInfo, kAudioUnitScope_Global, 0, &names, &size) != noErr
+            || names == nullptr)
+            return false;
+
+        const auto count = CFArrayGetCount(names);
+        CFRelease(names);
+        return count > 0;
+    }
+
+    /** The channels of the first bus of a scope, or 0 when the AU has none there. */
+    static int getBusChannelCount(AudioUnit unit, AudioUnitScope scope)
+    {
+        UInt32 elementCount = 0;
+        UInt32 size = sizeof(elementCount);
+
+        if (AudioUnitGetProperty(unit, kAudioUnitProperty_ElementCount, scope, 0, &elementCount, &size) != noErr || elementCount == 0)
+            return 0;
+
+        AudioStreamBasicDescription format{};
+        size = sizeof(format);
+
+        if (AudioUnitGetProperty(unit, kAudioUnitProperty_StreamFormat, scope, 0, &format, &size) != noErr)
+            return 0;
+
+        return static_cast<int>(format.mChannelsPerFrame);
+    }
+
     static AudioBusLayout makeBusLayout(const AudioPluginDescription& desc, OSType componentType)
     {
         std::vector<AudioBus> inputs;
@@ -1265,7 +1310,11 @@ class AUInstance : public AudioPluginInstance, private AudioParameter::Listener
             *outIsRecording = position->getIsRecording();
 
         if (outTransportStateChanged != nullptr)
-            *outTransportStateChanged = false;
+        {
+            const bool isPlaying = position->getIsPlaying();
+            *outTransportStateChanged = instance->lastReportedPlaying.has_value() && *instance->lastReportedPlaying != isPlaying;
+            instance->lastReportedPlaying = isPlaying;
+        }
 
         if (outCurrentSampleInTimeLine != nullptr)
         {
@@ -1276,21 +1325,16 @@ class AUInstance : public AudioPluginInstance, private AudioParameter::Listener
             *outCurrentSampleInTimeLine = static_cast<Float64> (*timeInSamples);
         }
 
+        const auto loopPoints = position->getLoopPoints();
+
         if (outIsCycling != nullptr)
-            *outIsCycling = position->getIsLooping();
+            *outIsCycling = loopPoints.has_value() && position->getIsLooping();
 
-        if (outCycleStartBeat != nullptr || outCycleEndBeat != nullptr)
-        {
-            const auto loopPoints = position->getLoopPoints();
-            if (! loopPoints.has_value())
-                return kAudioUnitErr_CannotDoInCurrentContext;
+        if (outCycleStartBeat != nullptr)
+            *outCycleStartBeat = loopPoints.has_value() ? loopPoints->ppqStart : 0.0;
 
-            if (outCycleStartBeat != nullptr)
-                *outCycleStartBeat = loopPoints->ppqStart;
-
-            if (outCycleEndBeat != nullptr)
-                *outCycleEndBeat = loopPoints->ppqEnd;
-        }
+        if (outCycleEndBeat != nullptr)
+            *outCycleEndBeat = loopPoints.has_value() ? loopPoints->ppqEnd : 0.0;
 
         return noErr;
     }
@@ -1304,8 +1348,8 @@ class AUInstance : public AudioPluginInstance, private AudioParameter::Listener
             if (message.isSysEx())
             {
                 MusicDeviceSysEx(audioUnit,
-                                 message.getSysExData(),
-                                 static_cast<UInt32>(message.getSysExDataSize()));
+                                 metadata.data,
+                                 static_cast<UInt32>(metadata.numBytes));
                 continue;
             }
 
@@ -1336,9 +1380,33 @@ class AUInstance : public AudioPluginInstance, private AudioParameter::Listener
 
         for (UInt32 i = 0; i < packetList->numPackets; ++i)
         {
-            instance->currentMidiOutputBuffer->addEvent(packet->data,
-                                                        packet->length,
-                                                        static_cast<int>(packet->timeStamp));
+            const auto* data = packet->data;
+            const int size = static_cast<int>(packet->length);
+            const auto time = static_cast<int>(packet->timeStamp);
+
+            for (int offset = 0; offset < size;)
+            {
+                int length = 1;
+
+                if (data[offset] == 0xf0)
+                {
+                    while (offset + length < size && data[offset + length - 1] != 0xf7)
+                        ++length;
+                }
+                else if (data[offset] >= 0x80)
+                {
+                    length = jmin(size - offset, MidiMessage::getMessageLengthFromFirstByte(data[offset]));
+                }
+                else
+                {
+                    ++offset;   // a stray data byte (running status isn't used in packets)
+                    continue;
+                }
+
+                instance->currentMidiOutputBuffer->addEvent(data + offset, length, time);
+                offset += jmax(1, length);
+            }
+
             packet = MIDIPacketNext(packet);
         }
 
@@ -1415,16 +1483,57 @@ class AUInstance : public AudioPluginInstance, private AudioParameter::Listener
             }
 
             const auto name = makeParameterName(info, paramId);
-            const auto range = makeParameterRange(info);
+            const bool isIndexed = info.unit == kAudioUnitParameterUnit_Indexed;
+            const bool isBoolean = info.unit == kAudioUnitParameterUnit_Boolean;
+            const bool hasValueStrings = (info.flags & kAudioUnitParameterFlag_ValuesHaveStrings) != 0;
+            auto range = makeParameterRange(info);
+
+            if ((isIndexed || isBoolean) && range.end > range.start)
+                range = NormalisableRange<float>(range.start, range.end, 1.0f);
+
+            auto valueStrings = std::make_shared<StringArray>(isIndexed ? getParameterValueStrings(paramId) : StringArray());
             releaseParameterInfoStrings(info);
 
-            auto param = AudioParameterBuilder()
-                             .withID(name + "_" + String(paramId))
-                             .withName(name)
-                             .withRange(range)
-                             .withDefault(info.defaultValue)
-                             .withSmoothing(0.0f)
-                             .build();
+            AudioParameterBuilder builder;
+            builder.withID(String(paramId))   // the AU's parameter id, as hosts know it
+                .withName(name)
+                .withRange(range)
+                .withDefault(info.defaultValue)
+                .withSmoothing(0.0f)
+                .withStepped(isIndexed || isBoolean)
+                .withEnum(isIndexed)
+                .withAutomatable((info.flags & kAudioUnitParameterFlag_NonRealTime) == 0);
+
+            if (! valueStrings->isEmpty() || hasValueStrings)
+            {
+                const auto minimum = range.start;
+
+                builder.withValueToString([this, paramId, valueStrings, minimum, hasValueStrings](float value)
+                {
+                    if (const auto index = roundToInt(value - minimum); isPositiveAndBelow(index, valueStrings->size()))
+                        return (*valueStrings)[index];
+
+                    if (hasValueStrings)
+                        if (const auto text = getParameterStringFromValue(paramId, value); text.isNotEmpty())
+                            return text;
+
+                    return String(value, 2);
+                });
+
+                builder.withStringToValue([this, paramId, valueStrings, minimum, hasValueStrings](const String& text)
+                {
+                    if (const auto index = valueStrings->indexOf(text); index >= 0)
+                        return minimum + static_cast<float>(index);
+
+                    if (hasValueStrings)
+                        if (const auto value = getParameterValueFromString(paramId, text))
+                            return *value;
+
+                    return text.getFloatValue();
+                });
+            }
+
+            auto param = builder.build();
 
             param->addListener(this);
 
@@ -1435,6 +1544,59 @@ class AUInstance : public AudioPluginInstance, private AudioParameter::Listener
         }
 
         syncParameterValuesFromAudioUnit();
+    }
+
+    /** The names of an indexed parameter's values (kAudioUnitProperty_ParameterValueStrings), if the AU has them */
+    StringArray getParameterValueStrings(AudioUnitParameterID paramId) const
+    {
+        StringArray strings;
+        CFArrayRef array = nullptr;
+        UInt32 size = sizeof(array);
+
+        if (AudioUnitGetProperty(audioUnit, kAudioUnitProperty_ParameterValueStrings, kAudioUnitScope_Global, paramId, &array, &size) != noErr
+            || array == nullptr)
+            return strings;
+
+        for (CFIndex i = 0; i < CFArrayGetCount(array); ++i)
+            strings.add(String::fromCFString(static_cast<CFStringRef>(CFArrayGetValueAtIndex(array, i))));
+
+        CFRelease(array);
+        return strings;
+    }
+
+    /** A value's text from the AU (kAudioUnitProperty_ParameterStringFromValue), or an empty string */
+    String getParameterStringFromValue(AudioUnitParameterID paramId, float value) const
+    {
+        AudioUnitParameterValue parameterValue = value;
+        AudioUnitParameterStringFromValue request{};
+        request.inParamID = paramId;
+        request.inValue = &parameterValue;
+        UInt32 size = sizeof(request);
+
+        if (AudioUnitGetProperty(audioUnit, kAudioUnitProperty_ParameterStringFromValue, kAudioUnitScope_Global, 0, &request, &size) != noErr
+            || request.outString == nullptr)
+            return {};
+
+        const auto text = String::fromCFString(request.outString);
+        CFRelease(request.outString);
+        return text;
+    }
+
+    /** A text's value from the AU (kAudioUnitProperty_ParameterValueFromString), if it can read it */
+    std::optional<float> getParameterValueFromString(AudioUnitParameterID paramId, const String& text) const
+    {
+        AudioUnitParameterValueFromString request{};
+        request.inParamID = paramId;
+        request.inString = text.toCFString();
+        UInt32 size = sizeof(request);
+
+        const auto result = AudioUnitGetProperty(audioUnit, kAudioUnitProperty_ParameterValueFromString, kAudioUnitScope_Global, 0, &request, &size);
+        CFRelease(request.inString);
+
+        if (result != noErr)
+            return std::nullopt;
+
+        return static_cast<float>(request.outValue);
     }
 
     void installParameterEventListener()
@@ -1578,6 +1740,7 @@ class AUInstance : public AudioPluginInstance, private AudioParameter::Listener
     MidiBuffer* currentMidiOutputBuffer = nullptr;
     AudioPlayHead* currentPlayHead = nullptr;
     bool currentPlayHeadPositionQueried = false;
+    std::optional<bool> lastReportedPlaying;    // The playing state the AU was last given (transport state changed)
     std::optional<AudioPlayHead::PositionInfo> currentPlayHeadPosition;
     int currentInputNumChannels = 0;
     int currentInputNumSamples = 0;

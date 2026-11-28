@@ -731,6 +731,8 @@ private:
             shouldSendStateChange.store (true);
     }
 
+    ScopedYupInitialiser_GUI scopeInitialiser;
+
 public:
     UridMap urids;
     double sampleRate = 44100.0;

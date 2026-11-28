@@ -70,10 +70,10 @@ public:
     /** Returns the bus layout. */
     const AudioBusLayout& getBusLayout() const noexcept { return busLayout; }
 
-    /** Returns the number of audio outputs. */
+    /** Returns the number of audio output buses (not channels: see AudioBusLayout::getNumAudioOutputChannels). */
     int getNumAudioOutputs() const;
 
-    /** Returns the number of audio inputs. */
+    /** Returns the number of audio input buses (not channels: see AudioBusLayout::getNumAudioInputChannels). */
     int getNumAudioInputs() const;
 
     /** Returns true if the processor can run with the given layout.

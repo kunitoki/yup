@@ -118,8 +118,8 @@ void addMidiMessageToVST3Events (Vst::EventList& events, const MidiMessageMetada
     {
         event.type = Vst::Event::kDataEvent;
         event.data.type = Vst::DataEvent::kMidiSysEx;
-        event.data.bytes = message.getSysExData();
-        event.data.size = static_cast<uint32> (message.getSysExDataSize());
+        event.data.bytes = metadata.data;
+        event.data.size = static_cast<uint32> (metadata.numBytes);
         events.addEvent (event);
         return;
     }
@@ -255,9 +255,14 @@ void addVST3EventToMidiBuffer (const Vst::Event& event, MidiBuffer& midiBuffer)
             break;
 
         case Vst::Event::kDataEvent:
-            if (event.data.type == Vst::DataEvent::kMidiSysEx)
-                midiBuffer.addEvent (MidiMessage::createSysExMessage (event.data.bytes, static_cast<int> (event.data.size)),
-                                     event.sampleOffset);
+            if (event.data.type == Vst::DataEvent::kMidiSysEx && event.data.bytes != nullptr && event.data.size > 0)
+            {
+                if (event.data.bytes[0] == 0xf0)
+                    midiBuffer.addEvent (event.data.bytes, static_cast<int> (event.data.size), event.sampleOffset);
+                else
+                    midiBuffer.addEvent (MidiMessage::createSysExMessage (event.data.bytes, static_cast<int> (event.data.size)),
+                                         event.sampleOffset);
+            }
             break;
 
         case Vst::Event::kLegacyMIDICCOutEvent:
@@ -1683,7 +1688,7 @@ public:
         if (rawFactory == nullptr)
             return nullptr;
 
-        IPtr<IPluginFactory> factory (rawFactory);
+        IPtr<IPluginFactory> factory (rawFactory, false);
 
         // Find the component class matching identifier
         const int classCount = factory->countClasses();
@@ -2363,15 +2368,18 @@ private:
         if (const auto flags = pendingRestartFlags.exchange (0); flags != 0)
             handleRestartComponent (flags);
 
-        toController.flush ([this] (int slot, Vst::ParamValue value, uint8)
+        toController.flush ([this] (int slot, Vst::ParamValue value, uint8 flags)
         {
             const auto id = allVST3ParameterIds[static_cast<std::size_t> (slot)];
 
             if (vst3Controller != nullptr)
                 vst3Controller->setParamNormalized (id, value);
 
-            if (auto param = getParameterForVST3Id (id))
-                param->setNormalizedValue (static_cast<float> (value));
+            if ((flags & AudioPluginParameterMailbox::valueFromPlugin) != 0)
+            {
+                if (auto param = getParameterForVST3Id (id))
+                    param->setNormalizedValue (static_cast<float> (value));
+            }
 
             if (id == bypassParameterId)
                 setBypassed (value >= 0.5);
@@ -2611,6 +2619,7 @@ private:
             {
                 addInputParameterChange (mapped->first, metadata.samplePosition, mapped->second);
                 toController.set (mapped->first, mapped->second);
+                toController.post (mapped->first, AudioPluginParameterMailbox::valueFromPlugin);
                 continue;
             }
 
@@ -2634,7 +2643,11 @@ private:
             int32 sampleOffset = 0;
             Vst::ParamValue value = 0.0;
             if (queue->getPoint (queue->getPointCount() - 1, sampleOffset, value) == kResultTrue)
-                toController.set (findSlotForVST3Id (queue->getParameterId()), value);
+            {
+                const auto slot = findSlotForVST3Id (queue->getParameterId());
+                toController.set (slot, value);
+                toController.post (slot, AudioPluginParameterMailbox::valueFromPlugin);
+            }
         }
     }
 
@@ -2814,7 +2827,7 @@ ResultValue<std::vector<AudioPluginDescription>> scanVST3Factory (const File& fi
     if (rawFactory == nullptr)
         return makeResultValueFail ("No factory in " + file.getFullPathName());
 
-    IPtr<IPluginFactory> factory (rawFactory);
+    IPtr<IPluginFactory> factory (rawFactory, false);
     auto* factory2 = FUnknownPtr<IPluginFactory2> (factory).getInterface();
 
     std::vector<AudioPluginDescription> results;
