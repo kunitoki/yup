@@ -235,9 +235,21 @@ void AudioThumbnail::paintChannel (Graphics& g,
     // Set fill color for drawing
     g.setFillColor (getChannelColor (channelIndex).withAlpha (0.9f));
 
-    // Draw one vertical bar per pixel column
+    // Draw one vertical bar per pixel column, leaving out the ones outside what is being repainted
     const float x0 = lane.getX();
-    for (int pixel = 0; pixel < pixelColumns; ++pixel)
+    const int firstColumn = static_cast<int> (x0);
+    const auto repaintedArea = g.getClipPath().getBounds();
+
+    int firstPixel = 0;
+    int endPixel = pixelColumns;
+
+    if (! repaintedArea.isEmpty())
+    {
+        firstPixel = jlimit (0, pixelColumns, static_cast<int> (std::floor (repaintedArea.getX())) - firstColumn);
+        endPixel = jlimit (firstPixel, pixelColumns, static_cast<int> (std::ceil (repaintedArea.getRight())) - firstColumn);
+    }
+
+    for (int pixel = firstPixel; pixel < endPixel; ++pixel)
     {
         const int peakStart = startPeak + static_cast<int> (pixel * peaksPerPixelColumn);
         int peakEnd = startPeak + static_cast<int> ((pixel + 1) * peaksPerPixelColumn);
@@ -273,7 +285,7 @@ void AudioThumbnail::paintChannel (Graphics& g,
         const float height = jmax (minLineHeight, bottom - top);
 
         // Use integer coordinates to avoid antialiasing gaps
-        const int x = static_cast<int> (x0) + pixel;
+        const int x = firstColumn + pixel;
         const int y = static_cast<int> (top);
         const int h = static_cast<int> (height) + 1;
 

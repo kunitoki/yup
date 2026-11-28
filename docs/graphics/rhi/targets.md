@@ -8,8 +8,7 @@ differ in whether they carry a 2D drawing context.
 | --- | --- | --- |
 | Render-pass rendering (`beginRenderPass`) | ✅ | ✅ |
 | 2D `Graphics` drawing (`beginDraw`) | ❌ | ✅ |
-| Dedicated render context | No (uses main context) | Yes |
-| Cost | Minimal | Higher (allocates a 2D context) |
+| 2D render context | None | Leased from the device for each frame |
 | Use for | Custom pipeline work, post-process | Mixed 2D drawing + custom passes |
 
 **Rule of thumb:** if you only need custom `GpuPipeline` passes, use `GpuTarget`.
@@ -17,8 +16,8 @@ If you also need to draw 2D vector content onto the surface, use `GpuCanvas`.
 
 ## `GpuTarget`
 
-The minimal offscreen render surface. It allocates a backing texture from the
-context's main render context - no dedicated 2D context is created.
+The minimal offscreen render surface: a backing texture, with no 2D render
+context.
 
 ```cpp
 static GpuTarget::Ptr GpuTarget::create (GpuDevice::Ptr ctx, int width, int height);
@@ -121,8 +120,11 @@ path in the backend layer.
 
 ## `GpuCanvas`
 
-Builds on a `GpuTarget` but is backed by a **dedicated render context**, adding
-2D `Graphics` drawing via `beginDraw()` / `commit()`. It consolidates creation,
+Builds on a `GpuTarget` and adds 2D `Graphics` drawing via `beginDraw()` /
+`commit()`. Each frame is drawn with a render context leased from the device
+until it is committed, so the canvases of an interface share the few contexts
+their frames need at once, and a canvas drawn inside the frame of another
+always gets one of its own. It consolidates creation,
 rendering, and readback of an offscreen surface into one object, replacing the
 lower-level `GpuDevice::createOffscreenTarget` / `beginOffscreen` /
 `endOffscreen` API.

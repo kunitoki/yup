@@ -155,6 +155,7 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "context/yup_GraphicsContext.cpp"
 #include "primitives/yup_Path.cpp"
 #include "primitives/yup_PathMarkers.cpp"
+#include "primitives/yup_PolylineReduction.cpp"
 #include "primitives/yup_Matrix4.cpp"
 #include "primitives/yup_Quaternion.cpp"
 #include "primitives/yup_Ray.cpp"

@@ -253,6 +253,24 @@ public:
     */
     std::function<void()> onTextChange;
 
+    /** Called when Return is pressed in a single line editor, which then keeps the key.
+
+        While it is null the key goes to the components around, as it has no use for a single line.
+        A multi line editor breaks the line and does not call it. The callback may hide or remove
+        the editor.
+    */
+    std::function<void()> onReturnKey;
+
+    /** Called when Escape is pressed, which the editor then keeps.
+
+        While it is null the key goes to the components around. The callback may hide or remove
+        the editor.
+    */
+    std::function<void()> onEscapeKey;
+
+    /** Called when the editor loses the keyboard focus. */
+    std::function<void()> onFocusLost;
+
     //==============================================================================
     /** Returns the current font.
 
@@ -308,6 +326,10 @@ public:
         static const Identifier cornerRadiusId;        /**< Corner radius, 4 by default */
         static const Identifier outlineWidthId;        /**< Outline width, 1 by default */
         static const Identifier focusedOutlineWidthId; /**< Outline width with keyboard focus, 2 by default */
+
+        static const Identifier selectionPartId;       /**< Name of the part that is the background of the selected text: `part selection { }` in a drawing */
+        static const Identifier textPartId;            /**< Name of the part that is the text: `part text { }` in a drawing */
+        static const Identifier caretPartId;           /**< Name of the part that is the caret: `part caret { }` in a drawing */
     };
 
     //==============================================================================

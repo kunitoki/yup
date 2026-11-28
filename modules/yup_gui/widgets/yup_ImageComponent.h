@@ -28,6 +28,9 @@ namespace yup
 /**
     A component that displays a raster @ref Image or an SVG @ref Drawable fitted into its bounds.
 
+    As every widget it is painted by its style: the one set on it, or else the one the theme sets
+    for the type, which fits, aligns and fades the image as the component is set to.
+
     In `.yui` markup this component is registered under the `Image` type name:
 
     @code
@@ -39,11 +42,18 @@ namespace yup
     }
     @endcode
 
-    @see Image, Drawable, Fitting, Justification
+    The file a `source` names is read through the document the component is in (see
+    ComponentDocument::readAssetFor): from a folder, embedded resources or the unsaved text of an
+    editor. It is read again when the document tells that it changed, and a source that can't be
+    loaded is listed with the problems of the document. In no document the file is read as it is:
+    an absolute path, or a path relative to the working directory.
+
+    @see Image, Drawable, Fitting, Justification, ComponentDocument
 
     @tags{GUI}
 */
 class YUP_API ImageComponent : public Component
+    , private ComponentDocument::Listener
 {
 public:
     //==============================================================================
@@ -73,17 +83,15 @@ public:
     const std::shared_ptr<Drawable>& getDrawable() const noexcept { return drawable; }
 
     //==============================================================================
-    /** Loads an image, SVG file, or `data:image/...;base64,...` URI from @p newSource. */
+    /** Loads an image, SVG file, or `data:image/...;base64,...` URI from @p newSource.
+
+        A file is read through the document the component is in at that time, so set the source
+        once the component is where it stays.
+    */
     void setSource (const String& newSource);
 
     /** Returns the source path last passed to setSource(). */
     const String& getSource() const noexcept { return source; }
-
-    /** Sets an optional base directory checked first when resolving relative @ref setSource paths. */
-    void setBaseDirectory (const File& directory);
-
-    /** Returns the base directory used to resolve relative @ref setSource paths. */
-    const File& getBaseDirectory() const noexcept { return baseDirectory; }
 
     //==============================================================================
     /** Sets how the image or drawable scales within the component bounds. */
@@ -105,22 +113,26 @@ public:
     float getImageOpacity() const noexcept { return imageOpacity; }
 
     //==============================================================================
+    struct Style
+    {
+        static const Identifier imagePartId; /**< Name of the part that is the image: `part image { }` in a drawing */
+    };
+
+    //==============================================================================
     /** Returns the static type info describing the Image type. */
     static const ComponentTypeInfo& getClassTypeInfo();
 
     /** @internal */
     const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
-    //==============================================================================
-    /** @internal */
-    void paint (Graphics& g) override;
-
 private:
     void reloadSource();
-    Rectangle<float> computeFittedBounds (Rectangle<float> sourceBounds, Rectangle<float> targetArea) const noexcept;
+    void reportSourceProblem();
+    void documentLoaded (ComponentDocument&) override;
+    void documentAssetChanged (ComponentDocument&, const String& path) override;
 
     String source;
-    File baseDirectory;
+    String sourceProblem;
     Image image;
     std::shared_ptr<Drawable> drawable;
     Fitting fitting = Fitting::scaleToFit;

@@ -90,3 +90,8 @@ constexpr int maximumYuiAgentImageSide = 4096;
     @param isPart True when the call draws a part of an interface, which may be drawn larger than all of it.
 */
 yup::Result readYuiAgentScale (const yup::var& arguments, double& scale, bool isPart = false);
+
+/** Returns the values of models as a tool tells them: a long list is the data of a meter rather than something
+    set by hand, and is told by its length.
+*/
+yup::var summarizeYuiAgentModels (const yup::var& models);

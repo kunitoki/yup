@@ -297,6 +297,7 @@ All codesigning options are macOS-only and have no effect on other platforms.
 | `OPTIONS` | list | - | Additional compile options applied to all format targets. |
 | `LINK_OPTIONS` | list | - | Additional linker options applied to all format targets. |
 | `ADDITIONAL_LIBRARIES` | list | - | Extra libraries to link into all format targets (in addition to `MODULES`). |
+| `PRECOMPILE_HEADERS` | list | - | Headers to precompile for the plugin's C++ sources, see [Precompiled headers](#precompiled-headers). |
 
 ---
 
@@ -330,6 +331,7 @@ also be used independently for non-plugin GUI applications.
 | `COMPILE_OPTIONS` | list | - | Additional compile options. |
 | `MODULES` | list | - | YUP and thirdparty module dependencies, with or without the `yup::` prefix (e.g. `yup::yup_gui yup::libpng`). |
 | `SOURCES` | list | - | Additional source files. |
+| `PRECOMPILE_HEADERS` | list | - | Headers to precompile for the target's C++ sources, see [Precompiled headers](#precompiled-headers). |
 | `LINK_OPTIONS` | list | - | Additional linker options. |
 | `BUNDLE_RESOURCES` | list | - | Files to bundle for runtime access via `File::getSpecialLocation (File::bundleDirectory)`, as `"local/path@relative/dest"` pairs. See `yup_add_bundled_resources()` below. |
 
@@ -338,6 +340,28 @@ also be used independently for non-plugin GUI applications.
 `TARGET_APP_NAMESPACE` (as `<namespace>.<TARGET_NAME>`). Unlike `yup_audio_plugin`
 it has **no** `TARGET_APP_ID` argument.
 ```
+
+#### Precompiled headers
+
+A source including `<yup_gui/yup_gui.h>` spends most of its compile time parsing it. With
+`PRECOMPILE_HEADERS` the listed headers are parsed once for the C++ sources of the target, which
+pays off from a handful of sources on and when editing one of them:
+
+```cmake
+yup_standalone_app (
+    TARGET_NAME my_app
+    TARGET_VERSION "1.0.0"
+    PRECOMPILE_HEADERS
+        <yup_gui/yup_gui.h>
+    MODULES
+        yup::yup_gui)
+```
+
+List them in angle brackets or as absolute paths, and prefer the headers that rarely change:
+every source is recompiled when one of them does. The precompiled header takes about 100 MB for
+each build configuration. The YUP and thirdparty modules compiled into the target never use it, and
+setting [`CMAKE_DISABLE_PRECOMPILE_HEADERS`](https://cmake.org/cmake/help/latest/variable/CMAKE_DISABLE_PRECOMPILE_HEADERS.html)
+turns it off, for example on a build server using a compiler cache.
 
 ##### Emscripten / WebAssembly
 
@@ -434,7 +458,8 @@ yup_add_embedded_binary_resources(<library_name>
     HEADER         <header_file_name>
     [NAMESPACE     <namespace>]
     RESOURCE_NAMES <symbol>...
-    RESOURCES      <path>... | INCLUDES <path>...)
+    [RESOURCES     <path>...]
+    [INCLUDES      <path>...])
 ```
 
 Embeds one or more arbitrary binary files directly into the executable, with no
@@ -459,14 +484,15 @@ extern const std::size_t <RESOURCE_NAME>_size;
 | `OUT_DIR` | string | *(required)* | Subdirectory under the build tree where the generated `.cpp`/`.inc`/header are written. |
 | `HEADER` | string | *(required)* | File name of the generated header declaring the symbols. |
 | `NAMESPACE` | string | - | C++ namespace wrapping the declarations. Omit for the global namespace. |
-| `RESOURCE_NAMES` | list | *(required)* | Symbol base names, one per resource. Paired positionally with `RESOURCES`. |
-| `RESOURCES` | list | *(required without `INCLUDES`)* | Source file paths to embed. Paired positionally with `RESOURCE_NAMES`. |
-| `INCLUDES` | list | - | Used instead of `RESOURCES`: byte array initializers (`.inc`) generated at build time by a custom command in the same directory, paired positionally with `RESOURCE_NAMES`. The library is built after them. |
+| `RESOURCE_NAMES` | list | *(required)* | Symbol base names, one per resource: those of the `RESOURCES` first, then those of the `INCLUDES`. |
+| `RESOURCES` | list | *(required without `INCLUDES`)* | Source file paths to embed when configuring. Paired positionally with `RESOURCE_NAMES`. |
+| `INCLUDES` | list | - | Byte array initializers (`.inc`) generated at build time by a custom command in the same directory, as `yup_shader_bundler --output-inc` writes them. The library is built after them. It can be combined with `RESOURCES`. |
 
-`RESOURCE_NAMES` and `RESOURCES` are parallel lists: the *n*-th name is bound to
-the *n*-th file. The library is regenerated only when a resource's bytes change,
-so incremental builds stay fast. The target is placed in the `EmbeddedResources`
-IDE folder.
+`RESOURCE_NAMES` and the files are parallel lists: the *n*-th name is bound to
+the *n*-th file, the `RESOURCES` counting first and the `INCLUDES` after them.
+Configuring fails when there are more or fewer names than files.
+The library is regenerated only when a resource's bytes change, so incremental
+builds stay fast. The target is placed in the `EmbeddedResources` IDE folder.
 
 #### Example
 
@@ -516,17 +542,21 @@ and embeds it through this function. See
 
 ```cmake
 yup_add_yui_resources(<library_name>
-    [BASE_DIR  <dir>]
-    [NAMESPACE <namespace>]
+    [BASE_DIR         <dir>]
+    [NAMESPACE        <namespace>]
     [VERIFY [VERIFY_MODELS <file>]]
-    FILES      <path>...)
+    FILES             <path>...
+    [ASSETS           <path>...]
+    [SHADERS          <path>...]
+    [MATERIAL_SHADERS <path>...])
 ```
 
-Embeds `.yui` files through `yup_add_embedded_binary_resources`, for
-`YuiLoader::loadResource`. Besides the byte arrays, it generates a
-`<library_name>.h` header declaring a function that finds a file by the `/`
-normalized path an `import` uses, relative to `BASE_DIR` (every file must
-reside inside `BASE_DIR`):
+Embeds `.yui` files and the files they read through
+`yup_add_embedded_binary_resources`, for `YuiLoader::loadResource`. Besides the
+byte arrays, it generates a `<library_name>.h` header declaring a function that
+finds a file by the `/` normalized path a document writes, in an `import` or in
+a property naming a file, relative to `BASE_DIR` (every file must reside inside
+`BASE_DIR`):
 
 ```cpp
 namespace <namespace>
@@ -538,15 +568,47 @@ const uint8_t* <c_identifier>_find (const char* path, std::size_t& size);
 `<c_identifier>` is `string(MAKE_C_IDENTIFIER)` applied to `<library_name>`, so
 target names containing `-` remain valid C++. It returns `nullptr` for an
 unknown path. Targets produced by `yup_add_yui_resources` can be passed in
-`MODULES` of both `yup_standalone_app` and `yup_audio_plugin`. Editing an
-embedded file configures the project again on the next build.
+`MODULES` of both `yup_standalone_app` and `yup_audio_plugin`.
 
-With `VERIFY`, the files are checked with
-[`yup_yui_tool verify`](../ui/yui/tooling.md) while configuring, and an invalid
-file fails the configuration with its errors, so a broken interface never
-reaches a release build. The tool is built for the host into the build tree the
-first time it is needed. It links `yup_gui`, so that first configuration takes
-as long as building the module. Files binding to the models of the application
+What each argument embeds, and under which path the function finds it:
+
+| Argument | Embeds | Found as |
+|---|---|---|
+| `FILES` | The `.yui` files, when configuring. | `ui.yui`, `parts/style.yui` |
+| `ASSETS` | The files a document reads besides its texts, as they are: models, textures, compiled shader bundles. When configuring. | `models/knob.glb` |
+| `SHADERS` | The GLSL fragment stages that `shader` blocks name with `fragment`. Each is compiled at build time by `yup_shader_bundler`, behind the vertex stage of `GpuImageShader`. | `fx/crt.frag.ysl` |
+| `MATERIAL_SHADERS` | The GLSL materials that `shader` blocks name with `material`. Each is compiled at build time inside the material template of `yup_renderer`, once for each tier of the renderer. | `fx/hologram.glsl.raster.ysl`, `fx/hologram.glsl.full.ysl` |
+
+- Nothing is followed: an imported `.yui` has to be in `FILES`, and a model or
+  a texture a document names in `ASSETS`.
+- The GLSL of a shader is not embedded. A document keeps naming the source and
+  reads the compiled bundle first, so the application needs no shader
+  transpiler. A shader that does not compile fails the build, with the message
+  of the compiler.
+- Shaders are compiled with the defaults of the tool: GLSL 450, every target
+  language. A shader therefore stays within the GLSL the
+  [WebGPU target](../graphics/rhi/wgsl-shaders.md) takes.
+- A material is one file, which can include the shader library of the renderer
+  (`lib/...`).
+- Editing an embedded file or asset configures the project again on the next
+  build. Editing a shader only builds its bundles again, unless `VERIFY` is
+  given.
+- Every file is listed once, and two files can't differ by the case of their
+  names alone: the file systems of macOS and Windows do not tell them apart.
+- Embed a model as a `.glb`: the buffers and the images a `.gltf` keeps in
+  other files are not read from embedded resources.
+
+With `VERIFY`, the `FILES` are checked with
+[`yup_yui_tool verify`](../ui/yui/tooling.md#checking-while-configuring) while
+configuring, and an invalid file fails the configuration with its errors, so a
+broken interface never reaches a release build. The tool loads them as the
+library serves them: it finds the files the call lists and no other, so a file
+a document reads that is not listed fails the configuration, and it compiles
+the shaders they name from their sources, so one that does not compile fails
+as well. Editing a shader then configures again. The tool is built for the
+host into the build tree the first time it is needed. It links `yup_gui_markup`,
+`yup_renderer`, `yup_audio_gui` and the shader transpiler, so that first
+configuration takes as long as building them. Files binding to the models of the application
 (`value <=> params.cutoff`) need `VERIFY_MODELS`, the JSON file declaring them.
 
 #### Arguments
@@ -556,9 +618,12 @@ as long as building the module. Files binding to the models of the application
 | `<library_name>` | string | *(required)* | Name of the generated `OBJECT` library target, also used for the header and function names. |
 | `BASE_DIR` | path | current source dir | Folder the lookup paths are relative to. |
 | `NAMESPACE` | string | `yup` | C++ namespace wrapping the function. |
-| `VERIFY` | flag | off | Check the files when configuring, failing on errors. |
-| `VERIFY_MODELS` | path | *(none)* | With `VERIFY`, the JSON file declaring the models the files bind to. |
+| `VERIFY` | flag | off | Check the `FILES` when configuring, loaded as the library serves them, failing on errors. |
+| `VERIFY_MODELS` | path | *(none)* | With `VERIFY`, the JSON file declaring the models the files bind to. Without it, each file is checked with the `<name>.models.json` next to it, when there is one. |
 | `FILES` | list | *(required)* | The `.yui` files, relative to the current source dir or absolute. |
+| `ASSETS` | list | - | Files embedded as they are: models, textures, compiled bundles, anything a document reads. |
+| `SHADERS` | list | - | GLSL 450 fragment stages, the files `shader Name { fragment: "P"; }` names. Embedded as `P.ysl`. |
+| `MATERIAL_SHADERS` | list | - | GLSL materials, the files `shader Name { material: "P"; }` names. Embedded as `P.raster.ysl` and `P.full.ysl`. |
 
 #### Example
 
@@ -566,21 +631,39 @@ as long as building the module. Files binding to the models of the application
 yup_add_yui_resources (MyAppUi
     BASE_DIR "${CMAKE_CURRENT_LIST_DIR}/ui"
     VERIFY
-    FILES ui/ui.yui ui/parts/style.yui)
+    FILES
+        ui/ui.yui
+        ui/parts/style.yui
+    ASSETS
+        ui/models/knob.glb
+        ui/textures/wood.png
+    SHADERS
+        ui/fx/crt.frag
+    MATERIAL_SHADERS
+        ui/fx/hologram.glsl)
 
 yup_standalone_app (
     # ...
-    MODULES yup::yup_gui MyAppUi)
+    MODULES yup::yup_gui_markup yup::yup_renderer MyAppUi)
 ```
 
 ```cpp
 #include <MyAppUi.h>
 
 yup::YuiLoader loader (document);
-loader.loadResource ("ui.yui", yup::MyAppUi_find); // imports "parts/style.yui"
+loader.loadResource ("ui.yui", yup::MyAppUi_find); // imports "parts/style.yui", reads "fx/crt.frag.ysl"
 ```
 
-See [Hot reloading `.yui` files](../ui/yui/hot-reload.md).
+```{tip}
+A shader that needs other options of the bundler is built with
+`yup_add_shader_bundle()` and listed in `ASSETS` under the name the document
+asks for, such as `fx/crt.frag.ysl`. See
+[Offline shader compilation](../graphics/rhi/offline-shaders.md).
+```
+
+See [Hot reloading `.yui` files](../ui/yui/hot-reload.md),
+[Shaders](../ui/yui/shaders.md#loading-and-shipping) and
+[3D scenes](../ui/yui/scenes.md#assets-and-hot-reload).
 
 ---
 
@@ -597,7 +680,8 @@ The runner is shipped as source (under `cmake/tools/test_runner`) and compiled
 into each test executable rather than linked as a prebuilt module. The helper
 compiles the runner into `<target_name>`, exposes the `<yup_test_runner.h>`
 header on its include path, and links the GoogleTest / GoogleMock targets when
-they are available.
+they are available. Test executables sharing a `TARGET_STATIC_LIBRARY` add the
+runner to that library instead, where it is compiled once for all of them.
 
 The target must already link the YUP modules the runner needs (`yup_gui` on
 desktop, `yup_events` on Emscripten). Define the entry point in one of the

@@ -354,6 +354,7 @@ GpuDevice::~GpuDevice()
     jassert (uniformBufferPool.isEmpty());
     jassert (shaderModuleCache.size() == 0);
     jassert (retiredFrames.empty());
+    jassert (ownerPipelines.empty());
 
     // A frame that never completed would leave its waiters blocked forever
     std::map<uint64_t, std::shared_ptr<GpuFrameStatus::Block>> abandoned;
@@ -379,6 +380,9 @@ void GpuDevice::releasePooledResources() noexcept
     retiredFrames.clear();
     uniformBufferPool.clear();
     shaderModuleCache.clear();
+
+    const ScopedLock sl (ownerPipelinesLock);
+    ownerPipelines.clear();
 }
 
 //==============================================================================
@@ -791,6 +795,76 @@ void GpuDevice::clearShaderBundleCache()
 {
     const ScopedLock sl (embeddedBundlesLock);
     embeddedBundles.clear();
+}
+
+void GpuDevice::releaseUnusedResources (GpuUnusedResources resources)
+{
+    if (hasBitValueSet (resources, GpuUnusedResources::shaderCaches))
+        clearShaderBundleCache();
+
+    runOnGraphicsContext ([&]
+    {
+        if (hasBitValueSet (resources, GpuUnusedResources::frameResources))
+        {
+            releaseRetiredFrames (getReleasableFrameGeneration());
+            uniformBufferPool.clear();
+
+            const ScopedLock sl (ownerPipelinesLock);
+            std::erase_if (ownerPipelines, [] (const OwnerPipeline& entry)
+            {
+                return entry.owner.expired();
+            });
+        }
+
+        if (hasBitValueSet (resources, GpuUnusedResources::shaderCaches))
+            shaderModuleCache.clear();
+
+        if (auto* renderContext = getRenderContext(); renderContext != nullptr && hasBitValueSet (resources, GpuUnusedResources::renderBuffers))
+            renderContext->releaseResources();
+
+        releaseUnusedOffscreenContexts (resources);
+    });
+}
+
+ResultValue<GpuPipeline::Ptr> GpuDevice::getOrCompilePipelineFor (const std::shared_ptr<void>& owner,
+                                                                  GpuTextureFormat format,
+                                                                  const std::function<ResultValue<GpuPipeline::Ptr> (GpuTextureFormat)>& compile)
+{
+    jassert (owner != nullptr && compile != nullptr);
+    if (owner == nullptr || compile == nullptr)
+        return makeResultValueFail ("No owner or no compiler for the pipeline");
+
+    const ScopedLock sl (ownerPipelinesLock);
+
+    // The pipelines of owners that are gone are released here, by a thread drawing with the device
+    std::erase_if (ownerPipelines, [] (const OwnerPipeline& entry)
+    {
+        return entry.owner.expired();
+    });
+
+    for (const auto& entry : ownerPipelines)
+    {
+        if (entry.format != format || entry.owner.owner_before (owner) || owner.owner_before (entry.owner))
+            continue;
+
+        if (entry.pipeline == nullptr)
+            return makeResultValueFail (entry.error);
+
+        return makeResultValueOk (entry.pipeline);
+    }
+
+    auto compiled = compile (format);
+
+    auto& entry = ownerPipelines.emplace_back();
+    entry.owner = owner;
+    entry.format = format;
+
+    if (compiled.wasOk())
+        entry.pipeline = compiled.getReference();
+    else
+        entry.error = compiled.getErrorMessage();
+
+    return compiled;
 }
 
 int GpuDevice::getShaderModuleCountForTesting() const

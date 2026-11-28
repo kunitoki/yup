@@ -76,7 +76,7 @@ struct Figure
     Factory create;        ///< Creates the component filling the figure inside its padding.
     float padding = 24.0f; ///< The space left around the component, filled with the background.
     int settleMs = 0;      ///< How long to wait before capturing, for what loads asynchronously.
-    int frames = 1;        ///< How many times to draw, keeping the last, for what refines over frames.
+    int frames = 1;        ///< How many times to draw at least, keeping the last. The scenes of a figure are drawn until they have settled anyway.
     bool themed = true;    ///< False captures once, for figures that do not follow the color mode.
 };
 

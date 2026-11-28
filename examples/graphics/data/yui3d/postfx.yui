@@ -1,0 +1,140 @@
+// Post effects: a stylesheet runs a shader over the picture of a 3D scene.
+//
+// - `effect:` names a shader block whose file reads a picture, here the one of the scene with everything inside
+//   it. The widgets around the scene are other components: they stay as they are.
+// - The toggles name the look of the scene, and a rule for each look selects its shader.
+// - The intensity is a property of the scene: a rule reads it from the slider, and a transition smooths it.
+// - The camera slides across the front of the set and the lamp sways, so the effects run on a moving picture,
+//   and the screen of the computer shows a test card for them to work on.
+
+palette Console { colors: #14161c, #35e0c2, #e9edf3; }
+
+shader Crt {
+    fragment: "fx/crt.frag";
+    property intensity: number = 0.6;
+}
+
+shader Pixelate {
+    fragment: "fx/pixelate.frag";
+    property intensity: number = 0.6;
+}
+
+// A test card: seven bars, a staircase of grays under them and a circle over both
+drawing TestCard {
+    // White, yellow, cyan, green, magenta, red and blue: three quarters of a channel, or none of it
+    let reds:   [0.75, 0.75, 0.0, 0.0, 0.75, 0.75, 0.0];
+    let greens: [0.75, 0.75, 0.75, 0.75, 0.0, 0.0, 0.0];
+    let blues:  [0.75, 0.0, 0.75, 0.0, 0.75, 0.0, 0.75];
+    let bar:    bounds.width / 7;
+
+    rect { bounds: bounds; fill: #05070c; }
+
+    repeat i in 0 .. 7 {
+        rect { bounds: rect (i * bar, 0, bar + 1, bounds.height * 0.64); fill: rgb (reds[i], greens[i], blues[i]); }
+        rect { bounds: rect (i * bar, bounds.height * 0.64, bar + 1, bounds.height * 0.14); fill: #ffffff; fillOpacity: i / 6.0; }
+    }
+
+    circle { center: point (bounds.width / 2, bounds.height * 0.39); radius: bounds.height * 0.3; fill: none; stroke: #ffffff; strokeWidth: 3; }
+}
+
+style {
+    :root  { palette: Console; }
+    .panel { cornerRadius: 10; shadow: 0 0 palette.surface.withAlpha (0.9), 0 6 18 #00000066; }
+    .title { textFillColor: palette.text; textHeightProportion: 0.6; }
+    .hint  { textFillColor: palette.textMuted; textHeightProportion: 0.5; }
+    .card  { drawing: TestCard; }
+
+    Scene3D {
+        property look: string = "crt";
+
+        intensity: amount.value;
+        transition: intensity 200ms easeOut;
+    }
+
+    Scene3D[look=crt]    { effect: Crt; }
+    Scene3D[look=pixels] { effect: Pixelate; }
+
+    // A shader is compiled the first time a component uses it: this one is used by a component nobody sees, so
+    // the picture does not wait for it when its toggle is picked
+    .warm { effect: Pixelate; }
+
+    // Two keyframes, and a `lookAt` that keeps the camera aimed while it goes from one to the other and back
+    .camera { position: [3.8, 3.1, 5.4]; animation: slide 16s easeInOut infinite alternate; }
+
+    @keyframes slide {
+        from { position: [3.8, 3.1, 5.4]; }
+        to   { position: [1.4, 2.9, 6.3]; }
+    }
+}
+
+Column {
+    padding: 12; gap: 10;
+
+    Row {
+        preferredHeight: 32; gap: 8;
+
+        Label { class: title; text: "Post effects"; flexGrow: 1; }
+
+        ToggleButton { text: "None"; radioGroup: 1; preferredWidth: 72; }
+        ToggleButton { id: crt; text: "CRT"; radioGroup: 1; checked: true; preferredWidth: 72; }
+        ToggleButton { id: pixels; text: "Pixels"; radioGroup: 1; preferredWidth: 72; }
+    }
+
+    Scene3D {
+        flexGrow: 1;
+        look: crt.checked ? "crt" : pixels.checked ? "pixels" : "none";
+
+        background: #101116; ambient: #2a3040; toneMapping: aces;
+
+        Camera3D { class: camera; lookAt: [-0.2, 0.75, 0]; fov: 34deg; }
+
+        Light3D { type: directional; position: [-3.5, 6, 3]; lookAt: [0, 0, 0]; intensity: 1.8; radius: 0.015; castsShadows: true; }
+        Light3D { type: point; position: [3.2, 2.2, -2.8]; color: #5c7cff; intensity: 40; range: 14; }
+
+        Model3D { source: "../gltf/stage.glb"; }
+
+        Model3D {
+            source: "../gltf/computer.glb";
+
+            // The lid is open: a time past the end of the clip is its end
+            clip: "Open"; time: 2;
+
+            Node3D {
+                node: "Screen"; surface: emissive;
+
+                Column {
+                    class: card; width: 416; height: 260; padding: 10; justify: end;
+
+                    Label {
+                        text: "YUP-1   TEST CARD"; preferredHeight: 38; justification: center;
+                        textFillColor: #d9fff7; textHeightProportion: 0.6;
+                    }
+                }
+            }
+        }
+
+        // The clip of the lamp loops, and the light inside its head follows the arm
+        Model3D {
+            source: "../gltf/lamp.glb"; position: [-2.03, 0, -0.54]; rotation: [0, 58deg, 0];
+            clip: "Sway"; loop: true; playing: true;
+
+            Node3D {
+                node: "LampHead";
+
+                Light3D { type: spot; color: #ffd9a8; intensity: 32; range: 9; innerCone: 22deg; outerCone: 46deg; castsShadows: true; }
+            }
+        }
+
+        Label { class: "panel hint"; text: "Inside the scene, so in its picture"; justification: center; x: 12; y: 12; width: 250; height: 28; }
+
+        Component { class: warm; visible: false; }
+    }
+
+    Row {
+        preferredHeight: 30; gap: 10;
+
+        Label  { text: "Intensity"; preferredWidth: 64; }
+        Slider { id: amount; value: 0.6; flexGrow: 1; }
+        Label  { text: format ("%.0f%%", amount.value * 100); preferredWidth: 44; justification: centerRight; }
+    }
+}

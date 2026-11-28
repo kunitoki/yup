@@ -33,6 +33,9 @@ ApplicationTheme::~ApplicationTheme() = default;
 void ApplicationTheme::setGlobalTheme (ApplicationTheme::Ptr s)
 {
     getGlobalThemeInstance() = std::move (s);
+
+    // Another theme being the global one is a change the windows look for, as a change of the theme itself
+    makeGeneration();
 }
 
 ApplicationTheme::Ptr ApplicationTheme::getGlobalTheme()
@@ -46,10 +49,90 @@ ApplicationTheme::Ptr& ApplicationTheme::getGlobalThemeInstance()
     return globalTheme;
 }
 
-uint32 ApplicationTheme::makeGeneration() noexcept
+std::atomic<uint32>& ApplicationTheme::getGenerationCounter() noexcept
 {
     static std::atomic<uint32> lastGeneration { 0 };
-    return ++lastGeneration;
+    return lastGeneration;
+}
+
+uint32 ApplicationTheme::makeGeneration() noexcept
+{
+    return ++getGenerationCounter();
+}
+
+uint32 ApplicationTheme::getLastGeneration() noexcept
+{
+    return getGenerationCounter().load();
+}
+
+//==============================================================================
+
+ComponentStyle::Ptr ApplicationTheme::findComponentStyle (const Component& component, std::type_index askedAs)
+{
+    if (auto style = component.getStyle())
+        return style;
+
+    const auto& theme = getGlobalThemeInstance();
+    if (theme == nullptr)
+        return nullptr;
+
+    const auto& styles = theme->componentStyles;
+
+    for (const auto classType : { std::type_index (typeid (component)), askedAs })
+        if (const auto found = styles.find (classType); found != styles.end())
+            return found->second;
+
+    for (const auto* type = std::addressof (component.getTypeInfo()); type != nullptr; type = type->getBaseTypeInfo())
+        if (const auto found = styles.find (type->getClassType()); found != styles.end())
+            return found->second;
+
+    return nullptr;
+}
+
+void ApplicationTheme::setComponentStyle (std::type_index classType, ComponentStyle::Ptr style)
+{
+    if (style != nullptr)
+        componentStyles.insert_or_assign (classType, std::move (style));
+    else
+        componentStyles.erase (classType);
+
+    paletteGeneration = makeGeneration();
+}
+
+//==============================================================================
+
+void ApplicationTheme::setComponentPart (const ComponentTypeInfo& type, const Identifier& partName, ComponentPartPainter painter)
+{
+    jassert (type.hasPart (partName)); // The type has to declare the part: see ComponentTypeBuilder::part
+
+    componentParts[std::addressof (type)][partName] = std::move (painter);
+    paletteGeneration = makeGeneration();
+}
+
+bool ApplicationTheme::paintComponentPart (Graphics& g, const Component& component, const Identifier& partName, const Rectangle<float>& area)
+{
+    const auto& theme = getGlobalThemeInstance();
+
+    return theme != nullptr && theme->paintPart (g, component, partName, area);
+}
+
+bool ApplicationTheme::paintPart (Graphics& g, const Component& component, const Identifier& partName, const Rectangle<float>& area) const
+{
+    for (const auto* type = std::addressof (component.getTypeInfo()); type != nullptr; type = type->getBaseTypeInfo())
+    {
+        const auto painters = componentParts.find (type);
+        if (painters == componentParts.end())
+            continue;
+
+        const auto painter = painters->second.find (partName);
+        if (painter == painters->second.end() || painter->second == nullptr)
+            continue;
+
+        painter->second (g, *this, component, area);
+        return true;
+    }
+
+    return false;
 }
 
 //==============================================================================

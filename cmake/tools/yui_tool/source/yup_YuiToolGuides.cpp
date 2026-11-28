@@ -21,7 +21,7 @@
 
 
 #include "yup_YuiToolGuides.h"
-#include "yup_YuiToolSupport.h"
+#include "yup_YuiToolView.h"
 
 #include <algorithm>
 #include <cmath>
@@ -43,7 +43,7 @@ void collectWrittenAt (YuiDocument& document, Component& component, YuiToolPlace
 
     if (const auto element = document.getBuilder().findElementFor (&component); element.isValid() && sourceMap != nullptr)
     {
-        YuiDiagnostic probe;
+        DataTreeDiagnostic probe;
         probe.element = element;
 
         const auto located = sourceMap->locate (probe);

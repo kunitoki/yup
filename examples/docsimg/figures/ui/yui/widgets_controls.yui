@@ -1,0 +1,50 @@
+// size: 560 64
+drawing Fader {
+    let y: trackBounds.centerY;
+    let x: trackBounds.x + normalized * trackBounds.width;
+
+    line { from: point (trackBounds.x, y); to: point (trackBounds.right, y); stroke: palette.outline; strokeWidth: 4; cap: round; }
+    line { from: point (trackBounds.x, y); to: point (x, y); stroke: palette.accent; strokeWidth: 4; cap: round; }
+    circle { id: thumb; center: point (x, y); radius: dragging ? 9 : 7; fill: palette.text; }
+}
+
+drawing Stepper {
+    rect { bounds: trackBounds; cornerRadius: 4; fill: palette.surface; }
+    rect { id: minus; bounds: decrementBounds.reduced (1); cornerRadius: 4; fill: pressedStep < 0 ? palette.accent : palette.surfaceRaised; }
+    rect { id: plus; bounds: incrementBounds.reduced (1); cornerRadius: 4; fill: pressedStep > 0 ? palette.accent : palette.surfaceRaised; }
+
+    text { bounds: decrementBounds; text: "-"; fill: palette.text; justification: center; }
+    text { bounds: incrementBounds; text: "+"; fill: palette.text; justification: center; }
+    text { bounds: rect (decrementBounds.right, trackBounds.y, incrementBounds.x - decrementBounds.right, trackBounds.height);
+           text: format ("%.0f", value); fill: palette.text; justification: center; }
+}
+
+drawing Switch {
+    let slot: trackBounds.reduced (4);
+
+    rect { bounds: slot; cornerRadius: slot.height / 2; fill: checked ? palette.accent : palette.surfaceRaised; }
+    ellipse { id: handle; bounds: thumbBounds.reduced (4); fill: palette.text; }
+}
+
+drawing Grip {
+    rect { bounds: trackBounds; cornerRadius: 3; fill: palette.surface; }
+    rect { id: grip; bounds: thumbBounds.reduced (3); cornerRadius: 3;
+           fill: dragging ? palette.accent : (thumbHovered ? palette.text : palette.textMuted); }
+}
+
+style {
+    .fader       { drawing: Fader; }
+    .stepper     { drawing: Stepper; }
+    SwitchButton { drawing: Switch; }
+    ScrollBar    { drawing: Grip; }
+}
+
+Row {
+    gap: 12;
+    padding: 12;
+
+    Slider { id: fader; class: fader; value: 0.6; flexGrow: 1; }
+    Slider { id: stepper; class: stepper; sliderType: incDecButtons; minimum: 0; maximum: 10; interval: 1; value: 4; preferredWidth: 120; }
+    SwitchButton { id: toggle; checked: true; preferredWidth: 56; }
+    ScrollBar { id: scroller; visibilityMode: alwaysVisible; preferredWidth: 12; }
+}

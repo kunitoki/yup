@@ -32,10 +32,10 @@ namespace yup
     the StyleContext that matches its rules and computes the values. Sheets are immutable
     once built and reference counted, so the same sheet can style several trees.
 
-    Build one straight from `.yui` text with @ref parse, or from a parsed document with
-    @ref fromTree. A sheet collects everything a document declares for styling: the rules
-    and keyframes of its `style` blocks, its palettes, and its named drawings, which rules
-    select with `drawing:`.
+    Build one with @ref fromTree, from the tree of a document. The yup_gui_markup module parses
+    that tree from `.yui` text, and without it the tree is written in code. A sheet collects
+    everything a document declares for styling: the rules and keyframes of its `style` blocks,
+    its palettes, its named drawings, which rules select with `drawing:`, and its shaders.
 
     @code
     palette Ember { colors: "#1b1b1e, #ff8800"; mode: dark; accent: #ff9a1f; }
@@ -196,25 +196,18 @@ public:
     /** Builds a sheet from a parsed document.
 
         The sheet keeps the tree, so the elements of its declarations and drawings stay in
-        their document and the diagnostics about them can be located with a YuiSourceMap.
+        their document and the diagnostics about them can be located with a DataTreeSourceMap.
 
-        @param tree     A `yui` document (see YuiParser), or a single `style` element.
+        @param tree     A `yui` document, as the parser of a `.yui` text returns it, or a single
+                        `style` element.
         @param failure  When not null, receives the first problem along with its element and
                         property, ready to be located.
 
         @returns The sheet, or a failure describing the first offending element.
     */
-    static ResultValue<Ptr> fromTree (const DataTree& tree, YuiDiagnostic* failure = nullptr);
+    static ResultValue<Ptr> fromTree (const DataTree& tree, DataTreeDiagnostic* failure = nullptr);
 
-    /** Parses `.yui` text and builds a sheet from it.
-
-        @param text The `.yui` text.
-
-        @returns The sheet, or a failure with the first diagnostic.
-    */
-    static ResultValue<Ptr> parse (const String& text);
-
-    /** Returns true when the element is a style, rule, palette, drawing or keyframes block. */
+    /** Returns true when the element is a style, rule, palette, drawing, shader or keyframes block. */
     static bool isStyleElement (const DataTree& element) noexcept;
 
     /** Returns the names of the declarations a rule takes on top of the properties of the
@@ -226,11 +219,38 @@ public:
 
         A name can be declared once for each mode: a second palette of the same mode is invalid.
     */
-    static std::optional<YuiDiagnostic> readPaletteElement (const DataTree& element, Palettes& palettes);
+    static std::optional<DataTreeDiagnostic> readPaletteElement (const DataTree& element, Palettes& palettes);
+
+    /** Reads what a `property` element declares: its name and its type.
+
+        This is the `property name: type;` a style, rule, drawing, shader, tokens or component
+        block holds, which types a custom property for what reads it. A name written with a
+        qualifier, as `Slider.thumbColor`, declares the name after it.
+
+        @param element  The element to read.
+
+        @returns The property, inherited by the components inside the one it is set on, or
+                 nothing for an element that is no `property`, or that has no name or no type.
+    */
+    static std::optional<ComponentProperty> readDeclaredProperty (const DataTree& element);
 
     //==============================================================================
     /** Returns the rules of the sheet, in source order. */
     const std::vector<Rule>& getRules() const noexcept { return rules; }
+
+    /** Finds the rules a component can match, in source order.
+
+        The sheet files each rule under what the last compound of its selector requires of a
+        component: its id, or else one of its classes, or else its type. The rules found are the
+        ones filed under the id, the classes and the types of the component, and the ones requiring
+        none of those, such as `*`, `:root`, `:hover` and `[text="Off"]`. Every rule matching the
+        component is among them, so testing them with StyleSelector::matches gives what testing
+        every rule of the sheet does.
+
+        @param component  The component to find the rules for.
+        @param candidates Receives the rules, in place of what it holds.
+    */
+    void findCandidateRules (const Component& component, std::vector<const Rule*>& candidates) const;
 
     /** Returns the keyframe sequence with a given name, or nullptr.
 
@@ -262,6 +282,17 @@ public:
     */
     DataTree findDrawing (const String& name) const;
 
+    /** Returns the shader declared under a given name, or an invalid tree.
+
+        The tree is the `shader` element: its `fragment` or `material` property holds the path of
+        the source, and each of its `property` children declares an input with its `name`, its
+        `type` and, when it has a default, the expression of its `value`. A name is declared by
+        one shader, and by no drawing.
+
+        @param name The shader name, as written after `shader`.
+    */
+    DataTree findShader (const String& name) const;
+
     /** Returns a custom property declared inside a rule of this sheet (`property name: type`), or nullptr. */
     const ComponentProperty* findDeclaredProperty (const Identifier& name) const;
 
@@ -272,19 +303,41 @@ public:
     */
     bool watchesProperty (const Identifier& name) const;
 
+    /** Returns true when changing a property on a component can change the style of its descendants.
+
+        That is so when a selector reads the property on a compound before a combinator, as in
+        `.row:hover .icon`, or as an attribute, whose value a component can take from a parent, and
+        when a rule reading it holds a qualified declaration such as `Slider.thumbColor`, which the
+        descendants inherit. A state only read as a pseudo-class of the component a rule matches, as
+        in `Slider:hover`, changes which rules that component matches and nothing below it.
+
+        @param name The property name.
+
+        @see watchesProperty, StyleSelector::selectsDescendantsBy
+    */
+    bool watchesPropertyForDescendants (const Identifier& name) const;
+
 private:
     //==============================================================================
     StyleSheet() = default;
 
-    std::optional<YuiDiagnostic> addElements (const DataTree& parent);
+    std::optional<DataTreeDiagnostic> addElements (const DataTree& parent);
+    std::optional<DataTreeDiagnostic> findSharedName() const;
+    void indexRule (const Rule& rule);
 
     DataTree tree;
     std::vector<Rule> rules;
+    std::unordered_map<String, std::vector<int>> rulesById;
+    std::unordered_map<Identifier, std::vector<int>> rulesByClass;
+    std::unordered_map<Identifier, std::vector<int>> rulesByType;
+    std::vector<int> rulesWithoutKey;
     std::vector<KeyframeSequence> keyframes;
     Palettes palettes;
     std::map<String, DataTree> drawings;
+    std::map<String, DataTree> shaders;
     std::map<Identifier, ComponentProperty> declaredProperties;
     Array<Identifier> watchedProperties;
+    Array<Identifier> descendantProperties;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StyleSheet)
 };

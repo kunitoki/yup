@@ -60,6 +60,41 @@ ComponentProperty::Type inferThemePropertyType (const var& value) noexcept
     return ComponentProperty::Type::any;
 }
 
+/* Binds elements to an array input of a state when they are of the type its program reads. Elements of another
+   type leave the input with nothing to read: what it viewed before may be gone. */
+template <class ElementType>
+void bindArrayElements (ExpressionState& state, int input, const ElementType* data, int size)
+{
+    const auto* inputType = state.getProgram().getInputType (input);
+    const auto* expected = inputType != nullptr ? inputType->getElementType() : nullptr;
+
+    if (expected == nullptr)
+        return;
+
+    if (expected->is<ElementType>())
+    {
+        state.bindArray (ExpressionArray<ElementType> { input }, data, size);
+        return;
+    }
+
+    for (const auto type : ComponentProperty::expressionTypes)
+    {
+        DrawingScope::withExpressionType (type, [&] (auto tag)
+        {
+            using Type = typename decltype (tag)::type;
+
+            if (expected->is<Type>())
+                state.bindArray (ExpressionArray<Type> { input }, static_cast<const Type*> (nullptr), 0);
+        });
+    }
+}
+
+/* Leaves an array input with nothing to read: what it viewed belongs to a component, or to a round, that may be gone. */
+void releaseArrayInput (ExpressionState& state, int input)
+{
+    bindArrayElements (state, input, static_cast<const float*> (nullptr), 0);
+}
+
 } // namespace
 
 DrawingScope::DrawingScope (Component& componentToUse, ExpressionContext& contextToUse)
@@ -227,6 +262,12 @@ DrawingScope::ResolvedProperty DrawingScope::resolve (const ParsedInput& input) 
                 return {};
 
             const auto* descriptor = target->getTypeInfo().findProperty (input.property);
+
+            // A model asks its provider for a value it does not list
+            if (descriptor == nullptr)
+                if (auto* model = dynamic_cast<BindingModel*> (target); model != nullptr && model->ensureProperty (input.property))
+                    descriptor = target->getTypeInfo().findProperty (input.property);
+
             return descriptor != nullptr ? ResolvedProperty { target, descriptor } : ResolvedProperty {};
         }
 
@@ -292,6 +333,23 @@ const ExpressionType* DrawingScope::resolveSymbol (const String& symbol) const
              : nullptr;
 }
 
+const ComponentPart* DrawingScope::findPart (const Identifier& name) const
+{
+    const auto* self = component.get();
+    return self != nullptr ? self->getTypeInfo().findPart (name) : nullptr;
+}
+
+StringArray DrawingScope::getPartNames() const
+{
+    StringArray names;
+
+    if (const auto* self = component.get())
+        for (const auto* part : self->getTypeInfo().getAllParts())
+            names.add (part->name.toString());
+
+    return names;
+}
+
 DrawingScope::BoundInputs DrawingScope::bindInputs (const CompiledExpression& program) const
 {
     BoundInputs bound;
@@ -334,7 +392,15 @@ DrawingScope::BoundInputs DrawingScope::bindInputs (const CompiledExpression& pr
 void DrawingScope::updateInputs (BoundInputs& bound, ExpressionState& state) const
 {
     auto* self = component.get();
-    if (self == nullptr || bound.inputs.empty())
+    if (self == nullptr)
+    {
+        for (const auto& input : bound.inputs)
+            releaseArrayInput (state, input.index);
+
+        return;
+    }
+
+    if (bound.inputs.empty())
         return;
 
     static const ThemePalette defaultPalette;
@@ -421,7 +487,33 @@ void DrawingScope::updateInputs (BoundInputs& bound, ExpressionState& state) con
 
         const auto resolved = resolve (input);
         if (resolved.descriptor == nullptr)
+        {
+            releaseArrayInput (state, input.index);
             continue;
+        }
+
+        if (resolved.descriptor->type == ComponentProperty::Type::array)
+        {
+            // A series is read where the component keeps it
+            if (resolved.descriptor->isSeries())
+            {
+                const auto view = resolved.descriptor->arrayGetter (*resolved.component);
+
+                bindArrayView (state, input.index, resolved.descriptor->elementType, view);
+
+                // The ones telling when they change are remembered for the round, for what is kept of them
+                if (updateRound != 0 && view.revision != 0 && findSeriesRevision (view.data) == 0)
+                    boundSeries.push_back (view);
+
+                continue;
+            }
+
+            if (updateRound != 0)
+            {
+                convertArray (*resolved.component, *resolved.descriptor, input.property).attach (state, input.index);
+                continue;
+            }
+        }
 
         setInputValue (state,
                        input.index,
@@ -450,6 +542,63 @@ void DrawingScope::setInputValue (ExpressionState& state,
 
             state.set (ExpressionInput<Type> { input }, VariantConverter<Type>::fromVar (value));
         });
+}
+
+void DrawingScope::bindArrayView (ExpressionState& state,
+                                  int input,
+                                  ComponentProperty::Type elementType,
+                                  const ComponentArrayView& view)
+{
+    withExpressionType (elementType, [&] (auto tag)
+    {
+        using Type = typename decltype (tag)::type;
+
+        bindArrayElements (state, input, static_cast<const Type*> (view.data), view.data != nullptr ? view.size : 0);
+    });
+}
+
+uint32 DrawingScope::findSeriesRevision (const void* elements) const noexcept
+{
+    for (const auto& series : boundSeries)
+    {
+        if (series.data == elements)
+            return series.revision;
+    }
+
+    return 0;
+}
+
+void DrawingScope::beginUpdates()
+{
+    boundSeries.clear();
+
+    // What the round before didn't read is not kept for the next one
+    std::erase_if (convertedArrays, [this] (const ConvertedArray& converted)
+    {
+        return converted.round != updateRound;
+    });
+
+    if (++updateRound == 0)
+        ++updateRound;
+}
+
+const DrawingScope::ArrayInput& DrawingScope::convertArray (const Component& source, const ComponentProperty& descriptor, const Identifier& property) const
+{
+    auto found = std::find_if (convertedArrays.begin(), convertedArrays.end(), [&] (const ConvertedArray& known)
+    {
+        return known.component == std::addressof (source) && known.descriptor == std::addressof (descriptor);
+    });
+
+    if (found == convertedArrays.end())
+        found = convertedArrays.insert (convertedArrays.end(), ConvertedArray { std::addressof (source), std::addressof (descriptor), 0, {} });
+
+    if (found->round != updateRound)
+    {
+        found->values.assign (descriptor.elementType, source.findProperty (property));
+        found->round = updateRound;
+    }
+
+    return found->values;
 }
 
 std::vector<DrawingScope::Dependency> DrawingScope::getDependencies (const CompiledExpression& program) const
@@ -515,22 +664,18 @@ void DrawingScope::addExpressionArrayTypes (ExpressionContext& context)
 
 void DrawingScope::ArrayInput::bind (ExpressionState& state, int input, ComponentProperty::Type elementType, const var& value)
 {
+    assign (elementType, value);
+    attach (state, input);
+}
+
+void DrawingScope::ArrayInput::assign (ComponentProperty::Type elementType, const var& value)
+{
     withExpressionType (elementType, [&] (auto tag)
     {
         using Type = typename decltype (tag)::type;
 
         if (! std::holds_alternative<Array<Type>> (values))
-        {
-            // The state may still view the elements of the type there was, which go away
-            const auto unbind = [&]<class Previous> (const Array<Previous>& previous)
-            {
-                if (previous.data() != nullptr)
-                    state.bindArray (ExpressionArray<Previous> { input }, static_cast<const Previous*> (nullptr), 0);
-            };
-
-            std::visit (unbind, values);
             values = Array<Type>();
-        }
 
         auto& elements = std::get<Array<Type>> (values);
         elements.clearQuick();
@@ -542,9 +687,15 @@ void DrawingScope::ArrayInput::bind (ExpressionState& state, int input, Componen
             for (const auto& element : *source)
                 elements.add (VariantConverter<Type>::fromVar (element));
         }
-
-        state.bindArray (ExpressionArray<Type> { input }, elements.data(), elements.size());
     });
+}
+
+void DrawingScope::ArrayInput::attach (ExpressionState& state, int input) const
+{
+    std::visit ([&]<class Type> (const Array<Type>& elements)
+    {
+        bindArrayElements (state, input, elements.data(), elements.size());
+    }, values);
 }
 
 } // namespace yup

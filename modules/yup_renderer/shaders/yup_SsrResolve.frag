@@ -38,49 +38,46 @@
 // (Karis 2014), so a rare ray reaching a bright highlight does not sparkle over the ones that did not.
 // The radiance of a ray is the previous scene color (exposed, premultiplied by coverage) where the
 // previous frame saw the hit, rescaled from that frame's exposure to this one's: stored exposed,
-// the half float target holds the radiance of bright scenes shown at a low exposure. Its confidence fades towards the
-// screen edges and for rays turning towards the camera, whose hits the depth may hide behind what
-// faces it; a ray reprojected off screen counts as a miss. The confidence of the pixel is the mean
-// over the similar texels, a miss counting 0, faded out above the roughness fade start.
-// The result then joins the resolve of the previous frame, reprojected by the motion of the
-// reflected point (the pixel's motion plus the parallax of the mean hit distance behind it) and rescaled to this exposure, by an exponential blend of ssrHistoryWeight (Karis 2014): the
-// history is first clamped to the range of the rays' radiance, wide where the rough lobes scatter
-// the rays and tight on mirrors, so the reflections hold still while the scene changes and
-// TemporalAA, whose clipping follows the noise of a single frame, restarts its running mean.
-// Output: the exposed radiance in rgb, the confidence in a; exactly 0 without any.
+// the half float target holds the radiance of bright scenes shown at a low exposure. It is read
+// filtered over the cone of directions the ray stands for among the 9 resolved, as the talk does
+// (filtered importance sampling: Colbert and Krivanek 2007, "GPU-Based Importance Sampling", GPU
+// Gems 3): the cone of solid angle 1 / (9 pdf), ssrConeBias levels wider, is as many texels across
+// at the hit as the level of the radiance pyramid read. So a small bright surface a wide lobe seldom
+// hits lights every ray whose cone holds it, by its share of the cone, where a single texel would
+// sparkle in the few rays reaching it; the narrow cones of a mirror read the scene color itself.
+// The confidence of a ray fades towards the screen edges and for rays turning towards the camera,
+// whose hits the depth may hide behind what faces it; a ray reprojected off screen counts as a miss.
+// The confidence of the pixel is the mean over the similar texels, a miss counting 0, faded out
+// above the roughness fade start.
+// Outputs: the exposed radiance in rgb and the confidence in a, exactly 0 without any, and the mean
+// distance to the hits, 0 without any, by which the denoise follows the reflection across frames.
 
 layout(set = 0, binding = 1) uniform sampler linearClamp;
 
 layout(set = 1, binding = 3) uniform texture2D u_trace;
 layout(set = 1, binding = 4) uniform texture2D u_velocity;
 layout(set = 1, binding = 5) uniform texture2D u_previousSceneColor;
-layout(set = 1, binding = 6) uniform texture2D u_history;
+layout(set = 1, binding = 6) uniform texture2D u_radiancePyramid;
 
-// The share of this frame against the history
-const float ssrHistoryWeight = 0.125;
+// The levels of the radiance pyramid a ray reads above the one of its cone: one, as ProbePrefilter
+// does, so the 9 rays of a pixel still cover its lobe
+const float ssrConeBias = 1.0;
 
 layout(location = 0) in vec2 uv;
 
-// The motion of a reflection beyond the motion of its surface, from the camera alone: the motion of
-// the reflected point, seen at its distance along the view ray behind the surface, minus the
-// motion of the surface's own position (Stachowiak 2015). Both in view space, of this frame
-vec2 reflectionParallax(vec3 surface, vec3 reflected)
-{
-    mat3 rotation = transpose(mat3(view.view));
-    vec4 surfaceWorld = vec4(rotation * (surface - view.view[3].xyz), 1.0);
-    vec4 reflectedWorld = vec4(rotation * (reflected - view.view[3].xyz), 1.0);
-
-    vec4 surfaceNow = view.unjitteredViewProjection * surfaceWorld;
-    vec4 surfaceBefore = view.previousViewProjection * surfaceWorld;
-    vec4 reflectedNow = view.unjitteredViewProjection * reflectedWorld;
-    vec4 reflectedBefore = view.previousViewProjection * reflectedWorld;
-    if (min(min(surfaceNow.w, surfaceBefore.w), min(reflectedNow.w, reflectedBefore.w)) <= 1.0e-6)
-        return vec2(0.0);
-
-    return viewVelocity(reflectedNow, reflectedBefore) - viewVelocity(surfaceNow, surfaceBefore);
-}
-
 layout(location = 0) out vec4 fragColor;
+layout(location = 1) out vec4 fragHitDistance;
+
+// The previous scene color around a uv, over 2^lod of its texels: the scene color itself up to lod
+// 0, the radiance pyramid from lod 1, whose level 0 halves it, and a mix of the two between
+vec4 previousRadiance(vec2 position, float lod)
+{
+    if (lod <= 0.0)
+        return textureLod(sampler2D(u_previousSceneColor, linearClamp), position, 0.0);
+
+    vec4 filtered = textureLod(sampler2D(u_radiancePyramid, linearClamp), position, max(lod - 1.0, 0.0));
+    return lod < 1.0 ? mix(textureLod(sampler2D(u_previousSceneColor, linearClamp), position, 0.0), filtered, lod) : filtered;
+}
 
 void main()
 {
@@ -89,6 +86,7 @@ void main()
     vec4 normalRoughness = ssrNormalRoughness(pixel);
     float fade = clamp((ssr.params.y - normalRoughness.w) / (ssr.params.y - ssr.params.x), 0.0, 1.0);
     fragColor = vec4(0.0);
+    fragHitDistance = vec4(0.0);
 
     if (depth >= 1.0 || fade <= 0.0)
         return;
@@ -104,13 +102,14 @@ void main()
     ivec2 last = textureSize(sampler2D(u_trace, pointClamp), 0) - 1;
     ivec2 center = (pixel + ivec2(int(mod(view.clipPlanes.z, 2.0)))) / 2;
 
+    // Upscaling keeps the previous scene color larger than the frame the rays were traced in
+    float texelsPerPixel = float(textureSize(sampler2D(u_previousSceneColor, linearClamp), 0).y) / view.viewport.y;
+
     vec3 radiance = vec3(0.0);
     float radianceWeight = 0.0;
     float confidence = 0.0;
     float similarity = 0.0;
     float hitDistance = 0.0;
-    vec3 boxMin = vec3(yupMaxHalf);
-    vec3 boxMax = vec3(-yupMaxHalf);
 
     for (int i = 0; i < 9; ++i)
     {
@@ -142,7 +141,8 @@ void main()
         if (dot(toHit, toHit) < 1.0e-12)
             continue;
 
-        vec3 l = toHit * inversesqrt(dot(toHit, toHit));
+        float distance = length(toHit);
+        vec3 l = toHit / distance;
         float nDotL = dot(n, l);
         if (nDotL <= 0.0)
             continue;
@@ -157,7 +157,11 @@ void main()
         if (any(lessThan(previousUv, vec2(0.0))) || any(greaterThan(previousUv, vec2(1.0))))
             continue;
 
-        vec4 previous = textureLod(sampler2D(u_previousSceneColor, linearClamp), previousUv, 0.0);
+        // The cone of the ray, in texels of the previous scene color across at the hit
+        float cone = 2.0 * distance * inversesqrt(9.0 * yupPi * ray.w);
+        float lod = log2(cone * ssrPixelsPerUnit(ssrViewDepth(ray.z)) * texelsPerPixel) + ssrConeBias;
+
+        vec4 previous = previousRadiance(previousUv, lod);
         if (valid <= 0.0 || previous.a <= 1.0e-3)
             continue;
 
@@ -166,43 +170,16 @@ void main()
         lobe = min(lobe, 1.0);
         float weight = lobe * similar * valid;
 
-        vec3 rayRadiance = yupReversibleToneMap(previous.rgb / previous.a);
-        radiance += rayRadiance * weight;
-        vec3 rayYCoCg = yupToYCoCg(rayRadiance);
-        boxMin = min(boxMin, rayYCoCg);
-        boxMax = max(boxMax, rayYCoCg);
+        radiance += yupReversibleToneMap(previous.rgb / previous.a) * weight;
         radianceWeight += weight;
-        hitDistance += length(toHit) * weight;
+        hitDistance += distance * weight;
         confidence += similar * valid;
     }
 
-    float scale = ssr.frame.x * view.cameraPosition.w;
-    bool traced = radianceWeight > 0.0 && confidence > 0.0;
-    vec3 current = traced ? radiance / radianceWeight : vec3(0.0);
-    float currentConfidence = traced ? confidence / similarity * fade : 0.0;
-
-    // The history, exposed by the previous frame like the rays' radiance, so both share its tone mapping,
-    // where the previous frame saw the reflected point
-    vec2 velocity = texelFetch(sampler2D(u_velocity, pointClamp), pixel, 0).xy;
-    if (traced)
-        velocity += reflectionParallax(position, position - v * (hitDistance / radianceWeight));
-
-    vec2 previousUv = (vec2(pixel) + 0.5) * view.viewport.zw - velocity;
-    vec4 history = vec4(0.0);
-    if (ssr.frame.w > 0.5 && all(greaterThanEqual(previousUv, vec2(0.0))) && all(lessThanEqual(previousUv, vec2(1.0))))
-        history = yupSanitize(textureLod(sampler2D(u_history, linearClamp), previousUv, 0.0));
-
-    vec3 kept = yupReversibleToneMap(history.rgb);
-    if (traced)
-        kept = yupFromYCoCg(yupClipToBox(yupToYCoCg(kept), boxMin, boxMax));
-
-    float historyShare = (1.0 - ssrHistoryWeight) * history.a;
-    float currentShare = ssrHistoryWeight * currentConfidence;
-    float shares = historyShare + currentShare;
-    if (shares <= 0.0)
+    if (radianceWeight <= 0.0 || confidence <= 0.0)
         return;
 
-    vec3 blended = (kept * historyShare + current * currentShare) / shares;
-    float blendedConfidence = history.a > 0.0 ? mix(history.a, currentConfidence, ssrHistoryWeight) : currentConfidence;
-    fragColor = vec4(min(yupReversibleToneMapInverse(blended) * scale, vec3(yupMaxHalf)), blendedConfidence);
+    float scale = ssr.frame.x * view.cameraPosition.w;
+    fragColor = vec4(min(yupReversibleToneMapInverse(radiance / radianceWeight) * scale, vec3(yupMaxHalf)), confidence / similarity * fade);
+    fragHitDistance = vec4(hitDistance / radianceWeight, 0.0, 0.0, 0.0);
 }

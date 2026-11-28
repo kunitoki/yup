@@ -36,6 +36,8 @@
 #include "yup_GpuFrame.cpp"
 #include "yup_GpuFrameDescriptor.cpp"
 #include "yup_OreBuffer.cpp"
+#include "yup_ShaderUniforms.cpp"
+#include "yup_GpuImageShader.cpp"
 
 #if YUP_APPLE
 #include "native/yup_GpuDevice_apple.cpp"
@@ -44,6 +46,7 @@
 #include "native/yup_GpuComputePass_apple.cpp"
 #include "native/yup_GpuFrame_apple.cpp"
 #include "native/yup_GpuFrameDescriptor_apple.cpp"
+#include "native/yup_GpuImageShader_apple.cpp"
 #endif
 
 #if YUP_LINUX

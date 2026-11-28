@@ -38,6 +38,17 @@ namespace yup
     at a configurable refresh rate (default: 30 Hz). All level reads are thread-safe
     via atomic variables in KMeterState.
 
+    The meter asks for a repaint only when a level moved to another pixel of its scale, or at
+    any change of a level when a style of its own paints it. It follows the state at every
+    frame only while it shows and the levels move: once they have kept still for a second it
+    looks at them ten times a second, which lets its window idle, and follows them again as
+    soon as one moves.
+
+    The levels it reads are its properties `peakDb`, `averageDb`, `peakHoldDb` and `clipping`,
+    and the scale of its state gives `rangeMinDb` and `rangeMaxDb`. It tells each of them when
+    it reads another value of it, so that what reads one, as a binding of a `.yui` document,
+    follows it (see Component::notifyPropertyChanged).
+
     Example usage:
     @code
     KMeterState meterState (48000.0, 2);
@@ -45,6 +56,10 @@ namespace yup
     leftMeter.setShowPeakHold (true);
     leftMeter.setBounds (0, 0, 40, 300);
     @endcode
+
+    The state can be given after construction with setState(), which is how a meter created
+    by a `.yui` document as `KMeter` gets it (see YuiDocument::setInitializer). Without a
+    state the meter shows silence.
 
     @see KMeterState, KMeterScale, Component
 
@@ -91,6 +106,37 @@ public:
     };
 
     //==============================================================================
+    /** A stretch of the scale of the meter, along which the levels are placed linearly in dB.
+
+        @see getScaleSegments
+    */
+    struct ScaleSegment
+    {
+        float topDb = 0.0f;    /**< The level at its top, in dB. */
+        float bottomDb = 0.0f; /**< The level at its bottom, in dB. */
+        float topY = 0.0f;     /**< Where its top is in the meter. */
+        float bottomY = 0.0f;  /**< Where its bottom is in the meter. */
+    };
+
+    /** A mark of the scale of the meter, with the label naming its level when it has one.
+
+        @see getScaleTicks
+    */
+    struct ScaleTick
+    {
+        int db = 0;                   /**< The level it marks, in dB. */
+        float y = 0.0f;               /**< Where it is in the meter. */
+        String label;                 /**< The text naming its level, empty for a tick without a label. */
+        Rectangle<float> labelBounds; /**< Where the label goes in the meter, empty for a tick without a label. */
+    };
+
+    //==============================================================================
+    /** Creates a KMeterComponent with no state, to be given one with setState().
+
+        @param componentID  An optional identifier for this component
+    */
+    explicit KMeterComponent (StringRef componentID = {});
+
     /** Creates a KMeterComponent.
 
         @param state     Reference to the KMeterState to read levels from
@@ -103,6 +149,32 @@ public:
     ~KMeterComponent() override;
 
     //==============================================================================
+    /** Changes the state the levels are read from.
+
+        Call it on the message thread. The state must outlive the meter, or be removed
+        first by setting a null one.
+
+        @param newState  the state to read, or nullptr for none
+    */
+    void setState (KMeterState* newState);
+
+    /** Returns the state the levels are read from, or nullptr if the meter has none. */
+    KMeterState* getState() const noexcept { return meterState; }
+
+    //==============================================================================
+    /** Returns the static type info describing the KMeterComponent type, `KMeter` in `.yui`. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
+
+    //==============================================================================
+    /** Sets the channel of the state this meter is displaying.
+
+        @param channel  channel index, or -1 for the loudest of all the channels
+    */
+    void setChannel (int channel);
+
     /** Returns the channel index this meter is displaying.
 
         @returns  channel index, or -1 for combined mode
@@ -142,14 +214,17 @@ public:
     /** Returns the scale mapping mode. */
     ScaleMapping getScaleMapping() const noexcept { return scaleMapping; }
 
-    /** Sets how the OVER counter is computed (passes through to the meter state).
+    /** Sets how the OVER counter is computed (passes through to the meter state, ignored while the meter has none).
 
         @param mode  counter mode (contiguous or total)
     */
     void setOverCounterMode (KMeterState::OverCounterMode mode);
 
-    /** Returns the current OVER counter mode. */
-    KMeterState::OverCounterMode getOverCounterMode() const noexcept { return meterState.getOverCounterMode(); }
+    /** Returns the current OVER counter mode, the contiguous one while the meter has no state. */
+    KMeterState::OverCounterMode getOverCounterMode() const noexcept
+    {
+        return meterState != nullptr ? meterState->getOverCounterMode() : KMeterState::OverCounterMode::contiguous;
+    }
 
     /** Sets the refresh rate for meter updates.
 
@@ -166,19 +241,66 @@ public:
     int getRefreshRate() const noexcept { return refreshRate; }
 
     //==============================================================================
-    /** Sets the average integration time in seconds (passes through to the meter state).
+    /** Returns the peak level shown, in dB. */
+    float getPeakLevel() const noexcept { return levels.peakDb; }
+
+    /** Returns the average level shown, in dB. */
+    float getAverageLevel() const noexcept { return levels.averageDb; }
+
+    /** Returns the peak level held, in dB. */
+    float getPeakHoldLevel() const noexcept { return levels.peakHoldDb; }
+
+    /** Returns whether the signal shown is clipping. */
+    bool isClipping() const noexcept { return levels.clipping; }
+
+    //==============================================================================
+    /** Returns the K-System scale of the state shown, the one of K-20 while the meter has no state. */
+    KMeterState::Scale getScale() const noexcept
+    {
+        return meterState != nullptr ? meterState->getScale() : KMeterState::Scale::k20;
+    }
+
+    /** Returns the segments of the scale, from the top of the meter to its bottom.
+
+        The K-System mapping has one for each of its bars, which cover fewer dB toward the top
+        of the scale, and the linear mapping has a single one. They are laid out again when the
+        size of the meter, its mapping or the scale of its state changes. A meter with no area
+        has none.
+
+        @see getPositionForLevel
+    */
+    Span<const ScaleSegment> getScaleSegments() const;
+
+    /** Returns the ticks of the scale, from the top of the meter to its bottom.
+
+        There is one every 5 dB, or every 10 dB on a meter less than 200 high. The ones at a
+        multiple of 10 dB have a label, when all of it fits the meter and it is off the labels
+        kept above it and off the lowest one.
+    */
+    Span<const ScaleTick> getScaleTicks() const;
+
+    /** Returns where a level is along the meter, in its own coordinates.
+
+        @param db  the level in dB, brought inside the range of the scale
+
+        @returns  the vertical position of the level, the bottom of the meter while it has no area
+    */
+    float getPositionForLevel (float db) const;
+
+    //==============================================================================
+    /** Sets the average integration time in seconds (passes through to the meter state, ignored while the meter has none).
 
         @param seconds  integration time in seconds
     */
     void setAverageIntegrationTime (double seconds);
 
-    /** Sets the average fall time in seconds (passes through to the meter state).
+    /** Sets the average fall time in seconds (passes through to the meter state, ignored while the meter has none).
 
         @param seconds  fall time in seconds
     */
     void setAverageFallTime (double seconds);
 
-    /** Sets the peak hold time in seconds (passes through to the meter state).
+    /** Sets the peak hold time in seconds (passes through to the meter state, ignored while the meter has none).
 
         @param seconds  hold time in seconds (-1.0 = infinite)
     */
@@ -214,24 +336,54 @@ public:
     void paint (Graphics& g) override;
 
     /** @internal */
+    void visibilityChanged() override;
+
+    /** @internal */
+    void parentHierarchyChanged() override;
+
+    /** @internal */
     void refreshDisplay (double lastFrameTimeSeconds);
 
 private:
     //==============================================================================
-    friend void paintKMeter (Graphics&, const ApplicationTheme&, const KMeterComponent&);
+    // What the meter shows of its state
+    struct Levels
+    {
+        float peakDb = -100.0f;
+        float averageDb = -100.0f;
+        float peakHoldDb = -100.0f;
+        bool clipping = false;
+        KMeterState::Scale scale = KMeterState::Scale::k20;
 
-    void updateLevels();
+        bool operator== (const Levels&) const = default;
+    };
+
+    // The scale as it is laid out, with what it was laid out for
+    struct ScaleLayout
+    {
+        KMeterState::Scale scale = KMeterState::Scale::k20;
+        ScaleMapping mapping = ScaleMapping::segmented;
+        Rectangle<float> bounds;
+        std::vector<ScaleSegment> segments;
+        std::vector<ScaleTick> ticks;
+    };
+
+    bool updateLevels();
+    bool showsDifferently (const Levels& previousLevels) const;
+    void followLevels();
+    void pollLevels();
+    void showingChanged();
     void checkForCallbacks();
+    void notifyLevelChanges();
+    const ScaleLayout& getScaleLayout() const;
 
     //==============================================================================
-    KMeterState& meterState;
+    KMeterState* meterState = nullptr;
     int channelIndex = -1;
 
-    // Display state (read from KMeterState via atomics)
-    Atomic<float> currentPeakDb { -100.0f };
-    Atomic<float> currentAverageDb { -100.0f };
-    Atomic<float> currentPeakHoldDb { -100.0f };
-    Atomic<bool> currentClipping { false };
+    // Display state, read from KMeterState when the meter updates
+    Levels levels;
+    mutable ScaleLayout scaleLayout;
 
     // Configuration
     bool showPeakHold = true;
@@ -239,12 +391,17 @@ private:
     ScaleMapping scaleMapping = ScaleMapping::segmented;
     int refreshRate = 30;
     double timeSinceLastUpdate = 0.0;
+    double timeAtRest = 0.0;
 
     // For callbacks
     float lastCallbackPeak = -100.0f;
     float lastCallbackAverage = -100.0f;
     bool lastCallbackClipping = false;
-    FrameAttachment frameAttachment { *this, bindFront (&KMeterComponent::refreshDisplay, this) };
+    Levels lastNotifiedLevels;
+
+    // The levels are followed at every frame while they move, and looked at by the timer once they keep still
+    FrameAttachment frameAttachment { *this, bindFront (&KMeterComponent::refreshDisplay, this), false };
+    TimedCallback restPoll { bindFront (&KMeterComponent::pollLevels, this) };
 
     //==============================================================================
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (KMeterComponent)

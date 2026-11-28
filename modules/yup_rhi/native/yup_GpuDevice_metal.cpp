@@ -276,72 +276,52 @@ public:
 
     std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) override
     {
-        if (width <= 0 || height <= 0 || renderContext == nullptr)
-            return nullptr;
-
-        auto target = std::make_unique<OffscreenTargetMetal>();
-        target->width = width;
-        target->height = height;
-        target->renderContext = nullptr;
-        target->contextSlot = nullptr;
-        target->renderCanvas = renderContext->makeRenderCanvas (static_cast<uint32_t> (width),
-                                                                static_cast<uint32_t> (height));
-        if (target->renderCanvas == nullptr)
-            return nullptr;
-
-        return target;
+        return makeOffscreenTarget (width, height, false);
     }
 
     std::unique_ptr<RenderableTarget> createRenderableTarget (int width, int height) override
     {
-        if (width <= 0 || height <= 0)
-            return nullptr;
-
-        auto* contextSlot = acquireOffscreenContext();
-        if (contextSlot == nullptr)
-            return nullptr;
-
-        auto target = std::make_unique<OffscreenTargetMetal>();
-        target->width = width;
-        target->height = height;
-        target->renderContext = contextSlot->renderContext.get();
-        target->contextSlot = contextSlot;
-        target->renderCanvas = target->renderContext->makeRenderCanvas (static_cast<uint32_t> (width),
-                                                                        static_cast<uint32_t> (height));
-        if (target->renderCanvas == nullptr)
-            return nullptr;
-
-        return target;
+        return makeOffscreenTarget (width, height, true);
     }
 
     void beginOffscreen (OffscreenTarget& baseTarget, const GpuFrameDescriptor& frameDesc) override
     {
         auto& target = static_cast<OffscreenTargetMetal&> (baseTarget);
-        auto* rc = target.getRenderContext();
 
-        if (rc == nullptr || target.contextSlot == nullptr || target.contextSlot->frameActive)
+        if (target.isRenderable && target.contextSlot == nullptr)
+            target.contextSlot = acquireOffscreenContext();
+
+        if (target.contextSlot == nullptr || target.contextSlot->frameActive)
             return;
 
-        rc->beginFrame (toRiveFrameDescriptor (frameDesc));
+        target.contextSlot->renderContext->beginFrame (toRiveFrameDescriptor (frameDesc));
         target.contextSlot->frameActive = true;
     }
 
     void endOffscreen (OffscreenTarget& baseTarget) override
     {
         auto& target = static_cast<OffscreenTargetMetal&> (baseTarget);
-        auto* rc = target.getRenderContext();
+        auto* slot = std::exchange (target.contextSlot, nullptr);
 
-        if (rc == nullptr || target.contextSlot == nullptr || ! target.contextSlot->frameActive)
+        if (slot == nullptr || ! slot->frameActive)
             return;
 
         YUP_AUTORELEASEPOOL
         {
             id<MTLCommandBuffer> commandBuffer = [queue commandBuffer];
-            rc->flush ({ .renderTarget = target.getRenderTarget(), .externalCommandBuffer = (__bridge void*) commandBuffer });
+            slot->renderContext->flush ({ .renderTarget = target.getRenderTarget(), .externalCommandBuffer = (__bridge void*) commandBuffer });
+
+            ++slot->flushesUnderWay;
+            [commandBuffer addCompletedHandler:^(id<MTLCommandBuffer>)
+            {
+                --slot->flushesUnderWay;
+            }];
+
             [commandBuffer commit];
         }
 
-        target.contextSlot->frameActive = false;
+        slot->frameActive = false;
+        slot->leased = false;
     }
 
     bool clearOffscreen (OffscreenTarget& baseTarget, GpuColor color) override
@@ -851,6 +831,7 @@ private:
         std::unique_ptr<rive::gpu::RenderContext> renderContext;
         bool frameActive = false;
         std::atomic<bool> leased = false;
+        std::atomic<int> flushesUnderWay = 0;
     };
 
     struct OffscreenTargetMetal : public RenderableTarget
@@ -865,7 +846,7 @@ private:
         int height = 0;
         id<MTLTexture> stagingTexture = nil;
         rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
-        rive::gpu::RenderContext* renderContext = nullptr;
+        bool isRenderable = false;
         OffscreenContextSlot* contextSlot = nullptr;
 
         int getWidth() const noexcept override { return width; }
@@ -879,7 +860,7 @@ private:
 
         rive::gpu::RenderContext* getRenderContext() noexcept override
         {
-            return renderContext;
+            return contextSlot != nullptr ? contextSlot->renderContext.get() : nullptr;
         }
 
         rive::rcp<rive::gpu::RenderCanvas> getRenderCanvas() noexcept override
@@ -930,11 +911,37 @@ private:
         dispatch_semaphore_wait (done, DISPATCH_TIME_FOREVER);
     }
 
+    std::unique_ptr<OffscreenTargetMetal> makeOffscreenTarget (int width, int height, bool isRenderable)
+    {
+        if (width <= 0 || height <= 0 || renderContext == nullptr)
+            return nullptr;
+
+        auto target = std::make_unique<OffscreenTargetMetal>();
+        target->width = width;
+        target->height = height;
+        target->isRenderable = isRenderable;
+        target->renderCanvas = renderContext->makeRenderCanvas (static_cast<uint32_t> (width),
+                                                                static_cast<uint32_t> (height));
+        if (target->renderCanvas == nullptr)
+            return nullptr;
+
+        return target;
+    }
+
+    void releaseUnusedOffscreenContexts (GpuUnusedResources resources) override
+    {
+        releaseIdleOffscreenContexts (offscreenContextPool, resources, [] (const auto& slot)
+        {
+            return ! slot->leased && slot->flushesUnderWay == 0;
+        });
+    }
+
     OffscreenContextSlot* acquireOffscreenContext()
     {
         for (const auto& slot : offscreenContextPool)
         {
-            if (! slot->leased)
+            // A context flushing with kBufferRingSize flushes under way waits for the GPU: another is taken instead
+            if (! slot->leased && slot->flushesUnderWay < rive::gpu::kBufferRingSize)
             {
                 slot->leased = true;
                 return slot.get();

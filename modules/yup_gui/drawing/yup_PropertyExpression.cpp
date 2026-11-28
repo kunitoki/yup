@@ -101,6 +101,127 @@ int cutToInteger (double value) noexcept
     return static_cast<int> (jlimit (static_cast<double> (std::numeric_limits<int>::min()), static_cast<double> (std::numeric_limits<int>::max()), value));
 }
 
+/* Returns what a text that is nothing but a number, `true`, `false` or a string evaluates to, with the type it is of,
+   or void for any other text. Most values of a document are such texts, and each would get a program compiled to
+   run it once. Only what the compiler makes the very same value of is read here: a number with a unit, a suffix or
+   another base, a string with an escape and a literal the type of the property converts are all left to it. */
+var readLiteral (const String& text, std::optional<ComponentProperty::Type> type, ComponentProperty::Type& valueType)
+{
+    using Type = ComponentProperty::Type;
+
+    const auto isSpace = [] (char c)
+    {
+        return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+    };
+
+    const auto isDigit = [] (char c)
+    {
+        return c >= '0' && c <= '9';
+    };
+
+    const auto* begin = text.toRawUTF8();
+
+    while (isSpace (*begin))
+        ++begin;
+
+    const auto* end = begin + std::strlen (begin);
+
+    while (end > begin && isSpace (end[-1]))
+        --end;
+
+    const std::string_view literal (begin, static_cast<size_t> (end - begin));
+    const bool isUntyped = ! type.has_value() || *type == Type::any;
+
+    if (literal == "true" || literal == "false")
+    {
+        if (! isUntyped && *type != Type::boolean)
+            return {};
+
+        valueType = Type::boolean;
+        return VariantConverter<bool>::toVar (literal == "true");
+    }
+
+    if (literal.size() >= 2 && literal.front() == '"' && literal.back() == '"')
+    {
+        const auto characters = literal.substr (1, literal.size() - 2);
+
+        // A quote inside makes it more than one string, as "a" + "b" is
+        if ((! isUntyped && *type != Type::string) || characters.find_first_of ("\"\\\n") != std::string_view::npos)
+            return {};
+
+        valueType = Type::string;
+        return VariantConverter<String>::toVar (String::fromUTF8 (characters.data(), static_cast<int> (characters.size())));
+    }
+
+    if (! isUntyped && *type != Type::number && *type != Type::integer)
+        return {};
+
+    const bool isNegative = *begin == '-';
+    const auto* digits = isNegative ? begin + 1 : begin;
+    const auto* position = digits;
+
+    while (isDigit (*position))
+        ++position;
+
+    const auto numWholeDigits = position - digits;
+    bool isFloating = false;
+
+    if (*position == '.' && isDigit (position[1]))
+    {
+        isFloating = true;
+        ++position;
+
+        while (isDigit (*position))
+            ++position;
+    }
+
+    if ((*position == 'e' || *position == 'E')
+        && (isDigit (position[1]) || ((position[1] == '+' || position[1] == '-') && isDigit (position[2]))))
+    {
+        isFloating = true;
+        position += 2;
+
+        while (isDigit (*position))
+            ++position;
+    }
+
+    // A whole number of more digits may not fit an integer, which is for the compiler to tell
+    if (numWholeDigits == 0 || position != end || (! isFloating && numWholeDigits > 9))
+        return {};
+
+    double number = 0.0;
+
+    if (isFloating)
+    {
+        number = CharacterFunctions::getDoubleValue (CharPointer_UTF8 (digits));
+
+        if (isNegative)
+            number = -number;
+    }
+    else
+    {
+        int whole = 0;
+
+        for (const auto* digit = digits; digit != position; ++digit)
+            whole = whole * 10 + (*digit - '0');
+
+        number = static_cast<double> (isNegative ? -whole : whole);
+    }
+
+    if (type == Type::integer)
+    {
+        valueType = Type::integer;
+        return cutToInteger (number);
+    }
+
+    valueType = Type::number;
+
+    if (type == Type::number)
+        return VariantConverter<float>::toVar (static_cast<float> (number));
+
+    return number;
+}
+
 // Types that aren't bridged are compiled as numbers, which is what an untyped value falls back to
 void declareValueOutput (ExpressionContext& context, ComponentProperty::Type type)
 {
@@ -208,6 +329,18 @@ ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compile (Co
                                                                               Component* locals,
                                                                               const File& baseDirectory)
 {
+    auto literalType = ComponentProperty::Type::any;
+
+    if (auto value = readLiteral (text, type, literalType); ! value.isVoid())
+    {
+        std::unique_ptr<PropertyExpression> expression (new PropertyExpression());
+        expression->source = text;
+        expression->type = literalType;
+        expression->literal = std::move (value);
+
+        return makeResultValueOk (std::move (expression));
+    }
+
     // An array literal is a var of its elements, but for a point and a rectangle, which the expression makes of them
     const bool isMadeOfNumbers = type == ComponentProperty::Type::point || type == ComponentProperty::Type::rectangle;
 
@@ -477,6 +610,9 @@ PropertyExpression::~PropertyExpression() = default;
 
 var PropertyExpression::evaluate()
 {
+    if (! literal.isVoid())
+        return literal;
+
     if (! state.has_value())
     {
         Array<var> values;

@@ -25,7 +25,6 @@ namespace yup
 {
 
 class DependencyObserver;
-struct YuiDiagnostic;
 
 //==============================================================================
 /**
@@ -37,12 +36,22 @@ struct YuiDiagnostic;
     - shapes: `rect`, `ellipse`, `circle`, `arc`, `line`, `path`, `polygon`, `star`, `text`,
       `image` and `svg`, each with its own geometry and paint properties (including `dash`
       and `dashOffset` for stroked shapes);
+    - `vertex` (`at`, `series`, `base`, `smooth` and paint properties), only among the shapes of a
+      `repeat`: one point of the line its turns make together, which is how a data series becomes
+      a polyline, an area down to its `base` or a band between two curves. Each `vertex` element
+      draws lines of its own, whatever its `series`, and a line with more points than the pixels
+      it is drawn across is drawn with what each column of pixels shows of it (see ExpressionDrawing);
+    - `part` (`name`, `bounds`, `fill`, `stroke`, `strokeWidth`, `opacity`, `blend`, `tint`,
+      `transform`, `clip`, `clipPath`, `visible`): what the type of the component declares it shows
+      beside its shapes, such as the text it laid out, its caret or its icon (see ComponentPart),
+      painted by the theme among the shapes with the paint the element gives it. Only a part that
+      fits any area takes `bounds`: the others are painted where the component puts them;
     - `let` (`name`, `value`): a local visible to the following siblings and their children;
     - `layer` (`opacity`, `blend`, `clip`, `clipPath`, `mask`, `maskMode`, `visible` and optional
       `mask` and `clipPath` children): draws its children into a transparency layer. With a `filter`
       child (`bounds`, `linearColors` and the primitives `blur`, `offset`, `flood`, `colorMatrix`,
-      `composite`, `blend`, `morphology`, `lighting`, `displacement` and `dropShadow`) it draws
-      them through a FilterGraph instead;
+      `composite`, `blend`, `morphology`, `lighting`, `displacement`, `dropShadow` and `use`, which
+      runs a shader) it draws them through a FilterGraph instead;
     - `clip` (`bounds`/`rect`, `path`/`clipPath`, `visible` and optional `clipPath` children
       holding the shapes to clip to): clips its children;
     - `group` (`transform`, `opacity`, `blend`, `visible`, `color` and paint properties): draws its
@@ -50,13 +59,16 @@ struct YuiDiagnostic;
     - `viewport` (`bounds`, `viewBox`, `fitting`, `justification`, `visible`): draws its children
       in the coordinates of a view box fitted in a rectangle, which it clips them to;
     - `repeat` (`name`, `from`, `to`): draws its shapes once for every int from `from` up to,
-      but not including, `to`, exposed to them under `name`;
+      but not including, `to`, exposed to them under `name`, 4096 times at most: a constant count
+      above that fails to compile, and one only known when painting is cut to it with no diagnostic;
     - `drawing`, `pattern` and `marker` (`name`): definitions visible to the elements after them,
       a drawing painted by `use`, a tile painting shapes through `fillPattern` and `strokePattern`,
       and content drawn at the vertices of shapes through `markerStart`, `markerMid` and `markerEnd`;
     - `use` (`drawing`, `bounds`, `transform`, `opacity`, `blend`, `visible`, `color`, paint
       properties and the properties of the drawing): paints a drawing defined inside this one, or
-      found by name through the DrawingResolver;
+      found by name through the DrawingResolver. When no drawing has the name it paints the shader
+      the ShaderResolver finds (`drawing`, `bounds`, `transform`, `opacity`, `blend`, `visible`,
+      `clip`, `clipPath` and the properties of the shader);
     - `property` (`name`, `type`, `value`), only at the top of the drawing: an input of the
       drawing, visible to every element.
 
@@ -74,11 +86,54 @@ struct YuiDiagnostic;
         slider.setStyle (style.getReference());
     @endcode
 
+    A `use` painting a shader draws it once into a texture of the size its bounds take in pixels,
+    then draws that texture in its bounds: under its transform, with its opacity and its blend
+    mode, inside its clips. The shader has to make its picture alone, declaring no texture, and
+    can't be painted inside a `repeat`. Each property its `shader` block declares is set by the
+    `use`, or else takes the default of the block, or else is zero, and fills the member of the
+    uniform block of the shader that has its name, as ShaderProperty::setUniform() converts it. The
+    shader is given three more members when its block has them and declares no property of their
+    name: `resolution`, the size of the texture in pixels, `scale`, the pixels a unit takes, and
+    `time`, the seconds the shader has been showing for. The texture is drawn again only when one
+    of these values changes: a shader given the time is drawn at every frame of the window of its
+    component, which it keeps repainting while it is showing with this style, and any other costs
+    nothing between two changes. Without a GPU, or when the shader can't be drawn by the device,
+    the `use` paints nothing, and repaints nothing: getShaderFailures() tells what the device
+    refused.
+
+    A `use` inside a `filter` runs a shader as one of its primitives: on the picture `in` names,
+    and on the one `in2` names when the shader declares two textures. A shader declaring none
+    makes a picture of its own, as a `flood` does. Its properties are set the same way. Its
+    `resolution` is the size the bounds of the filter take in pixels where the layer is drawn and
+    its `scale` the pixels a unit takes there, which is what its picture is seen as: the raster
+    the filter runs on is rounded up to a larger size and stretched over those bounds. A filter
+    does not tell the time: a shader whose block has `time` is refused there, unless a property
+    of that name sets it.
+
+    The tile of a `pattern`, and what a `layer` draws for its `filter`, are drawn once and kept
+    from one paint to the next. They are drawn again when something their elements read changes:
+    a property, a palette color or a state of the component, its bounds, the font. They are drawn
+    again at every paint when they hold a `part` or a shader given the time, when their elements
+    read an array, and when they read the component next to an `image`, an `svg` read from a file
+    or a shape with markers.
+
+    An `image` and an `svg` read the file their `source` names when they are first painted, through
+    the document of the component the style was created for (see ComponentDocument::readAssetFor):
+    from a folder, embedded resources or the unsaved text of an editor, and from the file system
+    for a component of no document. What they read is kept, and read again once the document tells
+    that the file changed.
+
+    A style keeps the shaders it was created with. One created before a shader is loaded is
+    compiled against the block of the shader alone: that `use` paints nothing, and a filter
+    running it leaves its layer as it is. createWithShaders() makes the style to install in its
+    place once the shader is there, or once its file changed, which a StyleContext does for the
+    drawings of the components it styles.
+
     Styles created from the same drawing share one compilation while any of them exists,
     as long as their components resolve every name the drawing reads to the same type.
     The style is bound to the component it was created for: install it on that component only.
 
-    @see DrawingScope, ComponentStyle, ExpressionDrawing, YuiSvgImporter
+    @see DrawingScope, ComponentStyle, ExpressionDrawing, GpuImageShader, ShaderEffect
 
     @tags{UI}
 */
@@ -95,6 +150,33 @@ public:
     */
     using DrawingResolver = std::function<DataTree (const String& name)>;
 
+    /** A shader a `use` element refers to by name, as a ShaderResolver finds it. */
+    struct Shader
+    {
+        /** The `shader` element declaring it, the DataTree form of a `shader` block of a `.yui` file,
+            or an invalid tree for a name that is no shader. Each of its `property` children is an
+            input a `use` sets, with its `name`, its `type` and, as its `value`, the expression of
+            its default when it has one. A block with a `material` instead of a `fragment` can't be
+            drawn by a drawing.
+        */
+        DataTree block;
+
+        /** The shader compiled from the file the block names, or nullptr while it is not loaded:
+            the `use` is then compiled against the block alone and runs nothing, until the style
+            is made again with the shader (see createWithShaders).
+        */
+        GpuImageShader::Ptr shader;
+    };
+
+    /** Finds the shader a `use` element refers to by name, when no drawing has that name.
+
+        It is called while creating the style, once or more for each shader the drawing uses, and
+        never while painting. The style keeps the compiled shader it is given: make the style
+        again to draw another one, such as the shader of a file that changed (see
+        createWithShaders).
+    */
+    using ShaderResolver = std::function<Shader (const String& name)>;
+
     //==============================================================================
     /** Compiles a drawing tree for a component (or reuses an equivalent compilation).
 
@@ -104,14 +186,17 @@ public:
         @param failure            Optional diagnostic populated with the offending child element and property on failure.
         @param drawingResolver    Optional resolver for the drawings `use` elements refer to by name. It is only
                                   called while creating the style.
+        @param shaderResolver     Optional resolver for the shaders `use` elements refer to by name. It is only
+                                  called while creating the style.
 
         @return A style on success, or a failure whose message starts with the path of the offending element.
     */
     static ResultValue<DrawingStyle::Ptr> create (Component& target,
                                                   const DataTree& drawing,
                                                   DrawingScope::ComponentResolver componentResolver = nullptr,
-                                                  YuiDiagnostic* failure = nullptr,
-                                                  const DrawingResolver& drawingResolver = nullptr);
+                                                  DataTreeDiagnostic* failure = nullptr,
+                                                  const DrawingResolver& drawingResolver = nullptr,
+                                                  const ShaderResolver& shaderResolver = nullptr);
 
     /** Destructor. */
     ~DrawingStyle() override;
@@ -134,8 +219,8 @@ public:
         StringArray geometry;
 
         /** The other properties the element takes. A shape takes those of
-            getShapePaintProperties() on top of them, and a `use` the properties its drawing
-            declares.
+            getShapePaintProperties() on top of them, and a `use` the properties its drawing or its
+            shader declares.
         */
         StringArray properties;
     };
@@ -143,7 +228,9 @@ public:
     /** Returns the elements a drawing can hold with the properties of each, as they are checked
         when a drawing is compiled, for a tool to list them.
 
-        A `text` is listed twice: fitted in its `bounds`, and placed at its `anchor`.
+        A `text` is listed twice: fitted in its `bounds`, and placed at its `anchor`. A `use` is
+        listed three times: as the `container` painting a drawing, as the `media` painting a
+        shader, and as the `filterPrimitive` running a shader in a `filter`.
     */
     static std::vector<ElementDescription> getElementDescriptions();
 
@@ -156,6 +243,61 @@ public:
 
     /** Returns the properties the drawing declares, in declaration order. */
     const std::vector<ComponentProperty>& getProperties() const noexcept;
+
+    //==============================================================================
+    /** Returns the shaders the `use` elements of the drawing run, each once, as the style has
+        them: the block the ShaderResolver gave for it when the style was created, and its
+        compiled shader, nullptr for one the style was created without.
+    */
+    std::vector<Shader> getShaders() const;
+
+    /** A shader the drawing could not run where one of its `use` elements does, as
+        getShaderFailures() tells it. */
+    struct ShaderFailure
+    {
+        /** The shader, as getShaders() tells it. */
+        Shader shader;
+
+        /** Why it was not drawn, as GpuImageShader::draw() tells it. */
+        String message;
+    };
+
+    /** Returns what the device of the window could not draw of the shaders the drawing runs, as
+        its last paint found it: one for each `use` painting a shader, or running one in a
+        `filter`, whose shader could not be drawn, such as for a pipeline the device failed to
+        compile or a bundle with no variant for its graphics API. That `use` paints nothing,
+        and the filter leaves its layer as it is.
+
+        A failure is logged when it is found, and the StyleContext styling the component of the
+        drawing reports it at its next restyle, as a diagnostic at the `shader` block. It is
+        forgotten when the component is painted by another device and when it leaves its window.
+    */
+    std::vector<ShaderFailure> getShaderFailures() const;
+
+    /** Releases what the style keeps of the device it was last painted with: the textures
+        its shaders were drawn into, the ones holding their series, and the rasters of its
+        patterns and of its filtered layers.
+
+        The component the style is set on calls it when it leaves its window, so that nothing
+        of the device of that window is kept past it. The next paint makes them again.
+    */
+    void releaseResources();
+
+    /** Creates the style again, for the same component and the same drawing, with the shaders
+        another resolver finds.
+
+        This makes the style to install in place of this one once a shader it was created without
+        is loaded, or once the file of one changed. The names its expressions read are resolved
+        as they were, the drawings its `use` elements paint are the ones found when it was
+        created, and its image resolver is kept.
+
+        @param shaderResolver  Finds the shaders by name, as the one given to create().
+        @param failure         Optional diagnostic populated as create() does.
+
+        @return The new style, or a failure as create() gives one: a drawing may not compile with
+                a shader reading other pictures than the one it was created with.
+    */
+    ResultValue<DrawingStyle::Ptr> createWithShaders (const ShaderResolver& shaderResolver, DataTreeDiagnostic* failure = nullptr) const;
 
     //==============================================================================
     /** Finds the image a `source` names, or returns nothing for it to be loaded as usual. */
@@ -202,6 +344,12 @@ public:
             bounds cover them all.
         */
         int numRows = 1;
+
+        /** For a `use` running a shader, the uniforms it gives the shader: the values of the
+            properties of the shader, with `resolution` and `scale` as they are for a component
+            painted with no transform at one pixel a unit, and `time`. Empty for other elements.
+        */
+        ShaderUniforms uniforms;
     };
 
     /** Evaluates the drawing for a component as paint() does, and returns where each of its
@@ -209,8 +357,9 @@ public:
 
         The elements are told in the order they are painted, a container before what it holds.
         Those not painted are left out: what a container that is not visible holds, and the masks,
-        clip shapes, patterns, markers and filters, which paint nothing of their own. Texts are
-        measured with the default font of the global theme.
+        clip shapes, patterns, markers and filters, which paint nothing of their own. The shaders a
+        filter runs are told though, after what their layer holds, each with the bounds of the
+        filter. Texts are measured with the default font of the global theme.
 
         @param component  The component the drawing paints, usually the one the style is set on.
     */
@@ -221,20 +370,27 @@ private:
     struct Node;
     struct Compiled;
     struct Slot;
+    struct ShaderState;
+    struct ShaderPicture;
     struct PaintContext;
     struct PatternSource;
     struct FilterSource;
+    struct DocumentLink;
     class Compiler;
     class CompiledCache;
 
     static constexpr int maxRepeatCount = 4096;
 
-    DrawingStyle (Component& target, DrawingScope::ComponentResolver componentResolver);
+    DrawingStyle (Component& target, DrawingScope::ComponentResolver resolverToUse);
 
-    void instantiate (std::shared_ptr<const Compiled> compiledToUse);
+    void instantiate (std::shared_ptr<const Compiled> compiledToUse, const ShaderResolver& shaderResolver);
+    void advance (double elapsedSeconds);
+    uint32 feedInputs (const Node& node, Slot& slot, const PaintContext& context, int numLevels);
     Slot* prepare (const Node& node, const PaintContext& context);
+    bool hasContentChanged (const std::vector<std::unique_ptr<Node>>& nodes, const PaintContext& context, int numLevels, bool isDrawnByTurns);
+    bool hasContentChanged (const Node& node, const PaintContext& context, int numLevels, bool isDrawnByTurns);
     PatternSource& preparePattern (int index, const PaintContext& context);
-    void drawPattern (Graphics& g, const PatternSource& source);
+    void drawPattern (Graphics& g, PatternSource& source);
     void drawMarkers (Graphics& g, const Node& node, Slot& slot, const PaintContext& context);
     Path collectOutline (const std::vector<std::unique_ptr<Node>>& shapes, const PaintContext& context, int numRows);
     void applyClips (Graphics& g, const Node& node, Slot* slot, const PaintContext& context, int numRows);
@@ -243,28 +399,48 @@ private:
     bool enterGroupBounds (const Node& node, Slot& slot, AffineTransform& mapping, std::optional<Rectangle<float>>& clip);
     Rectangle<float> measureNodes (const std::vector<std::unique_ptr<Node>>& children, const PaintContext& context, const AffineTransform& transform, int numRows, std::vector<ElementBounds>& measured);
     Rectangle<float> measureNode (const Node& node, const PaintContext& context, const AffineTransform& transform, int numRows, std::vector<ElementBounds>& measured);
+    void measureFilterShaders (const Node& filterNode, const PaintContext& context, const AffineTransform& transform, int numRows, std::vector<ElementBounds>& measured);
     void drawNode (Graphics& g, const Node& node, const PaintContext& context, int numRows);
     int getRepeatCount (const Node& node, const Slot& slot) const;
+    ShaderUniforms readUniforms (const Node& node, const Slot* slot) const;
+    uint32 findSeriesRevision (const void* numbers) const noexcept;
+    ShaderUniforms readFilterUniforms (const Node& node, const PaintContext& context, const Rectangle<float>& region, const AffineTransform& transform, float contextScale);
+    ShaderPicture prepareShader (const Node& node, const Slot* slot, const Rectangle<float>& area, const AffineTransform& transform, float contextScale, int maxSize) const;
+    void drawShader (Graphics& g, const Node& node, Slot& slot, const PaintContext& context, int numRows);
+    void drawPart (Graphics& g, const Node& node, Slot& slot, const PaintContext& context, int numRows);
+    const Component* getPaintedComponent() const;
     bool drawFilteredLayer (Graphics& g, const Node& node, const PaintContext& context, int numRows);
-    void drawFilteredContent (Graphics& g, const FilterSource& source);
+    void drawFilteredContent (Graphics& g, FilterSource& source);
+    void followDocument (ComponentDocument* document);
+    void forgetPictures (const String& path);
+    void redrawPictures();
 
     WeakReference<Component> targetComponent;
+    DrawingScope::ComponentResolver componentResolver;
+    DataTree drawingTree;
     ExpressionContext context;
     DrawingScope scope;
     std::shared_ptr<const Compiled> compiled;
     std::unique_ptr<Slot[]> slots;
+    std::unique_ptr<ShaderState[]> shaderStates;
     std::vector<Rectangle<float>> levelBounds;
     std::vector<int> loopIndices;
     int numLoopTurns = 1;
     std::vector<std::unique_ptr<PatternSource>> patternSources;
     ImageResolver imageResolver;
-    std::map<const Node*, std::unique_ptr<FilterSource>> filterSources;
+    std::unique_ptr<DocumentLink> documentLink;
+    std::vector<std::unique_ptr<FilterSource>> filterSources;
     const Font* paintFont = nullptr;
+    const Component* paintedComponent = nullptr;
     uint32 paintSerial = 0;
     std::vector<var> propertyValues;
     std::vector<DrawingScope::ArrayInput> propertyArrays;
+    std::vector<std::optional<ComponentArrayView>> propertySeries;
     std::vector<DrawingScope::Dependency> dependencies;
     std::unique_ptr<DependencyObserver> observer;
+    double shaderTime = 0.0;
+    bool paintedShaderTime = false;
+    std::optional<FrameAttachment> frameAttachment;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DrawingStyle)
 };

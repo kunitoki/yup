@@ -34,7 +34,10 @@ DropShadowEffect::~DropShadowEffect() = default;
 
 void DropShadowEffect::setColor (Color shadowColor) noexcept
 {
-    colorArgb.store (shadowColor.getARGB(), std::memory_order_relaxed);
+    const auto newColor = shadowColor.getARGB();
+
+    if (colorArgb.exchange (newColor, std::memory_order_relaxed) != newColor)
+        invalidate();
 }
 
 Color DropShadowEffect::getColor() const noexcept
@@ -44,7 +47,10 @@ Color DropShadowEffect::getColor() const noexcept
 
 void DropShadowEffect::setRadius (float radiusPoints) noexcept
 {
-    radius.store (jmax (0.0f, radiusPoints), std::memory_order_relaxed);
+    const auto newRadius = jmax (0.0f, radiusPoints);
+
+    if (radius.exchange (newRadius, std::memory_order_relaxed) != newRadius)
+        invalidate();
 }
 
 float DropShadowEffect::getRadius() const noexcept
@@ -54,13 +60,25 @@ float DropShadowEffect::getRadius() const noexcept
 
 void DropShadowEffect::setOffset (Point<float> offsetPoints) noexcept
 {
-    offsetX.store (offsetPoints.getX(), std::memory_order_relaxed);
-    offsetY.store (offsetPoints.getY(), std::memory_order_relaxed);
+    const bool movedX = offsetX.exchange (offsetPoints.getX(), std::memory_order_relaxed) != offsetPoints.getX();
+    const bool movedY = offsetY.exchange (offsetPoints.getY(), std::memory_order_relaxed) != offsetPoints.getY();
+
+    if (movedX || movedY)
+        invalidate();
 }
 
 Point<float> DropShadowEffect::getOffset() const noexcept
 {
     return { offsetX.load (std::memory_order_relaxed), offsetY.load (std::memory_order_relaxed) };
+}
+
+void DropShadowEffect::releaseResources()
+{
+    pipeline = nullptr;
+    targetA = nullptr;
+    targetB = nullptr;
+    pipelineDevice = nullptr;
+    compileAttempted = false;
 }
 
 void DropShadowEffect::apply (Graphics& g, GpuTexture::Ptr inputTexture, Rectangle<float> bounds)

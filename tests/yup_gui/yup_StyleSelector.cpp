@@ -160,6 +160,57 @@ TEST_F (StyleSelectorTests, ReportsReferencedProperties)
     EXPECT_TRUE (selector.getReferencedProperties().contains (Identifier ("enabled")));
 }
 
+TEST_F (StyleSelectorTests, TellsWhatItsLastCompoundRequires)
+{
+    const auto selector = parse (".panel > Slider#gain.knob.wide:hover");
+
+    EXPECT_EQ (selector.getSubjectId(), "gain");
+    EXPECT_EQ (selector.getSubjectType(), Identifier ("Slider"));
+    ASSERT_EQ (selector.getSubjectClasses().size(), 2);
+    EXPECT_EQ (selector.getSubjectClasses()[0], Identifier ("knob"));
+    EXPECT_EQ (selector.getSubjectClasses()[1], Identifier ("wide"));
+
+    // What a compound before a combinator requires is asked of another component
+    for (const auto* text : { "#panel *", ".panel :hover", "Slider > [title=\"a\"]", ":root" })
+    {
+        const auto other = parse (text);
+
+        EXPECT_TRUE (other.getSubjectId().isEmpty()) << text;
+        EXPECT_TRUE (other.getSubjectClasses().isEmpty()) << text;
+        EXPECT_FALSE (other.getSubjectType().isValid()) << text;
+    }
+
+    const StyleSelector empty {};
+    EXPECT_TRUE (empty.getSubjectId().isEmpty());
+    EXPECT_TRUE (empty.getSubjectClasses().isEmpty());
+    EXPECT_FALSE (empty.getSubjectType().isValid());
+}
+
+TEST_F (StyleSelectorTests, TellsThePropertiesSelectingTheDescendantsOfAComponent)
+{
+    // Read on the component the selector matches
+    EXPECT_FALSE (parse ("Slider:hover").selectsDescendantsBy (Identifier ("hovered")));
+    EXPECT_FALSE (parse (".panel Slider:hover:disabled").selectsDescendantsBy (Identifier ("hovered")));
+    EXPECT_FALSE (parse (".panel Slider:hover:disabled").selectsDescendantsBy (Identifier ("enabled")));
+    EXPECT_FALSE (parse ("ToggleButton:checked").selectsDescendantsBy (Identifier ("checked")));
+    EXPECT_FALSE (parse ("#gain").selectsDescendantsBy (Identifier ("id")));
+    EXPECT_FALSE (parse (".row:focus-within .icon:hover").selectsDescendantsBy (Identifier ("hovered")));
+
+    // Read on a component the matched one is inside of
+    EXPECT_TRUE (parse (".row:hover .icon").selectsDescendantsBy (Identifier ("hovered")));
+    EXPECT_TRUE (parse (".row:active > .icon").selectsDescendantsBy (Identifier ("pressed")));
+    EXPECT_TRUE (parse (".row:focus-within .icon:hover").selectsDescendantsBy (Identifier ("focus-within")));
+    EXPECT_TRUE (parse (".row:hover .icon:hover").selectsDescendantsBy (Identifier ("hovered")));
+    EXPECT_TRUE (parse ("ToggleButton:checked Label").selectsDescendantsBy (Identifier ("checked")));
+    EXPECT_TRUE (parse ("#gain Label").selectsDescendantsBy (Identifier ("id")));
+
+    // A component with no value of its own for an attribute takes the one of a parent
+    EXPECT_TRUE (parse ("Slider[title=\"a\"]").selectsDescendantsBy (Identifier ("title")));
+    EXPECT_TRUE (parse ("[title] Slider").selectsDescendantsBy (Identifier ("title")));
+
+    EXPECT_FALSE (parse (".row:hover .icon").selectsDescendantsBy (Identifier ("pressed")));
+}
+
 TEST_F (StyleSelectorTests, AcceptsFocusedAndHoveredAliases)
 {
     EXPECT_TRUE (StyleSelector::parse ("Slider:focused").wasOk());

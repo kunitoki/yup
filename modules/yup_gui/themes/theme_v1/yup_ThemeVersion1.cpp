@@ -45,6 +45,9 @@ extern const std::size_t FontAwesome7Font_size;
 
 //==============================================================================
 
+namespace
+{
+
 using PaletteRole = ThemePalette::Role;
 
 constexpr float widgetCornerRadius = 4.0f;
@@ -57,7 +60,6 @@ struct CuratedGeometry
     static inline const Identifier outlineWidth { "outlineWidth" };
     static inline const Identifier focusedOutlineWidth { "focusedOutlineWidth" };
     static inline const Identifier trackWidth { "trackWidth" };
-    static inline const Identifier thumbSize { "thumbSize" };
     static inline const Identifier thumbInset { "thumbInset" };
     static inline const Identifier rotaryInset { "rotaryInset" };
     static inline const Identifier rotaryDialInset { "rotaryDialInset" };
@@ -78,6 +80,41 @@ struct CuratedGeometry
         return radius.isVoid() ? pillSize * 0.5f : VariantConverter<float>::fromVar (radius);
     }
 };
+
+//==============================================================================
+
+/** Lays a text out in what its widget keeps for whoever paints it, and returns it laid out.
+
+    The text is laid out again only when the text, the font, the size or the way it is laid out are not the ones of
+    what is kept. That comparison is all there is to tell that a text changed: the widget tells nothing.
+*/
+const StyledText& layoutKeptText (TextLayoutCache& kept,
+                                  const String& text,
+                                  const Font& font,
+                                  const Size<float>& size,
+                                  StyledText::HorizontalAlign horizontalAlign,
+                                  StyledText::VerticalAlign verticalAlign,
+                                  StyledText::TextOverflow overflow,
+                                  StyledText::TextWrap wrap)
+{
+    auto modifier = kept.styledText.startUpdate();
+    modifier.setHorizontalAlign (horizontalAlign);
+    modifier.setVerticalAlign (verticalAlign);
+    modifier.setOverflow (overflow);
+    modifier.setWrap (wrap);
+
+    if (kept.text != text || kept.font != font || kept.styledText.getMaxSize() != size)
+    {
+        modifier.clear();
+        modifier.setMaxSize (size);
+        modifier.appendText (text, font);
+
+        kept.text = text;
+        kept.font = font;
+    }
+
+    return kept.styledText;
+}
 
 //==============================================================================
 
@@ -105,30 +142,39 @@ SliderColors getSliderColors (const ApplicationTheme& theme, const Slider& slide
     return colors;
 }
 
-void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider& slider, Rectangle<float> sliderBounds, float rotaryStartAngle, float rotaryEndAngle, float sliderValue, bool isMouseOver, bool isMouseDown)
+void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider& slider, Rectangle<float> sliderBounds, float rotaryStartAngle, float rotaryEndAngle, float sliderValue)
 {
     const auto colors = getSliderColors (theme, slider);
 
-    auto bounds = sliderBounds.reduced (slider.proportionOfWidth (slider.findPropertyAs<float> (CuratedGeometry::rotaryInset)));
+    // A dial is round whatever the shape of the slider: it takes the largest square in the middle of its bounds, and its
+    // geometry is in proportion to the smaller side of the slider
+    const auto dialSize = jmin (sliderBounds.getWidth(), sliderBounds.getHeight());
+    const auto shortSide = jmin (slider.getWidth(), slider.getHeight());
+    const auto proportionOfSide = [&] (const Identifier& property)
+    {
+        return shortSide * slider.findPropertyAs<float> (property);
+    };
+
+    auto bounds = sliderBounds.withSizeKeepingCenter (dialSize, dialSize).reduced (proportionOfSide (CuratedGeometry::rotaryInset));
     const auto center = bounds.getCenter();
 
     const auto fromRadians = rotaryStartAngle;
     const auto toRadians = rotaryEndAngle;
     const auto toCurrentRadians = fromRadians + (toRadians - fromRadians) * sliderValue;
 
-    const auto arcWidth = slider.proportionOfWidth (slider.findPropertyAs<float> (CuratedGeometry::rotaryArcWidth));
+    const auto arcWidth = proportionOfSide (CuratedGeometry::rotaryArcWidth);
 
     Path backgroundPath;
-    backgroundPath.addEllipse (bounds.reduced (slider.proportionOfWidth (slider.findPropertyAs<float> (CuratedGeometry::rotaryDialInset))));
+    backgroundPath.addEllipse (bounds.reduced (proportionOfSide (CuratedGeometry::rotaryDialInset)));
 
     g.setFillColor (colors.background);
     g.fillPath (backgroundPath);
 
     g.setStrokeColor (colors.background.darker (0.3f));
-    g.setStrokeWidth (slider.proportionOfWidth (slider.findPropertyAs<float> (CuratedGeometry::rotaryDialOutlineWidth)));
+    g.setStrokeWidth (proportionOfSide (CuratedGeometry::rotaryDialOutlineWidth));
     g.strokePath (backgroundPath);
 
-    const auto reducedBounds = bounds.reduced (slider.proportionOfWidth (slider.findPropertyAs<float> (CuratedGeometry::rotaryPointerInset)));
+    const auto reducedBounds = bounds.reduced (proportionOfSide (CuratedGeometry::rotaryPointerInset));
     const auto pos = center.getPointOnCircumference (
         reducedBounds.getWidth() / 2.0f,
         reducedBounds.getHeight() / 2.0f,
@@ -139,7 +185,7 @@ void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider
 
     g.setStrokeCap (StrokeCap::Round);
     g.setStrokeColor (colors.text);
-    g.setStrokeWidth (slider.proportionOfWidth (slider.findPropertyAs<float> (CuratedGeometry::rotaryPointerWidth)));
+    g.setStrokeWidth (proportionOfSide (CuratedGeometry::rotaryPointerWidth));
     g.strokePath (foregroundLine);
 
     Path backgroundArc;
@@ -165,7 +211,7 @@ void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider
                                   toCurrentRadians,
                                   true);
 
-    auto thumbColor = slider.isMouseOver() ? colors.thumbOver : colors.thumb;
+    auto thumbColor = slider.isCurrentlyBeingDragged() ? colors.thumbDown : (slider.isMouseOver() ? colors.thumbOver : colors.thumb);
     if (! slider.isEnabled())
         thumbColor = thumbColor.withAlpha (0.3f);
 
@@ -173,18 +219,6 @@ void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider
     g.setStrokeColor (thumbColor);
     g.setStrokeWidth (arcWidth);
     g.strokePath (foregroundArc);
-
-    /*
-    if (slider.hasKeyboardFocus())
-    {
-        Path focusPath;
-        focusPath.addEllipse (slider.getLocalBounds().reduced (2));
-
-        g.setStrokeColor (Colors::cornflowerblue); // TODO - findColor
-        g.setStrokeWidth (2.0f);
-        g.strokePath (focusPath);
-    }
-    */
 }
 
 void paintLinearSlider (Graphics& g, const ApplicationTheme& theme, const Slider& slider, Rectangle<float> sliderBounds, Rectangle<float> thumbBounds, bool isHorizontal, float sliderValue, bool isMouseOver, bool isMouseDown)
@@ -219,16 +253,6 @@ void paintLinearSlider (Graphics& g, const ApplicationTheme& theme, const Slider
     {
         g.fillEllipse (thumbBounds);
     }
-
-    /*
-    // Draw focus outline if needed
-    if (slider.hasKeyboardFocus())
-    {
-        g.setStrokeColor (Colors::cornflowerblue);
-        g.setStrokeWidth (2.0f);
-        g.strokeRoundedRect (slider.getLocalBounds().reduced (2), 2.0f);
-    }
-    */
 }
 
 void paintTwoValueSlider (Graphics& g, const ApplicationTheme& theme, const Slider& slider, Rectangle<float> sliderBounds, Rectangle<float> minThumbBounds, Rectangle<float> maxThumbBounds, bool isHorizontal, float minValue, float maxValue, bool isMouseOverMinThumb, bool isMouseOverMaxThumb, bool isMouseDown)
@@ -259,31 +283,24 @@ void paintTwoValueSlider (Graphics& g, const ApplicationTheme& theme, const Slid
         g.fillRoundedRect (sliderBounds.getCenterX() - trackRadius, endY, trackWidth, startY - endY, trackRadius);
     }
 
-    // Draw min thumb
-    g.setFillColor (isMouseDown ? colors.thumbDown : (isMouseOverMinThumb ? colors.thumbOver : colors.thumb));
+    // Draw the thumbs: the one under the pointer is told from the other, and from itself while it is dragged
+    const auto thumbColor = [&] (bool isMouseOverThumb)
+    {
+        return ! isMouseOverThumb ? colors.thumb : (isMouseDown ? colors.thumbDown : colors.thumbOver);
+    };
+
+    g.setFillColor (thumbColor (isMouseOverMinThumb));
     g.fillEllipse (minThumbBounds);
 
-    // Draw max thumb
-    g.setFillColor (isMouseDown ? colors.thumbDown : (isMouseOverMaxThumb ? colors.thumbOver : colors.thumb));
+    g.setFillColor (thumbColor (isMouseOverMaxThumb));
     g.fillEllipse (maxThumbBounds);
-
-    /*
-    // Draw focus outline if needed
-    if (slider.hasKeyboardFocus())
-    {
-        g.setStrokeColor (Colors::cornflowerblue);
-        g.setStrokeWidth (2.0f);
-        g.strokeRoundedRect (slider.getLocalBounds().reduced (2), 2.0f);
-    }
-    */
 }
 
 void paintStepperSlider (Graphics& g, const ApplicationTheme& theme, const Slider& slider, Rectangle<float> sliderBounds)
 {
     const auto colors = getSliderColors (theme, slider);
-    const auto decrement = slider.getDecrementButtonBounds();
-    const auto increment = slider.getIncrementButtonBounds();
-    const auto isOnALine = approximatelyEqual (decrement.getY(), increment.getY());
+    const auto decrement = slider.getDecrementBounds();
+    const auto increment = slider.getIncrementBounds();
     const auto radius = jmin (4.0f, jmin (sliderBounds.getWidth(), sliderBounds.getHeight()) * 0.5f);
 
     g.setFillColor (colors.background);
@@ -309,8 +326,7 @@ void paintStepperSlider (Graphics& g, const ApplicationTheme& theme, const Slide
     paintButton (decrement, -1);
     paintButton (increment, 1);
 
-    const auto valueBounds = isOnALine ? Rectangle<float> (decrement.getRight(), sliderBounds.getY(), increment.getX() - decrement.getRight(), sliderBounds.getHeight())
-                                       : Rectangle<float> (sliderBounds.getX(), increment.getBottom(), sliderBounds.getWidth(), decrement.getY() - increment.getBottom());
+    const auto valueBounds = slider.getTextBounds();
 
     if (valueBounds.isEmpty())
         return;
@@ -319,19 +335,18 @@ void paintStepperSlider (Graphics& g, const ApplicationTheme& theme, const Slide
     const auto interval = slider.getInterval();
     const auto isWhole = interval > 0.0 && approximatelyEqual (interval, std::round (interval));
     const auto text = isWhole ? String (roundToInt (slider.getValue())) : String (slider.getValue(), jlimit (0, 3, slider.getNumDecimalPlacesToDisplay()));
+    const auto font = theme.getDefaultFont().withHeight (jmin (14.0f, valueBounds.getHeight() * 0.6f));
 
     g.setFillColor (colors.text);
-    g.fillFittedText (text, theme.getDefaultFont().withHeight (jmin (14.0f, valueBounds.getHeight() * 0.6f)), valueBounds, Justification::center);
+    g.fillFittedText (layoutKeptText (slider.getTextLayoutCache(), text, font, valueBounds.getSize(), StyledText::center, StyledText::middle, StyledText::visible, StyledText::wrap), valueBounds);
 }
 
 void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
 {
-    auto sliderBounds = s.getSliderBounds();
+    auto sliderBounds = s.getTrackBounds();
     const auto sliderType = s.getSliderType();
     const bool isMouseOver = s.isMouseOver();
-    const bool isMouseDown = false; // s.isMouseButtonDown();
-    const auto thumbSize = s.findPropertyAs<float> (CuratedGeometry::thumbSize);
-    const auto thumbRadius = thumbSize * 0.5f;
+    const bool isMouseDown = s.isCurrentlyBeingDragged();
 
     switch (sliderType)
     {
@@ -346,7 +361,7 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
         {
             constexpr float rotaryStartAngle = degreesToRadians (135.0f);
             constexpr float rotaryEndAngle = rotaryStartAngle + degreesToRadians (270.0f);
-            paintRotarySlider (g, theme, s, sliderBounds, rotaryStartAngle, rotaryEndAngle, static_cast<float> (s.getValueNormalised()), isMouseOver, isMouseDown);
+            paintRotarySlider (g, theme, s, sliderBounds, rotaryStartAngle, rotaryEndAngle, static_cast<float> (s.getValueNormalised()));
             break;
         }
 
@@ -355,60 +370,22 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
         case Slider::LinearBarHorizontal:
         case Slider::LinearBarVertical:
         {
-            Rectangle<float> thumbBounds;
             const bool isHorizontal = (sliderType == Slider::LinearHorizontal || sliderType == Slider::LinearBarHorizontal);
             const float sliderValue = static_cast<float> (s.getValueNormalised());
 
-            if (isHorizontal)
-            {
-                const float thumbX = sliderBounds.getX() + (sliderValue * sliderBounds.getWidth()) - thumbRadius;
-                thumbBounds = Rectangle<float> (thumbX, sliderBounds.getCenterY() - thumbRadius, thumbSize, thumbSize);
-            }
-            else
-            {
-                const float thumbY = sliderBounds.getBottom() - (sliderValue * sliderBounds.getHeight()) - thumbRadius;
-                thumbBounds = Rectangle<float> (sliderBounds.getCenterX() - thumbRadius, thumbY, thumbSize, thumbSize);
-            }
-
-            paintLinearSlider (g, theme, s, sliderBounds, thumbBounds, isHorizontal, sliderValue, isMouseOver, isMouseDown);
+            paintLinearSlider (g, theme, s, sliderBounds, s.getThumbBounds(), isHorizontal, sliderValue, isMouseOver, isMouseDown);
             break;
         }
 
         case Slider::TwoValueHorizontal:
         case Slider::TwoValueVertical:
         {
-            Rectangle<float> minThumbBounds, maxThumbBounds;
             const bool isHorizontal = (sliderType == Slider::TwoValueHorizontal);
-            const float minNorm = 0.0f; // static_cast<float>(s.getMinValueNormalised());
-            const float maxNorm = 1.0f; // static_cast<float>(s.getMaxValueNormalised());
+            const float minNorm = static_cast<float> (s.getMinValueNormalised());
+            const float maxNorm = static_cast<float> (s.getMaxValueNormalised());
+            const auto hoveredThumb = s.getHoveredThumb();
 
-            if (isHorizontal)
-            {
-                const float minThumbX = sliderBounds.getX() + (minNorm * sliderBounds.getWidth()) - thumbRadius;
-                const float maxThumbX = sliderBounds.getX() + (maxNorm * sliderBounds.getWidth()) - thumbRadius;
-                minThumbBounds = Rectangle<float> (minThumbX, sliderBounds.getCenterY() - thumbRadius, thumbSize, thumbSize);
-                maxThumbBounds = Rectangle<float> (maxThumbX, sliderBounds.getCenterY() - thumbRadius, thumbSize, thumbSize);
-            }
-            else
-            {
-                const float minThumbY = sliderBounds.getBottom() - (minNorm * sliderBounds.getHeight()) - thumbRadius;
-                const float maxThumbY = sliderBounds.getBottom() - (maxNorm * sliderBounds.getHeight()) - thumbRadius;
-                minThumbBounds = Rectangle<float> (sliderBounds.getCenterX() - thumbRadius, minThumbY, thumbSize, thumbSize);
-                maxThumbBounds = Rectangle<float> (sliderBounds.getCenterX() - thumbRadius, maxThumbY, thumbSize, thumbSize);
-            }
-
-            // For two-value sliders, check which thumb the mouse is over
-            bool isMouseOverMinThumb = false;
-            bool isMouseOverMaxThumb = false;
-            if (isMouseOver)
-            {
-                const auto mousePos = Point<float>(); // s.getMousePosition();
-                const Point<float> mousePosFloat (static_cast<float> (mousePos.getX()), static_cast<float> (mousePos.getY()));
-                isMouseOverMinThumb = minThumbBounds.contains (mousePosFloat);
-                isMouseOverMaxThumb = maxThumbBounds.contains (mousePosFloat);
-            }
-
-            paintTwoValueSlider (g, theme, s, sliderBounds, minThumbBounds, maxThumbBounds, isHorizontal, minNorm, maxNorm, isMouseOverMinThumb, isMouseOverMaxThumb, isMouseDown);
+            paintTwoValueSlider (g, theme, s, sliderBounds, s.getMinThumbBounds(), s.getMaxThumbBounds(), isHorizontal, minNorm, maxNorm, hoveredThumb == Slider::Thumb::minValue, hoveredThumb == Slider::Thumb::maxValue, isMouseDown);
             break;
         }
     }
@@ -416,11 +393,34 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
 
 //==============================================================================
 
+void paintTextEditorSelection (Graphics& g, const ApplicationTheme&, const TextEditor& t, const Rectangle<float>& area)
+{
+    if (! t.hasSelection())
+        return;
+
+    // The selection is told from where the text starts, and moves with it as it scrolls
+    const auto offset = area.getTopLeft() - t.getScrollOffset();
+
+    for (const auto& selected : t.getSelectedTextAreas())
+        g.fillRect (selected.translated (offset));
+}
+
+void paintTextEditorText (Graphics& g, const ApplicationTheme&, const TextEditor& t, const Rectangle<float>& area)
+{
+    const auto offset = t.getScrollOffset();
+
+    g.fillFittedText (t.getStyledText(), area.translated (-offset.getX(), -offset.getY()));
+}
+
+void paintTextEditorCaret (Graphics& g, const ApplicationTheme&, const TextEditor& t, const Rectangle<float>& area)
+{
+    if (t.hasKeyboardFocus() && t.isCaretVisible())
+        g.fillRect (area);
+}
+
 void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEditor& t)
 {
     auto bounds = t.getLocalBounds();
-    auto textBounds = t.getTextBounds();
-    auto scrollOffset = t.getScrollOffset();
     const auto cornerRadius = t.findPropertyAs<float> (CuratedGeometry::cornerRadius);
     const auto& palette = theme.getPalette (t);
 
@@ -444,38 +444,26 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
     {
         auto selectionColor = theme.findColor (t, TextEditor::Style::selectionColorId).value_or (palette.getColor (PaletteRole::accent).withAlpha (0.4f));
         g.setFillColor (selectionColor);
-
-        // Get all selection rectangles for proper multiline selection rendering
-        auto selectionRects = t.getSelectedTextAreas();
-        for (const auto& rect : selectionRects)
-        {
-            // Adjust each rectangle for scroll offset and text bounds
-            auto adjustedRect = rect.translated (textBounds.getTopLeft() - scrollOffset);
-            g.fillRect (adjustedRect);
-        }
+        paintTextEditorSelection (g, theme, t, t.getTextBounds());
     }
 
     // Draw text with scroll offset
     auto textColor = theme.findColor (t, TextEditor::Style::textColorId).value_or (palette.getColor (PaletteRole::text));
     g.setFillColor (textColor);
-
-    auto scrolledTextBounds = textBounds.translated (-scrollOffset.getX(), -scrollOffset.getY());
-    g.fillFittedText (t.getStyledText(), scrolledTextBounds);
+    paintTextEditorText (g, theme, t, t.getTextBounds());
 
     // Draw caret
     if (t.hasKeyboardFocus() && t.isCaretVisible())
     {
         auto caretColor = theme.findColor (t, TextEditor::Style::caretColorId).value_or (palette.getColor (PaletteRole::text));
         g.setFillColor (caretColor);
-
-        auto caretBounds = t.getCaretBounds();
-        g.fillRect (caretBounds);
+        paintTextEditorCaret (g, theme, t, t.getCaretBounds());
     }
 }
 
 //==============================================================================
 
-static Color getCodeDiagnosticColor (const CodeEditorScheme& scheme, CodeEditor::Diagnostic::Severity severity)
+Color getCodeDiagnosticColor (const CodeEditorScheme& scheme, CodeEditor::Diagnostic::Severity severity)
 {
     switch (severity)
     {
@@ -497,7 +485,7 @@ void paintCodeEditor (Graphics& g, const ApplicationTheme& theme, const CodeEdit
     ignoreUnused (theme);
 
     const auto bounds = editor.getLocalBounds();
-    const auto textArea = editor.getTextArea();
+    const auto textArea = editor.getTextBounds();
     const auto& scheme = editor.getScheme();
     const auto scrollOffset = editor.getScrollOffset();
 
@@ -662,7 +650,18 @@ void paintCodeEditor (Graphics& g, const ApplicationTheme& theme, const CodeEdit
     clipState.restore();
 }
 
+void paintCodeEditorContent (Graphics& g, const ApplicationTheme& theme, const CodeEditor& editor, const Rectangle<float>&)
+{
+    // What an editor shows is told by its scheme, so it is one part: a drawing frames it
+    paintCodeEditor (g, theme, editor);
+}
+
 //==============================================================================
+
+void paintTextButtonText (Graphics& g, const ApplicationTheme&, const TextButton& b, const Rectangle<float>& area)
+{
+    g.fillFittedText (b.getStyledText(), area);
+}
 
 void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButton& b)
 {
@@ -702,10 +701,16 @@ void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButt
 
     // Draw text
     g.setFillColor (textColor);
-    g.fillFittedText (b.getStyledText(), b.getTextBounds());
+    paintTextButtonText (g, theme, b, b.getTextBounds());
 }
 
 //==============================================================================
+
+void paintToggleButtonText (Graphics& g, const ApplicationTheme&, const ToggleButton& b, const Rectangle<float>& area)
+{
+    if (b.getButtonText().isNotEmpty())
+        g.fillFittedText (b.getStyledText(), area);
+}
 
 void paintToggleButton (Graphics& g, const ApplicationTheme& theme, const ToggleButton& b)
 {
@@ -747,18 +752,21 @@ void paintToggleButton (Graphics& g, const ApplicationTheme& theme, const Toggle
     g.strokeRoundedRect (bounds.reduced (0.5f), cornerRadius);
 
     // Draw text
-    if (b.getButtonText().isNotEmpty())
-    {
-        g.setFillColor (textColor);
-        g.fillFittedText (b.getStyledText(), bounds);
-    }
+    g.setFillColor (textColor);
+    paintToggleButtonText (g, theme, b, b.getLocalBounds());
 }
 
 //==============================================================================
 
 void paintSwitchButton (Graphics& g, const ApplicationTheme& theme, const SwitchButton& s)
 {
-    auto bounds = s.getLocalBounds().reduced (4);
+    const auto switchBounds = s.getTrackBounds();
+
+    // The slot and the handle have their whole inset in a switch as thick as it is by default, and less of it in a thinner one
+    constexpr float thicknessOfWholeInset = 28.0f;
+    const auto insetScale = jmin (1.0f, (s.isVertical() ? switchBounds.getWidth() : switchBounds.getHeight()) / thicknessOfWholeInset);
+
+    auto bounds = switchBounds.reduced (4.0f * insetScale);
     auto cornerSize = CuratedGeometry::getCornerRadius (s, s.isVertical() ? bounds.getWidth() : bounds.getHeight());
 
     // Draw shadow/outline
@@ -776,7 +784,8 @@ void paintSwitchButton (Graphics& g, const ApplicationTheme& theme, const Switch
     g.fillRoundedRect (bounds, cornerSize);
 
     // Draw handle
-    auto circleBounds = s.getSwitchCircleBounds().reduced (s.findPropertyAs<float> (CuratedGeometry::thumbInset));
+    auto circleBounds = s.getThumbBounds();
+    circleBounds = circleBounds.reduced (jmin (s.findPropertyAs<float> (CuratedGeometry::thumbInset) * insetScale, circleBounds.getWidth() * 0.5f));
     auto circleColor = theme.findColor (s, SwitchButton::Style::switchColorId).value_or (palette.getColor (PaletteRole::text));
 
     g.setFillColor (circleColor);
@@ -790,9 +799,14 @@ void paintSwitchButton (Graphics& g, const ApplicationTheme& theme, const Switch
 
 //==============================================================================
 
+void paintComboBoxText (Graphics& g, const ApplicationTheme&, const ComboBox& c, const Rectangle<float>& area)
+{
+    if (! c.getStyledText().isEmpty())
+        g.fillFittedText (c.getStyledText(), area);
+}
+
 void paintComboBox (Graphics& g, const ApplicationTheme& theme, const ComboBox& c)
 {
-    auto& styledText = c.getStyledText();
     const auto bounds = c.getLocalBounds();
     const auto& palette = theme.getPalette (c);
     const auto cornerRadius = c.findPropertyAs<float> (CuratedGeometry::cornerRadius);
@@ -812,28 +826,17 @@ void paintComboBox (Graphics& g, const ApplicationTheme& theme, const ComboBox& 
     g.setStrokeWidth (CuratedGeometry::getOutlineWidth (c, hasFocus));
     g.strokeRoundedRect (bounds.reduced (0.5f), cornerRadius);
 
-    // Calculate text and arrow areas
-    auto arrowWidth = 20.0f;
-    auto arrowSize = 4.0f;
-    auto textBounds = bounds.reduced (8.0f, 4.0f);
-    textBounds.removeFromRight (arrowWidth);
-
-    auto arrowBounds = bounds.reduced (4.0f);
-    arrowBounds.removeFromLeft (bounds.getWidth() - arrowWidth);
-
     // Draw text
-    if (! styledText.isEmpty())
-    {
-        auto textColor = theme.findColor (c, ComboBox::Style::textColorId).value_or (palette.getColor (PaletteRole::text));
-        g.setFillColor (textColor);
-        g.fillFittedText (styledText, textBounds);
-    }
+    auto textColor = theme.findColor (c, ComboBox::Style::textColorId).value_or (palette.getColor (PaletteRole::text));
+    g.setFillColor (textColor);
+    paintComboBoxText (g, theme, c, c.getTextBounds());
 
     // Draw arrow
     auto arrowColor = theme.findColor (c, ComboBox::Style::arrowColorId).value_or (palette.getColor (PaletteRole::textMuted));
     g.setFillColor (arrowColor);
 
-    auto center = arrowBounds.getCenter();
+    const auto arrowSize = 4.0f;
+    const auto center = c.getArrowBounds().getCenter();
 
     // Draw simple triangle using lines instead of Path
     g.setStrokeColor (arrowColor);
@@ -846,9 +849,20 @@ void paintComboBox (Graphics& g, const ApplicationTheme& theme, const ComboBox& 
 
 //==============================================================================
 
+void paintLabelText (Graphics& g, const ApplicationTheme&, const Label& l, const Rectangle<float>& area)
+{
+    if (! l.getStyledText().isEmpty())
+        g.fillFittedText (l.getStyledText(), area);
+}
+
+void paintLabelTextOutline (Graphics& g, const ApplicationTheme&, const Label& l, const Rectangle<float>& area)
+{
+    if (! l.getStyledText().isEmpty())
+        g.strokeFittedText (l.getStyledText(), area);
+}
+
 void paintLabel (Graphics& g, const ApplicationTheme& theme, const Label& l)
 {
-    auto& styledText = l.getStyledText();
     const auto bounds = l.getLocalBounds();
 
     if (const auto backgroundColor = theme.findColor (l, Label::Style::backgroundColorId); backgroundColor && ! backgroundColor->isTransparent())
@@ -868,15 +882,38 @@ void paintLabel (Graphics& g, const ApplicationTheme& theme, const Label& l)
     {
         g.setStrokeColor (*strokeColor);
         g.setStrokeWidth (l.getStrokeWidth());
-        g.strokeFittedText (styledText, bounds);
+        paintLabelTextOutline (g, theme, l, bounds);
     }
 
-    if (! styledText.isEmpty())
-    {
-        const auto fillColor = theme.findColor (l, Label::Style::textFillColorId).value_or (theme.getPalette (l).getColor (PaletteRole::text));
-        g.setFillColor (fillColor);
-        g.fillFittedText (styledText, bounds);
-    }
+    const auto fillColor = theme.findColor (l, Label::Style::textFillColorId).value_or (theme.getPalette (l).getColor (PaletteRole::text));
+    g.setFillColor (fillColor);
+    paintLabelText (g, theme, l, bounds);
+}
+
+//==============================================================================
+
+void paintImageComponentImage (Graphics& g, const ApplicationTheme&, const ImageComponent& c, const Rectangle<float>& area)
+{
+    const auto imageOpacity = c.getImageOpacity();
+    const auto& drawable = c.getDrawable();
+    const auto& image = c.getImage();
+
+    if (imageOpacity <= 0.0f || area.isEmpty() || (drawable == nullptr && ! image.isValid()))
+        return;
+
+    const auto savedState = g.saveState();
+    if (imageOpacity < 1.0f)
+        g.setOpacity (g.getOpacity() * imageOpacity);
+
+    if (drawable != nullptr)
+        drawable->paint (g, area, c.getFitting(), c.getJustification());
+    else
+        detail::drawFittedImage (g, image, area, c.getFitting(), c.getJustification());
+}
+
+void paintImageComponent (Graphics& g, const ApplicationTheme& theme, const ImageComponent& c)
+{
+    paintImageComponentImage (g, theme, c, c.getLocalBounds());
 }
 
 //==============================================================================
@@ -924,16 +961,6 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
     }
 
     // Draw items
-    bool anyItemIsTicked = false;
-    for (const auto& item : p)
-    {
-        if (item->isTicked)
-        {
-            anyItemIsTicked = true;
-            break;
-        }
-    }
-
     int itemIndex = -1;
     auto itemFont = theme.getDefaultFont();
 
@@ -1007,33 +1034,13 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
 
             g.setFillColor (textColor);
 
-            auto textRect = rect.reduced (12.0f, 2.0f);
-            if (anyItemIsTicked)
-                textRect = textRect.withTrimmedLeft (8.0f);
-
-            if (item->shortcutKeyText.isNotEmpty())
-                textRect = textRect.withTrimmedRight (80.0f);
-
-            if (item->isSubMenu())
-                textRect = textRect.withTrimmedRight (24.0f);
-
-            {
-                auto styledText = yup::StyledText();
-                {
-                    auto modifier = styledText.startUpdate();
-                    modifier.setMaxSize (textRect.getSize());
-                    modifier.setOverflow (yup::StyledText::ellipsis);
-                    modifier.setWrap (yup::StyledText::noWrap);
-                    modifier.appendText (item->text, itemFont);
-                }
-
-                g.fillFittedText (styledText, textRect);
-            }
+            const auto textRect = p.getItemTextBounds (itemIndex);
+            g.fillFittedText (layoutKeptText (item->textLayoutCache, item->text, itemFont, textRect.getSize(), StyledText::left, StyledText::top, StyledText::ellipsis, StyledText::noWrap), textRect);
 
             // Draw checkmark if ticked
             if (item->isTicked)
             {
-                auto checkRect = Rectangle<float> (rect.getX() + 4.0f, rect.getCenterY() - 6.0f, 12.0f, 12.0f);
+                const auto checkRect = p.getItemTickBounds (itemIndex);
                 g.setStrokeColor (textColor);
                 g.setStrokeWidth (2.0f);
                 g.strokeLine (checkRect.getX() + 2.0f, checkRect.getCenterY(), checkRect.getCenterX(), checkRect.getBottom() - 2.0f);
@@ -1043,29 +1050,19 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
             // Draw shortcut text
             if (item->shortcutKeyText.isNotEmpty())
             {
-                auto shortcutRect = Rectangle<float> (rect.getRight() - 80.0f, rect.getY() + 2.0f, 75.0f, rect.getHeight() - 2.0f);
-
-                auto styledText = yup::StyledText();
-                {
-                    auto modifier = styledText.startUpdate();
-                    modifier.setMaxSize (shortcutRect.getSize());
-                    modifier.setOverflow (yup::StyledText::ellipsis);
-                    modifier.setWrap (yup::StyledText::noWrap);
-                    modifier.setHorizontalAlign (yup::StyledText::right);
-                    modifier.appendText (item->shortcutKeyText, itemFont.withHeight (itemFont.getHeight() - 1.0f));
-                }
+                const auto shortcutRect = p.getItemShortcutBounds (itemIndex);
+                const auto shortcutFont = itemFont.withHeight (itemFont.getHeight() - 1.0f);
 
                 g.setOpacity (0.7f);
                 g.setFillColor (textColor);
-                g.fillFittedText (styledText, shortcutRect);
+                g.fillFittedText (layoutKeptText (item->shortcutKeyTextLayoutCache, item->shortcutKeyText, shortcutFont, shortcutRect.getSize(), StyledText::right, StyledText::top, StyledText::ellipsis, StyledText::noWrap), shortcutRect);
                 g.setOpacity (1.0f);
             }
 
             // Draw submenu arrow
             if (item->isSubMenu())
             {
-                const auto arrowHeight = jmin (12.0f, jmax (4.0f, rect.getHeight() - 8.0f));
-                auto arrowRect = Rectangle<float> (rect.getRight() - 16.0f, rect.getCenterY() - arrowHeight * 0.5f, 8.0f, arrowHeight);
+                const auto arrowRect = p.getItemArrowBounds (itemIndex);
                 g.setStrokeColor (textColor);
                 g.setStrokeWidth (1.5f);
                 g.strokeLine (arrowRect.getX() + 2.0f, arrowRect.getY() + 2.0f, arrowRect.getRight() - 2.0f, arrowRect.getCenterY());
@@ -1082,7 +1079,7 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
         // Up arrow
         if (p.canScrollUp())
         {
-            auto upBounds = p.getScrollUpIndicatorBounds();
+            auto upBounds = p.getScrollUpBounds();
             auto center = upBounds.getCenter();
             auto arrowSize = 4.0f;
 
@@ -1098,7 +1095,7 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
         // Down arrow
         if (p.canScrollDown())
         {
-            auto downBounds = p.getScrollDownIndicatorBounds();
+            auto downBounds = p.getScrollDownBounds();
             auto center = downBounds.getCenter();
             auto arrowSize = 4.0f;
 
@@ -1125,8 +1122,8 @@ void paintScrollBar (Graphics& g, const ApplicationTheme& theme, const ScrollBar
     if (scrollBar.getVisibilityMode() == ScrollBar::VisibilityMode::autoHide && ! scrollBar.isScrollingNeeded())
         return;
 
-    auto trackBounds = scrollBar.getTrackBoundsForRendering();
-    auto thumbBounds = scrollBar.getThumbBoundsForRendering().reduced (scrollBar.findPropertyAs<float> (CuratedGeometry::thumbInset));
+    auto trackBounds = scrollBar.getTrackBounds();
+    auto thumbBounds = scrollBar.getThumbBounds().reduced (scrollBar.findPropertyAs<float> (CuratedGeometry::thumbInset));
     auto cornerSize = CuratedGeometry::getCornerRadius (scrollBar, scrollBar.getScrollBarWidth());
 
     // Draw track (optional, usually invisible on macOS)
@@ -1204,9 +1201,8 @@ void paintJoystickComponent (Graphics& g, const ApplicationTheme& theme, const J
     else
         thumbColor = theme.findColor (joystick, JoystickComponent::Style::thumbColorId).value_or (palette.getColor (PaletteRole::text));
 
-    const auto size = joystick.getThumbSize();
     g.setFillColor (thumbColor);
-    g.fillEllipse (Rectangle<float> (0.0f, 0.0f, size, size).withCenter (thumb));
+    g.fillEllipse (joystick.getThumbBounds());
 }
 
 void paintResizableDivider (Graphics& g, const ApplicationTheme& theme, const ResizableDivider& divider)
@@ -1295,11 +1291,15 @@ void paintProgressBar (Graphics& g, const ApplicationTheme& theme, const Progres
 
     if (progressBar.isIndeterminate())
     {
-        // Indeterminate mode - draw animated diagonal stripes
+        // The stripes are as wide as the bar is high: lower than a pixel it has none to draw
+        if (bounds.getHeight() < 1.0f)
+            return;
+
+        // Indeterminate mode - draw animated diagonal stripes, moved by a pair of them in a cycle of the animation
         const auto stripeWidth = bounds.getHeight() * 2.0f;
         const auto halfStripeWidth = stripeWidth * 0.5f;
         // Reverse animation direction (right to left becomes left to right)
-        const auto position = static_cast<float> (static_cast<int> (stripeWidth) - (static_cast<int> (Time::getCurrentTime().toMilliseconds() / 15) % static_cast<int> (stripeWidth)));
+        const auto position = stripeWidth * (1.0f - static_cast<float> (progressBar.getAnimationPhase()));
 
         auto state = g.saveState();
 
@@ -1395,6 +1395,30 @@ void paintListBox (Graphics& g, const ApplicationTheme& theme, const ListBox& li
 
 //==============================================================================
 
+void paintListBoxItemIcon (Graphics& g, const ApplicationTheme&, const ListBoxItem& item, const Rectangle<float>& area)
+{
+    if (area.isEmpty())
+        return;
+
+    if (const auto drawable = item.getIconDrawable())
+        drawable->paint (g, area, Fitting::scaleToFit, Justification::center);
+    else if (const auto image = item.getIconImage(); image.isValid())
+        g.drawImage (image, area);
+}
+
+void paintListBoxItemText (Graphics& g, const ApplicationTheme& theme, const ListBoxItem& item, const Rectangle<float>& area)
+{
+    const auto text = item.getText();
+
+    if (text.isEmpty() || area.isEmpty())
+        return;
+
+    const auto font = theme.getDefaultFont();
+    const auto fontSize = jmin (area.getHeight() * 0.6f, font.getHeight());
+
+    g.fillFittedText (layoutKeptText (item.getTextLayoutCache(), text, font.withHeight (fontSize), area.getSize(), StyledText::left, StyledText::middle, StyledText::ellipsis, StyledText::noWrap), area);
+}
+
 void paintListBoxItem (Graphics& g, const ApplicationTheme& theme, const ListBoxItem& item)
 {
     const auto& palette = theme.getPalette (item);
@@ -1417,16 +1441,11 @@ void paintListBoxItem (Graphics& g, const ApplicationTheme& theme, const ListBox
     }
 
     // Draw icon
-    auto iconDrawable = item.getIconDrawable();
-    auto iconBounds = item.getIconBoundsForRendering();
-    if (iconDrawable != nullptr && ! iconBounds.isEmpty())
-        iconDrawable->paint (g, iconBounds, Fitting::scaleToFit, Justification::center);
-    else if (const auto iconImage = item.getIconImage(); iconImage.isValid() && ! iconBounds.isEmpty())
-        g.drawImage (iconImage, iconBounds);
+    paintListBoxItemIcon (g, theme, item, item.getIconBounds());
 
     // Draw text
     auto text = item.getText();
-    auto textBounds = item.getTextBoundsForRendering();
+    auto textBounds = item.getTextBounds();
     if (text.isNotEmpty() && ! textBounds.isEmpty())
     {
         Color textColor;
@@ -1437,26 +1456,29 @@ void paintListBoxItem (Graphics& g, const ApplicationTheme& theme, const ListBox
             textColor = theme.findColor (item, ListBoxItem::Style::textColorId).value_or (palette.getColor (PaletteRole::text));
 
         g.setFillColor (textColor);
-
-        auto font = theme.getDefaultFont();
-        auto fontSize = jmin (textBounds.getHeight() * 0.6f, font.getHeight());
-
-        auto styledText = yup::StyledText();
-        {
-            auto modifier = styledText.startUpdate();
-            modifier.setMaxSize (textBounds.getSize());
-            modifier.setHorizontalAlign (StyledText::left);
-            modifier.setVerticalAlign (StyledText::middle);
-            modifier.setOverflow (StyledText::ellipsis);
-            modifier.setWrap (StyledText::noWrap);
-            modifier.appendText (text, font.withHeight (fontSize));
-        }
-
-        g.fillFittedText (styledText, textBounds);
+        paintListBoxItemText (g, theme, item, textBounds);
     }
 }
 
 //==============================================================================
+
+void paintTreeViewRowIcon (Graphics& g, const ApplicationTheme&, const TreeViewRow& row, const Rectangle<float>& area)
+{
+    if (row.getItem() != nullptr && row.hasItemIcon() && ! area.isEmpty())
+        row.getItem()->paintItemIcon (g, area, row.isItemSelected());
+}
+
+void paintTreeViewRowText (Graphics& g, const ApplicationTheme& theme, const TreeViewRow& row, const Rectangle<float>& area)
+{
+    const auto& text = row.getItemText();
+
+    if (text.isEmpty() || area.isEmpty())
+        return;
+
+    const auto font = theme.getDefaultFont().withHeight (jmin (area.getHeight() * 0.6f, 16.0f));
+
+    g.fillFittedText (layoutKeptText (row.getTextLayoutCache(), text, font, area.getSize(), StyledText::left, StyledText::middle, StyledText::ellipsis, StyledText::noWrap), area);
+}
 
 void paintTreeViewRow (Graphics& g, const ApplicationTheme& theme, const TreeViewRow& row)
 {
@@ -1513,8 +1535,7 @@ void paintTreeViewRow (Graphics& g, const ApplicationTheme& theme, const TreeVie
     if (row.hasCustomContent())
         return;
 
-    if (row.hasItemIcon())
-        row.getItem()->paintItemIcon (g, row.getIconBounds(), row.isItemSelected());
+    paintTreeViewRowIcon (g, theme, row, row.getIconBounds());
 
     const auto& text = row.getItemText();
     const auto textBounds = row.getTextBounds();
@@ -1526,19 +1547,8 @@ void paintTreeViewRow (Graphics& g, const ApplicationTheme& theme, const TreeVie
                              ? theme.findColor (row, TreeView::Style::itemTextSelectedColorId).value_or (palette.getColor (PaletteRole::onAccent))
                              : theme.findColor (row, TreeView::Style::itemTextColorId).value_or (palette.getColor (PaletteRole::text));
 
-    auto styledText = StyledText();
-    {
-        auto modifier = styledText.startUpdate();
-        modifier.setMaxSize (textBounds.getSize());
-        modifier.setHorizontalAlign (StyledText::left);
-        modifier.setVerticalAlign (StyledText::middle);
-        modifier.setOverflow (StyledText::ellipsis);
-        modifier.setWrap (StyledText::noWrap);
-        modifier.appendText (text, theme.getDefaultFont().withHeight (jmin (textBounds.getHeight() * 0.6f, 16.0f)));
-    }
-
     g.setFillColor (textColor);
-    g.fillFittedText (styledText, textBounds);
+    paintTreeViewRowText (g, theme, row, textBounds);
 }
 
 //==============================================================================
@@ -1606,6 +1616,29 @@ void paintTabBar (Graphics& g, const ApplicationTheme& theme, const TabBar& bar)
     }
 }
 
+void paintTabButtonIcon (Graphics& g, const ApplicationTheme& theme, const TabButton& button, const Rectangle<float>& area)
+{
+    if (area.isEmpty())
+        return;
+
+    if (button.getIconImage().isValid())
+    {
+        g.drawImage (button.getIconImage(), area);
+        return;
+    }
+
+    // Never shortened: a glyph wider than its box would become an ellipsis the icon font doesn't have.
+    g.fillFittedText (button.getIconGlyph(), theme.getDefaultIconFont().withHeight (area.getHeight() * 0.85f), area, Justification::center);
+}
+
+void paintTabButtonText (Graphics& g, const ApplicationTheme&, const TabButton& button, const Rectangle<float>& area)
+{
+    if (area.isEmpty())
+        return;
+
+    g.fillFittedText (layoutKeptText (button.getTextLayoutCache(), button.getText(), button.getFont (button.isSelected()), area.getSize(), StyledText::left, StyledText::middle, StyledText::ellipsis, StyledText::noWrap), area);
+}
+
 void paintTabButton (Graphics& g, const ApplicationTheme& theme, const TabButton& button)
 {
     const auto& palette = theme.getPalette (button);
@@ -1626,36 +1659,17 @@ void paintTabButton (Graphics& g, const ApplicationTheme& theme, const TabButton
 
     if (const auto iconBounds = button.getIconBounds(); ! iconBounds.isEmpty())
     {
-        if (button.getIconImage().isValid())
-        {
-            g.drawImage (button.getIconImage(), iconBounds);
-        }
-        else
-        {
-            // Never shortened: a glyph wider than its box would become an ellipsis the icon font doesn't have.
-            g.setFillColor (textColor);
-            g.fillFittedText (button.getIconGlyph(), theme.getDefaultIconFont().withHeight (iconBounds.getHeight() * 0.85f), iconBounds, Justification::center);
-        }
+        g.setFillColor (textColor);
+        paintTabButtonIcon (g, theme, button, iconBounds);
     }
 
     if (const auto textBounds = button.getTextBounds(); ! textBounds.isEmpty())
     {
-        auto styledText = StyledText();
-        {
-            auto modifier = styledText.startUpdate();
-            modifier.setMaxSize (textBounds.getSize());
-            modifier.setHorizontalAlign (StyledText::left);
-            modifier.setVerticalAlign (StyledText::middle);
-            modifier.setOverflow (StyledText::ellipsis);
-            modifier.setWrap (StyledText::noWrap);
-            modifier.appendText (button.getText(), button.getFont (selected));
-        }
-
         g.setFillColor (textColor);
-        g.fillFittedText (styledText, textBounds);
+        paintTabButtonText (g, theme, button, textBounds);
     }
 
-    if (const auto closeBounds = button.getCloseButtonBounds(); ! closeBounds.isEmpty())
+    if (const auto closeBounds = button.getCloseBounds(); ! closeBounds.isEmpty())
     {
         if (button.isCloseButtonOver())
         {
@@ -2021,23 +2035,23 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
     const auto keysArea = isHorizontal ? Rectangle<float> (keyRange.getStart(), 0.0f, keyRange.getLength(), bounds.getHeight())
                                        : Rectangle<float> (0.0f, keyRange.getStart(), bounds.getWidth(), keyRange.getLength());
 
+    // Base colors from theme
+    const auto whiteKeyColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::whiteKeyColorId).value_or (Color());
+    const auto pressedColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::whiteKeyPressedColorId).value_or (Color());
+    const auto outlineColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::keyOutlineColorId).value_or (Color());
+
+    const auto font = theme.getDefaultFont().withHeight (11.0f);
+
     // Paint white keys first
     for (int note = keyboard.getLowestVisibleKey(); note <= keyboard.getHighestVisibleKey(); ++note)
     {
         if (keyboard.isBlackKey (note))
             continue;
 
-        bool isBlack;
-        Rectangle<float> keyArea;
-        keyboard.getKeyPosition (note, keyWidth, keyArea, isBlack);
+        const auto keyArea = keyboard.getRectangleForKey (note);
 
         auto isPressed = keyboard.isNoteOn (note);
         auto isOver = keyboard.isMouseOverNote (note);
-
-        // Base colors from theme
-        auto whiteKeyColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::whiteKeyColorId).value_or (Color());
-        auto pressedColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::whiteKeyPressedColorId).value_or (Color());
-        auto outlineColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::keyOutlineColorId).value_or (Color());
 
         // Determine fill color based on state
         Color fillColor = whiteKeyColor;
@@ -2073,8 +2087,6 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
 
                 g.setFillColor (textColor);
 
-                const auto font = theme.getDefaultFont().withHeight (11.0f);
-
                 if (isHorizontal)
                     g.fillFittedText (noteText, font, keyArea.reduced (2.0f).removeFromBottom (16.0f), Justification::center);
                 else
@@ -2099,12 +2111,14 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
     }
 
     // Draw separator line along the front edge
-    auto lineColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::keyOutlineColorId).value_or (Color());
-    if (! lineColor.isTransparent())
+    if (! outlineColor.isTransparent())
     {
-        g.setFillColor (lineColor);
+        g.setFillColor (outlineColor);
         g.fillRect (slice (keysArea, edges.front, 1.0f));
     }
+
+    const auto blackKeyColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::blackKeyColorId).value_or (Color());
+    const auto blackPressedColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::blackKeyPressedColorId).value_or (Color());
 
     // Paint black keys on top
     for (int note = keyboard.getLowestVisibleKey(); note <= keyboard.getHighestVisibleKey(); ++note)
@@ -2112,16 +2126,10 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
         if (! keyboard.isBlackKey (note))
             continue;
 
-        bool isBlack;
-        Rectangle<float> keyArea;
-        keyboard.getKeyPosition (note, keyWidth, keyArea, isBlack);
+        const auto keyArea = keyboard.getRectangleForKey (note);
 
         auto isPressed = keyboard.isNoteOn (note);
         auto isOver = keyboard.isMouseOverNote (note);
-
-        // Base colors from theme
-        auto blackKeyColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::blackKeyColorId).value_or (Color());
-        auto blackPressedColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::blackKeyPressedColorId).value_or (Color());
 
         // Determine fill color based on state
         Color fillColor = blackKeyColor;
@@ -2244,36 +2252,23 @@ void paintVectorWheel (Graphics& g, Rectangle<float> bounds, float normalizedVal
     g.strokeRect (contentBounds);
 }
 
-void paintPitchWheel (Graphics& g, const ApplicationTheme& theme, const PitchWheelComponent& wheel)
+// One painter for the two wheels, each with the colors of its own type
+template <class WheelType>
+void paintMidiWheel (Graphics& g, const ApplicationTheme& theme, const WheelType& wheel)
 {
+    using Style = typename WheelType::Style;
+
     const auto& palette = theme.getPalette (wheel);
-    const auto topColor = theme.findColor (wheel, PitchWheelComponent::Style::bodyTopColorId).value_or (palette.getColor (PaletteRole::surfaceRaised));
-    const auto bottomColor = theme.findColor (wheel, PitchWheelComponent::Style::bodyBottomColorId).value_or (palette.getColor (PaletteRole::background));
-    const auto outlineColor = theme.findColor (wheel, PitchWheelComponent::Style::outlineColorId).value_or (palette.getColor (PaletteRole::outline));
+    const auto topColor = theme.findColor (wheel, Style::bodyTopColorId).value_or (palette.getColor (PaletteRole::surfaceRaised));
+    const auto bottomColor = theme.findColor (wheel, Style::bodyBottomColorId).value_or (palette.getColor (PaletteRole::background));
+    const auto outlineColor = theme.findColor (wheel, Style::outlineColorId).value_or (palette.getColor (PaletteRole::outline));
     const auto gripColor = theme.findColor (wheel,
-                                            wheel.isCurrentlyBeingDragged() ? PitchWheelComponent::Style::gripDownColorId
-                                            : wheel.isMouseOver()           ? PitchWheelComponent::Style::gripOverColorId
-                                                                            : PitchWheelComponent::Style::gripColorId)
+                                            wheel.isCurrentlyBeingDragged() ? Style::gripDownColorId
+                                            : wheel.isMouseOver()           ? Style::gripOverColorId
+                                                                            : Style::gripColorId)
                                .value_or (palette.getColor (PaletteRole::accent));
 
-    const auto normalized = static_cast<float> ((wheel.getValue() + 1.0) * 0.5);
-    paintVectorWheel (g, wheel.getLocalBounds(), normalized, topColor, bottomColor, outlineColor, gripColor);
-}
-
-void paintModWheel (Graphics& g, const ApplicationTheme& theme, const ModWheelComponent& wheel)
-{
-    const auto& palette = theme.getPalette (wheel);
-    const auto topColor = theme.findColor (wheel, ModWheelComponent::Style::bodyTopColorId).value_or (palette.getColor (PaletteRole::surfaceRaised));
-    const auto bottomColor = theme.findColor (wheel, ModWheelComponent::Style::bodyBottomColorId).value_or (palette.getColor (PaletteRole::background));
-    const auto outlineColor = theme.findColor (wheel, ModWheelComponent::Style::outlineColorId).value_or (palette.getColor (PaletteRole::outline));
-    const auto gripColor = theme.findColor (wheel,
-                                            wheel.isCurrentlyBeingDragged() ? ModWheelComponent::Style::gripDownColorId
-                                            : wheel.isMouseOver()           ? ModWheelComponent::Style::gripOverColorId
-                                                                            : ModWheelComponent::Style::gripColorId)
-                               .value_or (palette.getColor (PaletteRole::accent));
-
-    const auto normalized = static_cast<float> (wheel.getValue());
-    paintVectorWheel (g, wheel.getLocalBounds(), normalized, topColor, bottomColor, outlineColor, gripColor);
+    paintVectorWheel (g, wheel.getLocalBounds(), static_cast<float> (wheel.getNormalizedValue()), topColor, bottomColor, outlineColor, gripColor);
 }
 
 void paintKMeter (Graphics& g, const ApplicationTheme& theme, const KMeterComponent& meter)
@@ -2313,151 +2308,22 @@ void paintKMeter (Graphics& g, const ApplicationTheme& theme, const KMeterCompon
         g.fillRect (bounds);
     }
 
-    // Get K-System scale range for the meter state
-    const auto scale = meter.meterState.getScale();
+    // Get K-System scale range for the meter state, the one of K-20 without a state
+    const auto scale = meter.getScale();
     const float rangeMin = KMeterState::rangeMinForScale (scale);
     const float rangeMax = KMeterState::rangeMaxForScale (scale);
-    const float rangeSpan = rangeMax - rangeMin;
 
-    auto linearDbToY = [&] (float db) -> float
+    // The meter lays its scale out, linear or with the segments of the K-System
+    const auto dbToY = [&meter] (float db)
     {
-        const float clampedDb = jlimit (rangeMin, rangeMax, db);
-        const float normalized = (clampedDb - rangeMin) / rangeSpan;
-        return bounds.getY() + height * (1.0f - normalized);
+        return meter.getPositionForLevel (db);
     };
 
-    std::function<float (float)> dbToY = linearDbToY;
-
-    if (meter.getScaleMapping() == KMeterComponent::ScaleMapping::segmented)
-    {
-        struct MeterSegment
-        {
-            float topDb = 0.0f;
-            float bottomDb = 0.0f;
-            float topY = 0.0f;
-            float bottomY = 0.0f;
-            float heightUnits = 1.0f;
-            Color color;
-        };
-
-        const float limitRedBars = 4.0f;
-        const float limitAmberBars = 0.0f;
-        float limitTopBars = 18.0f;
-        float limitGreenBars = -24.0f;
-        float limitLinearArea = -30.0f;
-        bool useFiveUnitBottom = false;
-
-        switch (scale)
-        {
-            case KMeterState::Scale::k20:
-                limitTopBars = 18.0f;
-                limitGreenBars = -24.0f;
-                limitLinearArea = -30.0f;
-                useFiveUnitBottom = false;
-                break;
-            case KMeterState::Scale::k14:
-                limitTopBars = 12.0f;
-                limitGreenBars = -30.0f;
-                limitLinearArea = -30.0f;
-                useFiveUnitBottom = false;
-                break;
-            case KMeterState::Scale::k12:
-                limitTopBars = 10.0f;
-                limitGreenBars = -30.0f;
-                limitLinearArea = -30.0f;
-                useFiveUnitBottom = true;
-                break;
-            default:
-                break;
-        }
-
-        const Color nonLinearColor = greenColor.darker (0.35f);
-        std::vector<MeterSegment> segments;
-        segments.reserve (64);
-
-        float currentDb = rangeMax;
-        while (currentDb > rangeMin)
-        {
-            float segmentRange = 1.0f;
-
-            if (currentDb > limitTopBars)
-                segmentRange = 0.5f;
-            else if (currentDb > limitGreenBars)
-                segmentRange = 1.0f;
-            else if (currentDb > limitLinearArea)
-                segmentRange = 6.0f;
-            else
-                segmentRange = 10.0f;
-
-            float bottomDb = currentDb - segmentRange;
-            if (bottomDb < rangeMin)
-                bottomDb = rangeMin;
-
-            float heightUnits = 1.0f;
-            if (currentDb > limitTopBars)
-                heightUnits = 1.0f;
-            else if (currentDb > limitGreenBars)
-                heightUnits = 2.0f;
-            else if (currentDb > limitLinearArea)
-                heightUnits = 3.0f;
-            else if (bottomDb <= rangeMin)
-                heightUnits = useFiveUnitBottom ? 5.0f : 4.0f;
-            else
-                heightUnits = 3.0f;
-
-            Color segmentColor = nonLinearColor;
-            if (currentDb > limitRedBars)
-                segmentColor = redColor;
-            else if (currentDb > limitAmberBars)
-                segmentColor = amberColor;
-            else if (currentDb > limitGreenBars)
-                segmentColor = greenColor;
-
-            segments.push_back ({ currentDb, bottomDb, 0.0f, 0.0f, heightUnits, segmentColor });
-            currentDb = bottomDb;
-        }
-
-        float totalUnits = 0.0f;
-        for (const auto& segment : segments)
-            totalUnits += segment.heightUnits;
-
-        const float unitHeight = totalUnits > 0.0f ? height / totalUnits : height;
-        float currentY = bounds.getY();
-
-        for (size_t index = 0; index < segments.size(); ++index)
-        {
-            auto& segment = segments[index];
-            const bool isLast = (index + 1 == segments.size());
-            const float segmentHeight = isLast ? (bounds.getBottom() - currentY) : (segment.heightUnits * unitHeight);
-
-            segment.topY = currentY;
-            segment.bottomY = currentY + segmentHeight;
-            currentY = segment.bottomY;
-        }
-
-        dbToY = [segments, rangeMin, rangeMax, bounds] (float db) -> float
-        {
-            const float clampedDb = jlimit (rangeMin, rangeMax, db);
-
-            for (const auto& segment : segments)
-            {
-                if (clampedDb <= segment.topDb && clampedDb >= segment.bottomDb)
-                {
-                    const float range = segment.topDb - segment.bottomDb;
-                    const float normalized = range > 0.0f ? (clampedDb - segment.bottomDb) / range : 0.0f;
-                    return segment.bottomY - (segment.bottomY - segment.topY) * normalized;
-                }
-            }
-
-            return bounds.getBottom();
-        };
-    }
-
-    // Get current levels (thread-safe)
-    const float averageDb = meter.currentAverageDb.get();
-    const float peakDb = meter.currentPeakDb.get();
-    const float peakHoldDb = meter.currentPeakHoldDb.get();
-    const bool isClipping = meter.currentClipping.get();
+    // Get current levels
+    const float averageDb = meter.getAverageLevel();
+    const float peakDb = meter.getPeakLevel();
+    const float peakHoldDb = meter.getPeakHoldLevel();
+    const bool isClipping = meter.isClipping();
 
     // Draw average level (filled bar from bottom with gradient)
     if (averageDb > rangeMin)
@@ -2535,55 +2401,12 @@ void paintKMeter (Graphics& g, const ApplicationTheme& theme, const KMeterCompon
         const auto font = theme.getDefaultFont().withHeight (12.0f);
         g.setFillColor (palette.getColor (PaletteRole::text).withAlpha (0.7f));
 
-        // Determine tick interval based on meter height and range
-        const float dbPerPixel = rangeSpan / height;
-        int tickInterval = 5; // Default: 5dB ticks
-
-        // Adjust tick interval for better visibility
-        if (height < 200)
-            tickInterval = 10; // Fewer ticks for small meters
-
-        // Draw tick marks and collect the fully visible labels from the top
-        const int startDb = static_cast<int> (std::ceil (rangeMin / tickInterval)) * tickInterval;
-        const int endDb = static_cast<int> (std::floor (rangeMax / tickInterval)) * tickInterval;
-        std::vector<std::pair<int, Rectangle<float>>> labels;
-
-        for (int db = endDb; db >= startDb; db -= tickInterval)
+        for (const auto& tick : meter.getScaleTicks())
         {
-            const float y = dbToY (static_cast<float> (db));
+            g.fillRect (bounds.getX(), tick.y - 0.5f, 4.0f, 1.0f);
 
-            // Skip if outside visible area
-            if (y < bounds.getY() || y > bounds.getBottom())
-                continue;
-
-            // Draw tick mark
-            g.fillRect (bounds.getX(), y - 0.5f, 4.0f, 1.0f);
-
-            // Label every 10dB, including the 0dB reference
-            if (db % 10 != 0)
-                continue;
-
-            const Rectangle<float> labelRect (bounds.getX() + 5.0f, y - 6.0f, 22.0f, 12.0f);
-            if (labelRect.getY() >= bounds.getY() && labelRect.getBottom() <= bounds.getBottom())
-                labels.emplace_back (db, labelRect);
-        }
-
-        // Always keep the lowest label, and skip the others that would overlap a kept one
-        float previousLabelBottom = bounds.getY();
-
-        for (std::size_t index = 0; index < labels.size(); ++index)
-        {
-            const auto& [db, labelRect] = labels[index];
-            const bool isLowest = index + 1 == labels.size();
-
-            if (labelRect.getY() < previousLabelBottom)
-                continue;
-
-            if (! isLowest && labelRect.getBottom() > labels.back().second.getY())
-                continue;
-
-            g.fillFittedText ((db > 0 ? "+" : "") + String (db), font, labelRect, Justification::left);
-            previousLabelBottom = labelRect.getBottom();
+            if (tick.label.isNotEmpty())
+                g.fillFittedText (tick.label, font, tick.labelBounds, Justification::left);
         }
     }
 
@@ -2774,6 +2597,8 @@ void mapPaletteThemeVersion1 (const ThemePalette& palette, ApplicationTheme& the
 #endif
 }
 
+} // namespace
+
 //==============================================================================
 
 ApplicationTheme::Ptr createThemeVersion1 (const ThemePalette& palette)
@@ -2828,6 +2653,7 @@ ApplicationTheme::Ptr createThemeVersion1 (const ThemePalette& palette)
     theme->setComponentStyle<CodeEditor> (ComponentStyle::createStyle<CodeEditor> (paintCodeEditor));
     theme->setComponentStyle<ComboBox> (ComponentStyle::createStyle<ComboBox> (paintComboBox));
     theme->setComponentStyle<Label> (ComponentStyle::createStyle<Label> (paintLabel));
+    theme->setComponentStyle<ImageComponent> (ComponentStyle::createStyle<ImageComponent> (paintImageComponent));
     theme->setComponentStyle<PopupMenu> (ComponentStyle::createStyle<PopupMenu> (paintPopupMenu));
     theme->setComponentStyle<ScrollBar> (ComponentStyle::createStyle<ScrollBar> (paintScrollBar));
     theme->setComponentStyle<ProgressBar> (ComponentStyle::createStyle<ProgressBar> (paintProgressBar));
@@ -2844,11 +2670,29 @@ ApplicationTheme::Ptr createThemeVersion1 (const ThemePalette& palette)
 
     theme->setComponentStyle<TreeViewRow> (ComponentStyle::createStyle<TreeViewRow> (paintTreeViewRow));
 
+    // The parts the widgets declare, for whoever places them: the painters above and the drawings of a `.yui` file
+    theme->setComponentPart<TextButton> (TextButton::Style::textPartId, paintTextButtonText);
+    theme->setComponentPart<ToggleButton> (ToggleButton::Style::textPartId, paintToggleButtonText);
+    theme->setComponentPart<ComboBox> (ComboBox::Style::textPartId, paintComboBoxText);
+    theme->setComponentPart<Label> (Label::Style::textPartId, paintLabelText);
+    theme->setComponentPart<Label> (Label::Style::textOutlinePartId, paintLabelTextOutline);
+    theme->setComponentPart<ImageComponent> (ImageComponent::Style::imagePartId, paintImageComponentImage);
+    theme->setComponentPart<TextEditor> (TextEditor::Style::selectionPartId, paintTextEditorSelection);
+    theme->setComponentPart<TextEditor> (TextEditor::Style::textPartId, paintTextEditorText);
+    theme->setComponentPart<TextEditor> (TextEditor::Style::caretPartId, paintTextEditorCaret);
+    theme->setComponentPart<CodeEditor> (CodeEditor::Style::contentPartId, paintCodeEditorContent);
+    theme->setComponentPart<ListBoxItem> (ListBoxItem::Style::iconPartId, paintListBoxItemIcon);
+    theme->setComponentPart<ListBoxItem> (ListBoxItem::Style::textPartId, paintListBoxItemText);
+    theme->setComponentPart<TreeViewRow> (TreeViewRow::Style::iconPartId, paintTreeViewRowIcon);
+    theme->setComponentPart<TreeViewRow> (TreeViewRow::Style::textPartId, paintTreeViewRowText);
+    theme->setComponentPart<TabButton> (TabButton::Style::iconPartId, paintTabButtonIcon);
+    theme->setComponentPart<TabButton> (TabButton::Style::textPartId, paintTabButtonText);
+
 #if YUP_MODULE_AVAILABLE_yup_audio_gui
     theme->setComponentStyle<MidiKeyboardComponent> (ComponentStyle::createStyle<MidiKeyboardComponent> (paintMidiKeyboard));
     theme->setComponentStyle<MidiKeyboardComponent::ScrollButton> (ComponentStyle::createStyle<MidiKeyboardComponent::ScrollButton> (paintMidiKeyboardScrollButton));
-    theme->setComponentStyle<PitchWheelComponent> (ComponentStyle::createStyle<PitchWheelComponent> (paintPitchWheel));
-    theme->setComponentStyle<ModWheelComponent> (ComponentStyle::createStyle<ModWheelComponent> (paintModWheel));
+    theme->setComponentStyle<PitchWheelComponent> (ComponentStyle::createStyle<PitchWheelComponent> (paintMidiWheel<PitchWheelComponent>));
+    theme->setComponentStyle<ModWheelComponent> (ComponentStyle::createStyle<ModWheelComponent> (paintMidiWheel<ModWheelComponent>));
 
     // Meter zones carry meaning, so they don't follow the palette
     theme->setComponentStyle<KMeterComponent> (ComponentStyle::createStyle<KMeterComponent> (paintKMeter));

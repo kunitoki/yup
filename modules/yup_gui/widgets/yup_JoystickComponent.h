@@ -134,6 +134,13 @@ public:
     /** Returns the center of the thumb in local coordinates. */
     Point<float> getThumbPosition() const;
 
+    /** Returns the area of the thumb in local coordinates: as large as getThumbSize() and centered on getThumbPosition().
+
+        It is where the theme paints the thumb. With GrabMode::thumb a press grabs the thumb within half its
+        size of its center, or within 4 points of it when the thumb is smaller than that.
+    */
+    Rectangle<float> getThumbBounds() const;
+
     /** Returns true while the thumb is being dragged. */
     bool isDragging() const noexcept { return dragging; }
 
@@ -167,8 +174,6 @@ public:
     const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
     //==============================================================================
-    /** @internal */
-    void paint (Graphics& g) override;
     /** @internal */
     bool hitTest (float x, float y) override;
     /** @internal */

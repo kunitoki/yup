@@ -20,6 +20,7 @@
 */
 
 #include <yup_gui/yup_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 
 #include <gtest/gtest.h>
 
@@ -137,6 +138,84 @@ TEST_F (PopupMenuTest, AddMultipleItemsWithShortcuts)
         itemCount++;
     }
     EXPECT_EQ (3, itemCount);
+}
+
+TEST_F (PopupMenuTest, TellsItsItemsAsSeriesADrawingReadsWithOneIndex)
+{
+    auto subMenu = PopupMenu::create();
+    subMenu->addItem ("Sub Item 1", 10);
+
+    auto menu = PopupMenu::create();
+    menu->addItem (kPopupTestText1, kPopupTestId1, true, false, kShortcutText);
+    menu->addSeparator();
+    menu->addItem (kPopupTestText2, kPopupTestId2, false, true);
+    menu->addSubMenu (kSubMenuText, subMenu, true);
+
+    const auto read = [&menu] (const char* name)
+    {
+        return menu->getProperty (Identifier (name));
+    };
+
+    // One value for each item in every series, so that one index reads all there is to tell of an item
+    for (const auto* name : { "itemBounds", "itemTexts", "itemShortcuts", "itemColors", "itemEnabled", "itemTicked", "itemHovered", "itemSeparator", "itemSubMenu", "itemActive", "itemCustom" })
+    {
+        const auto* property = menu->getTypeInfo().findProperty (Identifier (name));
+
+        ASSERT_NE (property, nullptr) << name;
+        EXPECT_TRUE (property->isSeries()) << name;
+        EXPECT_EQ (read (name).size(), 4) << name;
+    }
+
+    EXPECT_EQ (read ("itemTexts")[0].toString(), kPopupTestText1);
+    EXPECT_EQ (read ("itemShortcuts")[0].toString(), kShortcutText);
+    EXPECT_TRUE (read ("itemShortcuts")[2].toString().isEmpty());
+    EXPECT_FALSE (static_cast<bool> (read ("itemSeparator")[0]));
+    EXPECT_TRUE (static_cast<bool> (read ("itemSeparator")[1]));
+    EXPECT_TRUE (static_cast<bool> (read ("itemEnabled")[0]));
+    EXPECT_FALSE (static_cast<bool> (read ("itemEnabled")[2]));
+    EXPECT_TRUE (static_cast<bool> (read ("itemTicked")[2]));
+    EXPECT_TRUE (static_cast<bool> (read ("itemSubMenu")[3]));
+    EXPECT_FALSE (static_cast<bool> (read ("itemHovered")[0]));
+    EXPECT_FALSE (static_cast<bool> (read ("itemActive")[3]));
+    EXPECT_FALSE (static_cast<bool> (read ("itemCustom")[0]));
+
+    // A drawing paints the menu from them, a turn of a repeat for each item
+    const auto parsed = YuiParser::parse (R"yui(
+        drawing Menu {
+            rect { bounds: bounds; cornerRadius: 6; fill: palette.surfaceRaised; }
+
+            repeat i in 0 .. len (itemTexts) {
+                rect { id: highlight; bounds: itemBounds[i].reduced (2, 1); cornerRadius: 3; fill: palette.accent.withAlpha (0.3);
+                       visible: itemHovered[i] && itemEnabled[i] && ! itemSeparator[i]; }
+
+                line { id: rule; from: point (itemBounds[i].x + 8, itemBounds[i].centerY); to: point (itemBounds[i].right - 8, itemBounds[i].centerY);
+                       stroke: palette.outline; visible: itemSeparator[i]; }
+
+                text { id: label; bounds: itemBounds[i].reduced (12, 2); text: itemTexts[i]; justification: centerLeft;
+                       fill: itemEnabled[i] ? palette.text : palette.textMuted; visible: ! itemSeparator[i] && ! itemCustom[i]; }
+
+                text { id: shortcut; bounds: itemBounds[i].reduced (12, 2); text: itemShortcuts[i]; justification: centerRight;
+                       fill: palette.textMuted; visible: len (itemShortcuts[i]) > 0; }
+            }
+        })yui");
+    ASSERT_TRUE (parsed.wasOk()) << DataTreeDiagnostic::join (parsed.diagnostics);
+
+    const auto style = DrawingStyle::create (*menu, parsed.document.getChildWithName ("drawing"));
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    int numLabelRows = 0;
+
+    for (const auto& element : style.getReference()->measureElements (*menu))
+        if (element.id == "label")
+            numLabelRows = element.numRows;
+
+    EXPECT_EQ (numLabelRows, 4);
+
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    auto renderer = context->makeRenderer (200, 120);
+    Graphics g (*context, *renderer);
+
+    style.getReference()->paint (g, *theme, *menu);
 }
 
 TEST_F (PopupMenuTest, AddSeparatorIncreasesCount)
@@ -905,7 +984,7 @@ TEST_F (PopupMenuTest, ScrollingKeepsRowsAdjacentToScrollIndicators)
             lastVisibleItemBottom = jmax (lastVisibleItemBottom, item->area.getBottom());
     }
 
-    const auto downIndicatorTop = menu->getScrollDownIndicatorBounds().getY();
+    const auto downIndicatorTop = menu->getScrollDownBounds().getY();
     EXPECT_LE (lastVisibleItemBottom, downIndicatorTop);
     EXPECT_LE (downIndicatorTop - lastVisibleItemBottom, 4.0f);
 }
@@ -929,8 +1008,8 @@ TEST_F (PopupMenuTest, ShowScrollsTickedItemIntoView)
 
     EXPECT_TRUE (menu->canScrollUp());
     EXPECT_FALSE (ticked.area.isEmpty());
-    EXPECT_GE (ticked.area.getY(), menu->getScrollUpIndicatorBounds().getBottom());
-    EXPECT_LE (ticked.area.getBottom(), menu->getScrollDownIndicatorBounds().getY());
+    EXPECT_GE (ticked.area.getY(), menu->getScrollUpBounds().getBottom());
+    EXPECT_LE (ticked.area.getBottom(), menu->getScrollDownBounds().getY());
 }
 
 TEST_F (PopupMenuTest, TappingScrollIndicatorsScrollsTheMenu)
@@ -953,11 +1032,11 @@ TEST_F (PopupMenuTest, TappingScrollIndicatorsScrollsTheMenu)
         menu->mouseUp (event);
     };
 
-    tap (menu->getScrollDownIndicatorBounds().getCenter());
+    tap (menu->getScrollDownBounds().getCenter());
     EXPECT_TRUE (menu->canScrollUp());
     EXPECT_TRUE (menu->isBeingShown());
 
-    tap (menu->getScrollUpIndicatorBounds().getCenter());
+    tap (menu->getScrollUpBounds().getCenter());
     EXPECT_FALSE (menu->canScrollUp());
     EXPECT_TRUE (menu->isBeingShown());
 }
@@ -1144,15 +1223,96 @@ TEST_F (PopupMenuTest, NeedsScrolling)
     EXPECT_FALSE (empty->needsScrolling());
 }
 
-TEST_F (PopupMenuTest, GetScrollUpIndicatorBounds)
+TEST_F (PopupMenuTest, GetScrollUpBounds)
 {
     auto menu = PopupMenu::create();
     for (int i = 1; i <= 100; ++i)
         menu->addItem (String ("Item ") + String (i), i);
 
     menu->show();
-    const auto upBounds = menu->getScrollUpIndicatorBounds();
+    const auto upBounds = menu->getScrollUpBounds();
     EXPECT_FALSE (upBounds.isEmpty());
+}
+
+TEST_F (PopupMenuTest, TellsWhereAnItemPutsItsTextItsTickItsShortcutAndItsArrow)
+{
+    auto subMenu = PopupMenu::create();
+    subMenu->addItem ("Sub Item 1", 10);
+
+    auto menu = PopupMenu::create (PopupMenu::Options().withParentComponent (parentComponent.get()).withPosition (Point<int> (10, 10)));
+    menu->addItem (kPopupTestText1, kPopupTestId1, true, false, kShortcutText);
+    menu->addSeparator();
+    menu->addItem (kPopupTestText2, kPopupTestId2, true, true);
+    menu->addSubMenu (kSubMenuText, subMenu, true);
+    menu->show();
+
+    const auto areaOf = [&menu] (int itemIndex)
+    {
+        return (*(menu->begin() + itemIndex))->area;
+    };
+
+    const auto withShortcut = areaOf (0);
+    const auto ticked = areaOf (2);
+    const auto withSubMenu = areaOf (3);
+    ASSERT_FALSE (withShortcut.isEmpty());
+    ASSERT_FALSE (ticked.isEmpty());
+    ASSERT_FALSE (withSubMenu.isEmpty());
+
+    // The text is inside the padding of its item. One item is ticked, so all of them leave the room of a tick before it
+    EXPECT_EQ (menu->getItemTextBounds (0), withShortcut.reduced (12.0f, 2.0f).withTrimmedLeft (8.0f).withTrimmedRight (80.0f));
+    EXPECT_EQ (menu->getItemTextBounds (2), ticked.reduced (12.0f, 2.0f).withTrimmedLeft (8.0f));
+    EXPECT_EQ (menu->getItemTextBounds (3), withSubMenu.reduced (12.0f, 2.0f).withTrimmedLeft (8.0f).withTrimmedRight (24.0f));
+
+    // The tick is before the text, the shortcut and the arrow after it, all inside the item
+    const auto tick = menu->getItemTickBounds (2);
+    EXPECT_EQ (tick, Rectangle<float> (ticked.getX() + 4.0f, ticked.getCenterY() - 6.0f, 12.0f, 12.0f));
+    EXPECT_LE (tick.getRight(), menu->getItemTextBounds (2).getX());
+    EXPECT_TRUE (ticked.contains (tick));
+
+    const auto shortcut = menu->getItemShortcutBounds (0);
+    EXPECT_EQ (shortcut, Rectangle<float> (withShortcut.getRight() - 80.0f, withShortcut.getY() + 2.0f, 75.0f, withShortcut.getHeight() - 2.0f));
+    EXPECT_GE (shortcut.getX(), menu->getItemTextBounds (0).getRight());
+    EXPECT_TRUE (withShortcut.contains (shortcut));
+
+    const auto arrow = menu->getItemArrowBounds (3);
+    EXPECT_EQ (arrow, Rectangle<float> (withSubMenu.getRight() - 16.0f, withSubMenu.getCenterY() - 6.0f, 8.0f, 12.0f));
+    EXPECT_GE (arrow.getX(), menu->getItemTextBounds (3).getRight());
+    EXPECT_TRUE (withSubMenu.contains (arrow));
+
+    // An item has only the areas of what it shows, and a separator none
+    EXPECT_TRUE (menu->getItemTickBounds (0).isEmpty());
+    EXPECT_TRUE (menu->getItemArrowBounds (0).isEmpty());
+    EXPECT_TRUE (menu->getItemShortcutBounds (2).isEmpty());
+    EXPECT_TRUE (menu->getItemShortcutBounds (3).isEmpty());
+    EXPECT_FALSE (areaOf (1).isEmpty());
+    EXPECT_TRUE (menu->getItemTextBounds (1).isEmpty());
+    EXPECT_TRUE (menu->getItemTextBounds (-1).isEmpty());
+    EXPECT_TRUE (menu->getItemTextBounds (4).isEmpty());
+
+    menu->dismiss();
+}
+
+TEST_F (PopupMenuTest, AnItemScrolledOutOfTheMenuHasNoTextBounds)
+{
+    auto smallParent = std::make_unique<Component> ("smallParent");
+    smallParent->setBounds (0, 0, 220, 130);
+
+    auto menu = PopupMenu::create (PopupMenu::Options().withParentComponent (smallParent.get()).withPosition (Point<int> (10, 10)));
+    for (int i = 1; i <= 40; ++i)
+        menu->addItem (String ("Item ") + String (i), i);
+
+    menu->show();
+    ASSERT_TRUE (menu->needsScrolling());
+
+    // No item is ticked, so the text starts at the padding of its item
+    const auto first = (*menu->begin())->area;
+    ASSERT_FALSE (first.isEmpty());
+    EXPECT_EQ (menu->getItemTextBounds (0), first.reduced (12.0f, 2.0f));
+
+    ASSERT_TRUE ((*(menu->begin() + 39))->area.isEmpty());
+    EXPECT_TRUE (menu->getItemTextBounds (39).isEmpty());
+
+    menu->dismiss();
 }
 
 TEST_F (PopupMenuTest, OptionsWithFocusComponent)
@@ -1254,7 +1414,7 @@ TEST_F (PopupMenuTest, StyleSheetStylesPopupOpenedOutsideStyledRoot)
     combo.setBounds (10, 10, 160, 28);
     styledPanel.addAndMakeVisible (combo);
 
-    auto sheet = StyleSheet::parse (R"(
+    auto sheet = YuiParser::parseStyleSheet (R"(
         palette Warm {
             colors: "#14161a #1e222a #ff8844 #f0f4f8";
             surfaceRaised: #1e222a;
@@ -1309,7 +1469,7 @@ TEST_F (PopupMenuTest, StyleSheetStylesPopupOpenedOutsideStyledRoot)
 
 TEST_F (PopupMenuTest, SubmenuAndNestedSubmenuInheritStyleFromParentPopupMenu)
 {
-    auto sheet = StyleSheet::parse (R"(
+    auto sheet = YuiParser::parseStyleSheet (R"(
         style {
             PopupMenu {
                 backgroundColor: #aa0000;
@@ -1398,7 +1558,7 @@ TEST_F (PopupMenuTest, QualifiedDeclarationsAndLiveRestylePropagateToPopupAndSub
     trigger.setBounds (10, 10, 80, 24);
     toolbar.addAndMakeVisible (trigger);
 
-    auto sheet = StyleSheet::parse (R"(
+    auto sheet = YuiParser::parseStyleSheet (R"(
         style {
             .toolbar {
                 PopupMenu.backgroundColor: #224466;
@@ -1442,4 +1602,78 @@ TEST_F (PopupMenuTest, QualifiedDeclarationsAndLiveRestylePropagateToPopupAndSub
     EXPECT_FLOAT_EQ (28.0f, subMenu->getHeight());
 
     PopupMenu::dismissAllPopups();
+}
+
+TEST_F (PopupMenuTest, ThePainterLaysTheTextsOfTheItemsOutAgainOnlyForOtherTextsOrOtherBounds)
+{
+    auto oldTheme = ApplicationTheme::getGlobalTheme();
+    ApplicationTheme::setGlobalTheme (createThemeVersion1());
+    const ScopeGuard restoreTheme { [&]
+    {
+        ApplicationTheme::setGlobalTheme (oldTheme.get());
+    } };
+
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    auto renderer = context->makeRenderer (400, 300);
+    Graphics g (*context, *renderer);
+
+    auto menu = PopupMenu::create (PopupMenu::Options().withParentComponent (parentComponent.get()).withPosition (Point<int> (10, 10)));
+    menu->addItem (kPopupTestText1, kPopupTestId1, true, false, kShortcutText);
+    menu->addSeparator();
+    menu->addItem (kPopupTestText2, kPopupTestId2);
+    menu->show();
+
+    const auto itemAt = [&menu] (int itemIndex) -> PopupMenu::Item&
+    {
+        return **(menu->begin() + itemIndex);
+    };
+
+    // The menu lays nothing out: whoever paints it does
+    auto& kept = itemAt (0).textLayoutCache;
+    auto& keptShortcut = itemAt (0).shortcutKeyTextLayoutCache;
+    EXPECT_TRUE (kept.styledText.isEmpty());
+    EXPECT_TRUE (keptShortcut.styledText.isEmpty());
+
+    menu->paint (g);
+
+    EXPECT_EQ (kept.text, kPopupTestText1);
+    EXPECT_FALSE (kept.styledText.isEmpty());
+    EXPECT_EQ (kept.styledText.getMaxSize(), menu->getItemTextBounds (0).getSize());
+
+    EXPECT_EQ (keptShortcut.text, kShortcutText);
+    EXPECT_FALSE (keptShortcut.styledText.isEmpty());
+    EXPECT_EQ (keptShortcut.styledText.getMaxSize(), menu->getItemShortcutBounds (0).getSize());
+    EXPECT_EQ (keptShortcut.styledText.getHorizontalAlign(), StyledText::right);
+
+    // A separator has no text, and the last item no shortcut
+    EXPECT_TRUE (itemAt (1).textLayoutCache.styledText.isEmpty());
+    EXPECT_EQ (itemAt (2).textLayoutCache.text, kPopupTestText2);
+    EXPECT_TRUE (itemAt (2).shortcutKeyTextLayoutCache.styledText.isEmpty());
+
+    // What is kept is what is painted again: emptied here, it stays empty until the painter has to lay it out
+    const auto isLaidOutAgain = [&] (const std::function<void()>& change)
+    {
+        kept.styledText.startUpdate().clear();
+        change();
+        menu->paint (g);
+        return ! kept.styledText.isEmpty();
+    };
+
+    // An item the keyboard moves to is hovered: the menu is painted again with the texts it has
+    EXPECT_FALSE (isLaidOutAgain ([&menu] { menu->keyDown (KeyPress (KeyPress::downKey), {}); }));
+    EXPECT_TRUE (itemAt (0).isHovered);
+
+    // Another text, written into the item with nothing telling the menu
+    EXPECT_TRUE (isLaidOutAgain ([&itemAt] { itemAt (0).text = "Another option"; }));
+    EXPECT_EQ (kept.text, "Another option");
+
+    // Other bounds: a tick moves the texts of all the items, higher items make them higher
+    EXPECT_TRUE (isLaidOutAgain ([&itemAt] { itemAt (2).isTicked = true; }));
+    EXPECT_EQ (kept.styledText.getMaxSize(), menu->getItemTextBounds (0).getSize());
+
+    EXPECT_TRUE (isLaidOutAgain ([&menu] { menu->setProperty ("itemHeight", 30.0); }));
+    EXPECT_EQ (kept.styledText.getMaxSize(), menu->getItemTextBounds (0).getSize());
+    EXPECT_FLOAT_EQ (kept.styledText.getMaxSize().getHeight(), 26.0f);
+
+    menu->dismiss();
 }

@@ -135,6 +135,41 @@ size_t getForwardPipelineIndex (const SceneDrawList::DrawItem& item) noexcept
          + GeometryBindings::getRasterState (item);
 }
 
+/** Adds the color targets of the pass to @p options: the scene color, and the velocity of the full tier. */
+void addForwardColorTargets (GpuPipelineOptions& options, GpuTextureFormat colorFormat, bool velocity, bool blend)
+{
+    auto& target = options.colorTargets.emplace_back();
+    target.format = colorFormat;
+    target.blendEnabled = blend;
+
+    if (velocity)
+    {
+        auto& velocityTarget = options.colorTargets.emplace_back();
+        velocityTarget.format = GpuTextureFormat::rg16float;
+        velocityTarget.blendEnabled = false;
+    }
+}
+
+/** The state of the pipeline drawing the items of getForwardPipelineIndex() @p index into the
+    attachments of the pass, whatever shades them: the material of the pass or a material shader.
+*/
+GpuPipelineOptions makeForwardPipelineOptions (size_t index, GpuTextureFormat colorFormat, GpuTextureFormat depthFormat, uint32_t sampleCount, bool velocity)
+{
+    const auto blend = index >= GeometryBindings::numRasterStates;
+
+    GpuPipelineOptions options;
+    GeometryBindings::setPipelineGeometry (options, index % GeometryBindings::numRasterStates);
+
+    addForwardColorTargets (options, colorFormat, velocity, blend);
+
+    options.depthStencil.enabled = true;
+    options.depthStencil.format = depthFormat;
+    options.depthStencil.depthCompare = GpuCompareFunction::lessEqual;
+    options.depthStencil.depthWriteEnabled = ! blend;
+    options.sampleCount = sampleCount;
+    return options;
+}
+
 } // namespace
 
 //==============================================================================
@@ -172,35 +207,10 @@ struct ForwardPass::Variant
         if (bundle.failed())
             return "Unable to load the scene shader bundle: " + bundle.getErrorMessage();
 
-        const auto addColorTargets = [this] (GpuPipelineOptions& options, bool blend)
-        {
-            auto& target = options.colorTargets.emplace_back();
-            target.format = colorFormat;
-            target.blendEnabled = blend;
-
-            if (velocity)
-            {
-                auto& velocityTarget = options.colorTargets.emplace_back();
-                velocityTarget.format = GpuTextureFormat::rg16float;
-                velocityTarget.blendEnabled = false;
-            }
-        };
-
         // The full tier draws its opaque items into the G-buffer, so only its blended ones come here
         for (size_t index = velocity ? GeometryBindings::numRasterStates : 0; index < pipelines.size(); ++index)
         {
-            const auto blend = index >= GeometryBindings::numRasterStates;
-
-            GpuPipelineOptions options;
-            GeometryBindings::setPipelineGeometry (options, index % GeometryBindings::numRasterStates);
-
-            addColorTargets (options, blend);
-
-            options.depthStencil.enabled = true;
-            options.depthStencil.format = depthFormat;
-            options.depthStencil.depthCompare = GpuCompareFunction::lessEqual;
-            options.depthStencil.depthWriteEnabled = ! blend;
-            options.sampleCount = sampleCount;
+            const auto options = makeForwardPipelineOptions (index, colorFormat, depthFormat, sampleCount, velocity);
 
             auto result = GpuPipeline::compileFromBundle (device, *bundle.getValue(), options);
             if (result.failed())
@@ -220,7 +230,7 @@ struct ForwardPass::Variant
         GpuPipelineOptions options;
         options.topology = GpuPrimitiveTopology::triangleList;
         options.cullMode = GpuCullMode::none;
-        addColorTargets (options, false);
+        addForwardColorTargets (options, colorFormat, velocity, false);
         options.depthStencil.enabled = true;
         options.depthStencil.format = depthFormat;
         options.depthStencil.depthCompare = GpuCompareFunction::always;
@@ -232,6 +242,58 @@ struct ForwardPass::Variant
             return "Unable to compile the background pipeline: " + result.getErrorMessage();
 
         background = result.getValue();
+        return {};
+    }
+};
+
+//==============================================================================
+/** The pipelines drawing the items of one material shader into attachments of one kind. They are
+    compiled for the device of the pass and live with it: the shader holds none.
+*/
+struct ForwardPass::MaterialPipelines
+{
+    uint64 shader = 0;            // MaterialShader::getIdentity(): its address could be the one of a later shader
+    std::weak_ptr<void> lifetime; // MaterialShader::getLifetime(): expired once the shader died, when the pipelines are let go
+    ShaderUniforms uniforms;      // MaterialShader::createUniforms(): what the values of a node have to fit
+    GpuTextureFormat colorFormat;
+    GpuTextureFormat depthFormat;
+    uint32_t sampleCount = 1;
+    bool velocity = false;
+
+    std::array<GpuPipeline::Ptr, 2 * GeometryBindings::numRasterStates> pipelines; // [blend * 4 + raster state], as Variant::pipelines, the opaque ones on the full tier too
+    String error;
+
+    bool matches (const MaterialShader& otherShader, GpuTextureFormat color, GpuTextureFormat depth, uint32_t samples, bool withVelocity) const noexcept
+    {
+        return shader == otherShader.getIdentity()
+            && colorFormat == color
+            && depthFormat == depth
+            && sampleCount == samples
+            && velocity == withVelocity;
+    }
+
+    String compile (const GpuDevice::Ptr& device, const MaterialShader& source)
+    {
+        const auto& bundle = velocity ? source.getFullBundle() : source.getRasterBundle();
+        if (bundle == nullptr)
+            return velocity ? "it has no full tier variant" : "it has no raster tier variant";
+
+        for (size_t index = 0; index < pipelines.size(); ++index)
+        {
+            // The values of a node move from draw to draw, as the blocks of the draw do
+            auto options = makeForwardPipelineOptions (index, colorFormat, depthFormat, sampleCount, velocity);
+            options.dynamicUniformBuffers.push_back ({ 2, MaterialShader::uniformBlockBinding });
+
+            auto result = GpuPipeline::compileFromBundle (device, *bundle, options);
+            if (result.failed())
+            {
+                pipelines = {};
+                return result.getErrorMessage();
+            }
+
+            pipelines[index] = result.getValue();
+        }
+
         return {};
     }
 };
@@ -300,6 +362,56 @@ Result ForwardPass::prepare (const GpuDevice::Ptr& device, const Targets& target
     return variant.failed() ? Result::fail (variant.getErrorMessage()) : Result::ok();
 }
 
+Result ForwardPass::prepareMaterialShader (const GpuDevice::Ptr& device, const MaterialShader::Ptr& shader, const Targets& targets, uint32_t sampleCount)
+{
+    if (device == nullptr || shader == nullptr || targets.color == nullptr || targets.depth == nullptr)
+        return Result::fail ("No device, no shader or no forward targets");
+
+    const auto colorFormat = targets.color->getFormat();
+    const auto depthFormat = targets.depth->getFormat();
+    const auto velocity = targets.velocity != nullptr;
+
+    auto existing = std::find_if (materialPipelines.begin(), materialPipelines.end(), [&] (const auto& entry)
+    {
+        return entry->matches (*shader, colorFormat, depthFormat, sampleCount, velocity);
+    });
+
+    if (existing == materialPipelines.end())
+    {
+        auto entry = std::make_unique<MaterialPipelines>();
+        entry->shader = shader->getIdentity();
+        entry->lifetime = shader->getLifetime();
+        entry->uniforms = shader->createUniforms();
+        entry->colorFormat = colorFormat;
+        entry->depthFormat = depthFormat;
+        entry->sampleCount = sampleCount;
+        entry->velocity = velocity;
+        entry->error = entry->compile (device, *shader);
+
+        if (entry->error.isNotEmpty())
+            YUP_DBG ("ForwardPass: a material shader is unavailable on the " << (velocity ? "full" : "raster") << " tier, its meshes are shaded by their materials: " << entry->error);
+
+        materialPipelines.push_back (std::move (entry));
+        existing = std::prev (materialPipelines.end());
+    }
+
+    return (*existing)->error.isEmpty() ? Result::ok() : Result::fail ((*existing)->error);
+}
+
+const ForwardPass::MaterialPipelines* ForwardPass::findMaterialPipelines (const SceneDrawList::DrawItem& item, const Variant& variant) const
+{
+    const auto* shader = item.materialShader != nullptr ? item.materialShader->getShader().get() : nullptr;
+    if (shader == nullptr)
+        return nullptr;
+
+    const auto existing = std::find_if (materialPipelines.begin(), materialPipelines.end(), [&] (const auto& entry)
+    {
+        return entry->error.isEmpty() && entry->matches (*shader, variant.colorFormat, variant.depthFormat, variant.sampleCount, variant.velocity);
+    });
+
+    return existing != materialPipelines.end() ? existing->get() : nullptr;
+}
+
 //==============================================================================
 bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const ViewData& view, const LightingInputs& lighting,
                           Span<const SceneDrawList::DrawItem> opaque, Span<const SceneDrawList::DrawItem> blend,
@@ -307,6 +419,13 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
 {
     usedLocalIndirect = false;
     usedLayers = false;
+
+    // The pipelines of the material shaders destroyed since the last frame are let go here, where
+    // the pass draws with its device: nothing else holds them
+    std::erase_if (materialPipelines, [] (const auto& entry)
+    {
+        return entry->lifetime.expired();
+    });
 
     // Over the loaded targets, nothing to draw leaves them as they are, and compiles nothing
     if (! clear.has_value() && opaque.empty() && blend.empty())
@@ -361,10 +480,16 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
         || lighting.shadowCascades == nullptr || lighting.shadowAtlas == nullptr)
         return false;
 
-    if (variant.velocity && (lighting.lights == nullptr || lighting.clusterLights == nullptr || lighting.reflectionProbeBuffer == nullptr
-                             || lighting.irradianceVolumeBuffer == nullptr || ! opaque.empty()))
+    // The full tier shades its opaque items through GBufferPass and LightingPass, but for the ones a material shader draws
+    const auto drawsDeferredItems = variant.velocity && std::any_of (opaque.begin(), opaque.end(), [&] (const SceneDrawList::DrawItem& item)
     {
-        jassert (opaque.empty()); // The full tier shades its opaque items through GBufferPass and LightingPass
+        return findMaterialPipelines (item, variant) == nullptr;
+    });
+
+    if (variant.velocity && (lighting.lights == nullptr || lighting.clusterLights == nullptr || lighting.reflectionProbeBuffer == nullptr
+                             || lighting.irradianceVolumeBuffer == nullptr || drawsDeferredItems))
+    {
+        jassert (! drawsDeferredItems);
         return false;
     }
 
@@ -471,7 +596,14 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
     {
         for (const auto& item : items)
         {
-            const auto& pipeline = variant.pipelines[getForwardPipelineIndex (item)];
+            if (! item.inView)
+                continue;
+
+            // An item of a material shader draws with its pipelines, once prepared for these targets,
+            // which read the values of its node and neither the lights nor the probes of the draw
+            const auto* shaderPipelines = findMaterialPipelines (item, variant);
+            const auto lit = shaderPipelines == nullptr;
+            const auto& pipeline = (lit ? variant.pipelines : shaderPipelines->pipelines)[getForwardPipelineIndex (item)];
 
             if (pipeline.get() != currentPipeline)
             {
@@ -479,7 +611,18 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
                 currentPipeline = pipeline.get();
             }
 
-            if (! variant.velocity)
+            if (! lit)
+            {
+                // Values of another size would leave the shader reading past them: zeroed ones instead
+                const auto& values = item.materialShader->getUniforms();
+                const auto fits = values.getSizeInBytes() == shaderPipelines->uniforms.getSizeInBytes();
+                jassert (fits);
+
+                if (const auto& uniforms = fits ? values : shaderPipelines->uniforms; ! uniforms.isEmpty())
+                    pass.setUniformBuffer (2, static_cast<int> (MaterialShader::uniformBlockBinding), uniforms.getData(), uniforms.getSizeInBytes());
+            }
+
+            if (lit && ! variant.velocity)
             {
                 ForwardLightListBlock lightList {};
                 for (size_t i = 0; i < static_cast<size_t> (item.numLights); ++i)
@@ -493,7 +636,7 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
                 pass.setUniformBuffer (2, 12, &lightList, sizeof (lightList));
             }
 
-            if (drawsProbeLists)
+            if (lit && drawsProbeLists)
             {
                 ForwardProbeListBlock probeList {};
                 auto numProbes = 0;

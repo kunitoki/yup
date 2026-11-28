@@ -72,4 +72,17 @@ void StackComponent::performLayout (Rectangle<float> area)
     stack.performLayout (area);
 }
 
+std::optional<Size<float>> StackComponent::measureContent() const
+{
+    Size<float> content;
+
+    for (const auto* child : getLayoutChildren())
+    {
+        const auto size = getMeasuredItemSize (*child);
+        content = { jmax (content.getWidth(), size.getWidth()), jmax (content.getHeight(), size.getHeight()) };
+    }
+
+    return content;
+}
+
 } // namespace yup

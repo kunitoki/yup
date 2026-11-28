@@ -199,6 +199,70 @@ TEST_F (FrameAttachmentTests, CallbackCanDestroyItsOwnAttachment)
     EXPECT_EQ (2, laterFrameCount);
 }
 
+TEST_F (FrameAttachmentTests, AnAttachmentThatIsNotActiveIsNotCalledAndIsNotInTheWindow)
+{
+    auto& native = makeWindow (window);
+    window.addChildComponent (child);
+
+    FrameAttachment attachment (child, countFrames(), false);
+
+    EXPECT_FALSE (attachment.isActive());
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    native.callFrameListeners (0.25);
+    EXPECT_EQ (0, frameCount);
+
+    attachment.setActive (true);
+
+    EXPECT_TRUE (attachment.isActive());
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    native.callFrameListeners (0.25);
+    EXPECT_EQ (1, frameCount);
+
+    attachment.setActive (false);
+
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    native.callFrameListeners (0.25);
+    EXPECT_EQ (1, frameCount);
+}
+
+TEST_F (FrameAttachmentTests, AnAttachmentThatIsNotActiveStaysOutOfTheWindowItsComponentEnters)
+{
+    FrameAttachment attachment (child, countFrames(), false);
+
+    auto& native = makeWindow (window);
+    window.addChildComponent (child);
+
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    attachment.setActive (true);
+    native.callFrameListeners (0.25);
+
+    EXPECT_EQ (1, frameCount);
+}
+
+TEST_F (FrameAttachmentTests, CallbackCanStopItsOwnAttachment)
+{
+    auto& native = makeWindow (window);
+    window.addChildComponent (child);
+
+    FrameAttachment* self = nullptr;
+    FrameAttachment attachment (child, [&] (double)
+    {
+        ++frameCount;
+        self->setActive (false);
+    });
+    self = std::addressof (attachment);
+
+    native.callFrameListeners (0.25);
+    native.callFrameListeners (0.25);
+
+    EXPECT_EQ (1, frameCount);
+    EXPECT_FALSE (native.hasFrameListeners());
+}
+
 // ==============================================================================
 // FrameAttachment - in a real window, where the frames come from the render
 // thread while the test runs the message thread.

@@ -66,6 +66,22 @@ float toLinearChannel (float value) noexcept
     return value <= 0.04045f ? value / 12.92f : std::pow ((value + 0.055f) / 1.055f, 2.4f);
 }
 
+/* Returns what prevents a `shader` primitive from being drawn with a graphics API, known before any primitive is: an empty
+   text when it has a shader reading the two pictures a filter gives at most, with a variant for that API. */
+String findShaderPrimitiveProblem (const FilterGraph::Primitive& primitive, GpuPlatform platform)
+{
+    if (primitive.shader == nullptr)
+        return "The shader primitive has no shader";
+
+    if (const auto numTextures = primitive.shader->getNumInputTextures(); numTextures > 2)
+        return "The shader reads " + String (numTextures) + " textures, a filter gives it two at most";
+
+    if (! primitive.shader->canDrawWith (platform))
+        return "The shader has no variant for the graphics API of the device";
+
+    return {};
+}
+
 } // namespace
 
 //==============================================================================
@@ -123,6 +139,9 @@ void FilterGraph::State::releaseResources()
 {
     output = nullptr;
     shared = nullptr;
+    refusedShader = nullptr;
+    shaderError.clear();
+    failedPrimitive = -1;
 }
 
 //==============================================================================
@@ -157,6 +176,17 @@ public:
             {
                 for (const auto& name : primitive.inputs)
                     inputs.push_back (findInput (name, i));
+            }
+            else if (primitive.type == Type::shader)
+            {
+                // A shader reads as many pictures as it declares textures
+                const int numTextures = primitive.shader != nullptr ? primitive.shader->getNumInputTextures() : 0;
+
+                if (numTextures > 0)
+                    inputs.push_back (findInput (primitive.in, i));
+
+                if (numTextures > 1)
+                    inputs.push_back (findInput (primitive.in2, i));
             }
             else if (primitive.type != Type::flood)
             {
@@ -212,6 +242,11 @@ public:
 
         return pass (output, filter.linearColors ? FilterPass::toSrgb : FilterPass::copy, 0, textureOf (results.back()), nullptr, {});
     }
+
+    /* Returns the `shader` primitive the device refused when that is what made render() fail, with the reason it gave. */
+    const Primitive* getRefusedPrimitive() const noexcept { return refusedPrimitive; }
+
+    const String& getShaderError() const noexcept { return shaderError; }
 
 private:
     // What a primitive reads when it is not the result of another one
@@ -453,6 +488,23 @@ private:
                 release (blurred);
                 return done;
             }
+
+            case Type::shader:
+            {
+                // What else prevents a shader from being drawn was found before the frame was begun
+                if (primitive.shader == nullptr)
+                    return false;
+
+                const auto drawn = primitive.shader->draw (shared.device, frame, *shared.scratch[static_cast<size_t> (target)], primitive.uniforms, first, second);
+
+                if (drawn.failed())
+                {
+                    refusedPrimitive = std::addressof (primitive);
+                    shaderError = drawn.getErrorMessage();
+                }
+
+                return drawn.wasOk();
+            }
         }
 
         return false;
@@ -523,6 +575,8 @@ private:
     std::vector<bool> used;
     std::vector<int> results;
     int alphaTarget = -1, emptyTarget = -1;
+    const Primitive* refusedPrimitive = nullptr;
+    String shaderError;
 };
 
 //==============================================================================
@@ -542,11 +596,45 @@ GpuTexture::Ptr FilterGraph::render (GraphicsContext& context, const GpuTexture:
     {
         state.output = nullptr;
         state.shared = Shared::get (device);
+        state.refusedShader = nullptr;
     }
 
     auto& shared = *state.shared;
     if (shared.pipeline == nullptr)
         return source;
+
+    // What prevents a shader from running is found before anything is drawn for the primitives ahead of it
+    for (size_t i = 0; i < primitives.size(); ++i)
+    {
+        const auto& primitive = primitives[i];
+
+        if (primitive.type != Type::shader)
+            continue;
+
+        // A shader the device refused is not drawn again with it: the reason it gave still stands
+        const bool wasRefused = primitive.shader != nullptr && primitive.shader == state.refusedShader;
+        auto problem = wasRefused ? state.shaderError : findShaderPrimitiveProblem (primitive, device->getPlatform());
+
+        if (problem.isEmpty())
+            continue;
+
+        if (! wasRefused)
+            state.refusedShader = nullptr;
+
+        // Told once, however many renders it stands for
+        if (problem != state.shaderError)
+        {
+            YUP_DBG ("FilterGraph: a filter leaves its picture as it is. " << problem);
+        }
+
+        state.shaderError = std::move (problem);
+        state.failedPrimitive = static_cast<int> (i);
+        return source;
+    }
+
+    state.refusedShader = nullptr;
+    state.shaderError.clear();
+    state.failedPrimitive = -1;
 
     const ScopedLock scope (shared.lock);
 
@@ -563,8 +651,18 @@ GpuTexture::Ptr FilterGraph::render (GraphicsContext& context, const GpuTexture:
     if (! frame.isValid())
         return source;
 
-    const bool rendered = Renderer (*this, shared, frame, source, scale).render (*state.output);
+    Renderer renderer (*this, shared, frame, source, scale);
+    const bool rendered = renderer.render (*state.output);
     frame.submit();
+
+    if (const auto* refused = renderer.getRefusedPrimitive(); refused != nullptr && ! rendered)
+    {
+        state.refusedShader = refused->shader;
+        state.shaderError = renderer.getShaderError();
+        state.failedPrimitive = static_cast<int> (refused - primitives.data());
+
+        YUP_DBG ("FilterGraph: a filter leaves its picture as it is, the device can't draw a shader it runs. " << state.shaderError);
+    }
 
     return rendered ? state.output->asTexture() : source;
 }

@@ -20,7 +20,8 @@
 */
 
 #include "yup_YuiCommands.h"
-#include "yup_YuiToolSupport.h"
+#include "yup_YuiToolCheck.h"
+#include "yup_YuiToolModels.h"
 
 #include <iostream>
 #include <iterator>
@@ -33,7 +34,10 @@ int runYuiVerifyCommand (int argc, char** argv, bool includeWarnings)
 {
     StringArray paths;
     String unsavedPath;
+    String embeddedBase;
+    String embeddedList;
     YuiToolModels models;
+    bool hasModels = false;
     bool json = false;
     bool strict = false;
     bool readStdin = false;
@@ -45,42 +49,43 @@ int runYuiVerifyCommand (int argc, char** argv, bool includeWarnings)
         if (argument == "--json")
         {
             json = true;
-            continue;
         }
-
-        if (argument == "--models" && i + 1 < argc)
+        else if (const auto* given = readYuiToolOption (argc, argv, i, "--models"))
         {
-            if (! models.load (argv[++i]))
-                return 2;
+            if (const auto loaded = models.load (given); loaded.failed())
+                return refuseYuiToolCommand (loaded);
 
-            continue;
+            hasModels = true;
         }
-
-        if (includeWarnings && argument == "--strict")
+        else if (const auto* folder = includeWarnings ? nullptr : readYuiToolOption (argc, argv, i, "--embedded-base"))
+        {
+            embeddedBase = folder;
+        }
+        else if (const auto* list = includeWarnings ? nullptr : readYuiToolOption (argc, argv, i, "--embedded"))
+        {
+            embeddedList = list;
+        }
+        else if (includeWarnings && argument == "--strict")
         {
             strict = true;
-            continue;
         }
-
-        if (includeWarnings && argument == "--stdin")
+        else if (includeWarnings && argument == "--stdin")
         {
             readStdin = true;
-            continue;
         }
-
-        if (includeWarnings && argument == "--path" && i + 1 < argc)
+        else if (const auto* unsaved = includeWarnings ? readYuiToolOption (argc, argv, i, "--path") : nullptr)
         {
-            unsavedPath = argv[++i];
-            continue;
+            unsavedPath = unsaved;
         }
-
-        if (argument.startsWithChar ('-'))
+        else if (argument.startsWithChar ('-'))
         {
             std::cerr << "invalid argument: " << argv[i] << "\n";
             return 2;
         }
-
-        paths.add (argument);
+        else
+        {
+            paths.add (argument);
+        }
     }
 
     if (readStdin ? (unsavedPath.isEmpty() || ! paths.isEmpty()) : (unsavedPath.isNotEmpty() || paths.isEmpty()))
@@ -89,8 +94,31 @@ int runYuiVerifyCommand (int argc, char** argv, bool includeWarnings)
         return 2;
     }
 
+    if (embeddedBase.isEmpty() != embeddedList.isEmpty())
+    {
+        std::cerr << "--embedded-base <dir> and --embedded <list file> go together\n";
+        return 2;
+    }
+
     const auto workingDirectory = File::getCurrentWorkingDirectory();
     std::optional<String> unsavedText;
+    std::optional<YuiToolEmbedded> embedded;
+
+    // The files a build embeds: one path a line, from the folder they are embedded from
+    if (embeddedList.isNotEmpty())
+    {
+        const auto listFile = workingDirectory.getChildFile (embeddedList);
+
+        if (! listFile.existsAsFile() || ! workingDirectory.getChildFile (embeddedBase).isDirectory())
+        {
+            std::cerr << "can't read '" << (listFile.existsAsFile() ? embeddedBase : embeddedList) << "'\n";
+            return 2;
+        }
+
+        embedded = YuiToolEmbedded { workingDirectory.getChildFile (embeddedBase), StringArray::fromLines (listFile.loadFileAsString()) };
+        embedded->paths.trim();
+        embedded->paths.removeEmptyStrings();
+    }
 
     if (readStdin)
     {
@@ -117,7 +145,16 @@ int runYuiVerifyCommand (int argc, char** argv, bool includeWarnings)
 
     for (const auto& path : paths)
     {
-        for (const auto& problem : findYuiToolFileProblems (workingDirectory.getChildFile (path), unsavedText, models))
+        const auto file = workingDirectory.getChildFile (path);
+
+        // Without models given, each file is checked with those next to it
+        YuiToolModels beside;
+
+        if (const auto modelsFile = findYuiToolModelsFile (file); ! hasModels && modelsFile.existsAsFile())
+            if (const auto loaded = beside.load (modelsFile.getFullPathName()); loaded.failed())
+                return refuseYuiToolCommand (loaded);
+
+        for (const auto& problem : findYuiToolFileProblems (file, unsavedText, hasModels ? models : beside, embedded.has_value() ? &*embedded : nullptr))
         {
             if (! problem.isError && ! includeWarnings)
                 continue;
@@ -132,12 +169,7 @@ int runYuiVerifyCommand (int argc, char** argv, bool includeWarnings)
     }
 
     if (json)
-    {
-        auto* result = new DynamicObject();
-        result->setProperty ("diagnostics", var (records));
-
-        std::cout << JSON::toString (var (result)).toStdString() << "\n";
-    }
+        std::cout << JSON::toString (var::object ({ { "diagnostics", var (records) } })).toStdString() << "\n";
 
     return numErrors > 0 || (strict && numWarnings > 0) ? 1 : 0;
 }

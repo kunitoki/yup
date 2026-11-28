@@ -54,6 +54,14 @@ constexpr uint32_t kFourCC_YSLZ = makeFourCC ('Y', 'S', 'L', 'Z');
 
 constexpr uint32_t kCurrentVersion = 2;
 
+// The most a compressed bundle may expand to, as a multiple of its compressed size. LZAV sets no
+// bound of its own, and shader variants pack about 6 to 1: a raw size above this is not allocated
+constexpr int64 kMaxCompressionRatio = 256;
+
+// The most variants a bundle may hold: one per stage and target language is a few dozen at most,
+// and an empty chunk is enough to declare one that takes far more memory once loaded
+constexpr size_t kMaxVariants = 256;
+
 //==============================================================================
 // Write helpers
 
@@ -75,27 +83,66 @@ void writeBinaryChunk (MemoryOutputStream& buf, uint32_t fourcc, const MemoryBlo
 }
 
 //==============================================================================
-// Read helpers
+// Read helpers: a size read from the bundle is checked against the bytes its container has left
+// before anything is allocated or read for it, and sets `error` when it exceeds them
 
-String readStringRaw (InputStream& s)
+String readStringRaw (InputStream& s, String& error)
 {
-    const auto len = s.readInt();
-    if (len <= 0)
+    const auto len = static_cast<uint32_t> (s.readInt());
+    if (len == 0)
         return {};
+
+    if (static_cast<int64> (len) > s.getNumBytesRemaining())
+    {
+        error = "ShaderBundle: truncated string data";
+        return {};
+    }
+
     MemoryBlock buf (static_cast<size_t> (len), false);
-    s.read (buf.getData(), len);
-    return String::fromUTF8 (static_cast<const char*> (buf.getData()), len);
+    s.read (buf.getData(), static_cast<int> (len));
+    return String::fromUTF8 (static_cast<const char*> (buf.getData()), static_cast<int> (len));
+}
+
+// A stage or a language read from the bundle is checked against the ones there are, and sets `error` when it is none of them
+
+ShaderStage readStage (InputStream& s, String& error)
+{
+    const auto value = s.readInt();
+
+    if (value >= static_cast<int> (ShaderStage::vertex) && value <= static_cast<int> (ShaderStage::tessEval))
+        return static_cast<ShaderStage> (value);
+
+    error = "ShaderBundle: unknown shader stage";
+    return ShaderStage::vertex;
+}
+
+ShaderLanguage readLanguage (InputStream& s, String& error)
+{
+    const auto value = s.readInt();
+
+    if (value >= static_cast<int> (ShaderLanguage::glsl) && value <= static_cast<int> (ShaderLanguage::wgsl))
+        return static_cast<ShaderLanguage> (value);
+
+    error = "ShaderBundle: unknown shader language";
+    return ShaderLanguage::glsl;
 }
 
 // Reads each [fourcc, size, data] chunk from `s`, calling handler(fourcc, subStream) for each.
 // The sub-stream contains exactly `size` bytes; padding is consumed before the next iteration.
+// Stops at the first error, whoever set it.
 template <typename Handler>
-void iterateChunks (InputStream& s, Handler&& handler)
+void iterateChunks (InputStream& s, String& error, Handler&& handler)
 {
-    while (s.getNumBytesRemaining() >= 8)
+    while (error.isEmpty() && s.getNumBytesRemaining() >= 8)
     {
         const auto fourcc = static_cast<uint32_t> (s.readInt());
         const auto size = static_cast<uint32_t> (s.readInt());
+
+        if (static_cast<int64> (size) > s.getNumBytesRemaining())
+        {
+            error = "ShaderBundle: truncated chunk data";
+            return;
+        }
 
         MemoryBlock data (static_cast<size_t> (size), false);
         if (size > 0)
@@ -282,14 +329,18 @@ Result ShaderBundle::saveToStream (OutputStream& stream, Compression compression
     if (packedLength <= 0)
         return Result::fail ("ShaderBundle: compression failed");
 
-    buf.reset();
-
-    writeChunk (kFourCC_RIFF, [&]
+    // What packs tighter than a load expands is written as it is, which every load function reads too
+    if (static_cast<int64> (rawLength) <= packedLength * kMaxCompressionRatio)
     {
-        buf.writeInt (static_cast<int> (kFourCC_YSLZ));
-        buf.writeInt (rawLength);
-        buf.write (packed.get(), static_cast<size_t> (packedLength));
-    });
+        buf.reset();
+
+        writeChunk (kFourCC_RIFF, [&]
+        {
+            buf.writeInt (static_cast<int> (kFourCC_YSLZ));
+            buf.writeInt (rawLength);
+            buf.write (packed.get(), static_cast<size_t> (packedLength));
+        });
+    }
 
     if (! stream.write (buf.getData(), buf.getDataSize()))
         return Result::fail ("ShaderBundle: failed to write to stream");
@@ -330,9 +381,22 @@ ResultValue<ShaderBundle> ShaderBundle::loadFromStream (InputStream& stream)
     if (formType != kFourCC_YSLB && formType != kFourCC_YSLZ)
         return makeResultValueFail ("ShaderBundle: not an YSLB bundle (wrong form type)");
 
+    // The RIFF size counts the form type, read above
+    if (riffSize < 4)
+        return makeResultValueFail ("ShaderBundle: invalid RIFF size");
+
     const auto dataLen = static_cast<size_t> (riffSize - 4);
+
+    // Checked before allocating: the sizes a bundle declares are not trusted over the bytes it has
+    if (static_cast<int64> (dataLen) > stream.getNumBytesRemaining())
+        return makeResultValueFail ("ShaderBundle: truncated RIFF data");
+
+    // Every size below fits in what is read here, and is read as an int
+    if (dataLen > static_cast<size_t> (std::numeric_limits<int>::max()))
+        return makeResultValueFail ("ShaderBundle: bundle too large");
+
     MemoryBlock riffData (dataLen, false);
-    if (stream.read (riffData.getData(), static_cast<int> (dataLen)) != static_cast<int> (dataLen))
+    if (dataLen > 0 && stream.read (riffData.getData(), static_cast<int> (dataLen)) != static_cast<int> (dataLen))
         return makeResultValueFail ("ShaderBundle: truncated RIFF data");
 
     if (formType == kFourCC_YSLZ)
@@ -341,12 +405,15 @@ ResultValue<ShaderBundle> ShaderBundle::loadFromStream (InputStream& stream)
             return makeResultValueFail ("ShaderBundle: invalid compressed data size");
 
         const auto rawLength = static_cast<int> (ByteOrder::littleEndianInt (riffData.getData()));
-        if (rawLength < 12)
+        const auto packedLength = static_cast<int> (dataLen - 4);
+
+        // LZAV writes the raw size it is given, which nothing but this bounds
+        if (rawLength < 12 || rawLength > packedLength * kMaxCompressionRatio)
             return makeResultValueFail ("ShaderBundle: invalid compressed data size");
 
         MemoryBlock raw (static_cast<size_t> (rawLength), false);
         const auto* packed = static_cast<const char*> (riffData.getData()) + 4;
-        if (lzav::lzav_decompress (packed, raw.getData(), static_cast<int> (dataLen - 4), rawLength) != rawLength)
+        if (lzav::lzav_decompress (packed, raw.getData(), packedLength, rawLength) != rawLength)
             return makeResultValueFail ("ShaderBundle: corrupted compressed data");
 
         // Only a plain YSLB may be nested, never another YSLZ
@@ -365,15 +432,21 @@ ResultValue<ShaderBundle> ShaderBundle::loadFromStream (InputStream& stream)
     // Parses a VART sub-stream into a ShaderInfo and appends it to the bundle.
     auto parseVariant = [&] (MemoryInputStream& vartStream, ShaderStage stage)
     {
+        if (bundle.shaders.size() >= kMaxVariants)
+        {
+            loadError = "ShaderBundle: too many shader variants";
+            return;
+        }
+
         ShaderInfo info;
         info.stage = stage;
-        info.language = static_cast<ShaderLanguage> (vartStream.readInt());
-        info.entryPoint = readStringRaw (vartStream);
-        info.source = readStringRaw (vartStream);
+        info.language = readLanguage (vartStream, loadError);
+        info.entryPoint = readStringRaw (vartStream, loadError);
+        info.source = readStringRaw (vartStream, loadError);
 
         std::vector<bool> storageReadOnly;
 
-        iterateChunks (vartStream, [&] (uint32_t fourcc, MemoryInputStream& sub)
+        iterateChunks (vartStream, loadError, [&] (uint32_t fourcc, MemoryInputStream& sub)
         {
             if (fourcc == kFourCC_ISRC)
             {
@@ -413,11 +486,11 @@ ResultValue<ShaderBundle> ShaderBundle::loadFromStream (InputStream& stream)
         if (shdrStream.getNumBytesRemaining() < 8)
             return;
 
-        const auto stage = static_cast<ShaderStage> (shdrStream.readInt());
-        const auto srcLang = static_cast<ShaderLanguage> (shdrStream.readInt());
+        const auto stage = readStage (shdrStream, loadError);
+        const auto srcLang = readLanguage (shdrStream, loadError);
         MemoryBlock spirv;
 
-        iterateChunks (shdrStream, [&] (uint32_t fourcc, MemoryInputStream& sub)
+        iterateChunks (shdrStream, loadError, [&] (uint32_t fourcc, MemoryInputStream& sub)
         {
             if (fourcc == kFourCC_SPVB)
             {
@@ -431,7 +504,7 @@ ResultValue<ShaderBundle> ShaderBundle::loadFromStream (InputStream& stream)
             else if (fourcc == kFourCC_LIST && sub.getNumBytesRemaining() >= 4)
             {
                 if (static_cast<uint32_t> (sub.readInt()) == kFourCC_VARS)
-                    iterateChunks (sub, [&] (uint32_t vartFourCC, MemoryInputStream& vartStream)
+                    iterateChunks (sub, loadError, [&] (uint32_t vartFourCC, MemoryInputStream& vartStream)
                     {
                         if (vartFourCC == kFourCC_VART)
                             parseVariant (vartStream, stage);
@@ -443,11 +516,8 @@ ResultValue<ShaderBundle> ShaderBundle::loadFromStream (InputStream& stream)
             bundle.spirvBinaries[stage] = { srcLang, std::move (spirv) };
     };
 
-    iterateChunks (riffStream, [&] (uint32_t fourcc, MemoryInputStream& chunkStream)
+    iterateChunks (riffStream, loadError, [&] (uint32_t fourcc, MemoryInputStream& chunkStream)
     {
-        if (! loadError.isEmpty())
-            return;
-
         if (fourcc == kFourCC_VERS)
         {
             if (chunkStream.getNumBytesRemaining() < 4)
@@ -462,7 +532,7 @@ ResultValue<ShaderBundle> ShaderBundle::loadFromStream (InputStream& stream)
         else if (fourcc == kFourCC_LIST && chunkStream.getNumBytesRemaining() >= 4)
         {
             if (static_cast<uint32_t> (chunkStream.readInt()) == kFourCC_SHAD)
-                iterateChunks (chunkStream, [&] (uint32_t shdrFourCC, MemoryInputStream& shdrStream)
+                iterateChunks (chunkStream, loadError, [&] (uint32_t shdrFourCC, MemoryInputStream& shdrStream)
                 {
                     if (shdrFourCC == kFourCC_SHDR)
                         parseShader (shdrStream);

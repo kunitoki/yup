@@ -39,6 +39,26 @@ constexpr int kDefaultOctaveOffset = 12 * kDefaultOctave;
 } // namespace
 
 //==============================================================================
+class MidiKeyboardComponentTests;
+
+namespace yup
+{
+
+/** What the tests of the keyboard do to a component that only the component does to itself. */
+template <>
+class ComponentTestHelper<MidiKeyboardComponentTests>
+{
+public:
+    /** Gives a component a window the caller built, which the component then owns. */
+    static void attachNative (Component& component, ComponentNative* newNative)
+    {
+        component.native = newNative;
+    }
+};
+
+} // namespace yup
+
+//==============================================================================
 class MidiKeyboardComponentTests : public ::testing::Test
 {
 protected:
@@ -47,6 +67,119 @@ protected:
         int channel;
         int note;
         float velocity;
+    };
+
+    /** Stands in for a window, keeping what its components ask to repaint. */
+    class StubWindow final : public ComponentNative
+    {
+    public:
+        explicit StubWindow (Component& component)
+            : ComponentNative (component, defaultFlags)
+        {
+        }
+
+        void setTitle (const String&) override {}
+
+        String getTitle() const override { return {}; }
+
+        void setVisible (bool) override {}
+
+        bool isVisible() const override { return false; }
+
+        bool isResizable() const override { return false; }
+
+        void setResizable (bool) override {}
+
+        void toFront() override {}
+
+        void setSize (const Size<int>&) override {}
+
+        Size<int> getSize() const override { return {}; }
+
+        Size<int> getContentSize() const override { return {}; }
+
+        Point<int> getPosition() const override { return {}; }
+
+        void setPosition (const Point<int>&) override {}
+
+        Rectangle<int> getBounds() const override { return {}; }
+
+        void setBounds (const Rectangle<int>&) override {}
+
+        Rectangle<int> getSafeAreaBounds() const override { return {}; }
+
+        void setFullScreen (bool) override {}
+
+        bool isFullScreen() const override { return false; }
+
+        bool isDecorated() const override { return false; }
+
+        void setOpacity (float) override {}
+
+        float getOpacity() const override { return 1.0f; }
+
+        void setFocusedComponent (Component*, FocusChangeType) override {}
+
+        Component* getFocusedComponent() const override { return nullptr; }
+
+        Component* getPointerTarget() const override { return nullptr; }
+
+        bool isContinuousRepaintingEnabled() const override { return false; }
+
+        void enableContinuousRepainting (bool) override {}
+
+        bool isAtomicModeEnabled() const override { return false; }
+
+        void enableAtomicMode (bool) override {}
+
+        bool isWireframeEnabled() const override { return false; }
+
+        void enableWireframe (bool) override {}
+
+        void setAspectRatio (std::optional<float>) override {}
+
+        std::optional<float> getAspectRatio() const override { return std::nullopt; }
+
+        GpuTriangulationThresholds getTriangulationThresholds() const override { return thresholds; }
+
+        void setTriangulationThresholds (const GpuTriangulationThresholds& newThresholds) override { thresholds = newThresholds; }
+
+        void repaint() override { repaintAreas.add (component.getBounds()); }
+
+        void repaint (const Rectangle<float>& rect) override { repaintAreas.add (rect); }
+
+        const RectangleList<float>& getRepaintAreas() const override { return repaintAreas; }
+
+        void startTextInput (Component&) override {}
+
+        void stopTextInput (Component&) override {}
+
+        void updateTextInputRect (Component&) override {}
+
+        float getScaleDpi() const override { return 1.0f; }
+
+        float getCurrentFrameRate() const override { return 60.0f; }
+
+        float getDesiredFrameRate() const override { return 60.0f; }
+
+        void setDesiredFrameRate (std::optional<float>) override {}
+
+        bool isVsyncEnabled() const override { return false; }
+
+        void setVsyncEnabled (bool) override {}
+
+        void* getNativeHandle() const override { return nullptr; }
+
+        rive::Factory* getFactory() override { return nullptr; }
+
+        GraphicsContext* getGraphicsContext() override { return nullptr; }
+
+        void setGlobalMouseCaptureActive (bool) override {}
+
+        void cancelCurrentMouseGesture() override {}
+
+        RectangleList<float> repaintAreas;
+        GpuTriangulationThresholds thresholds;
     };
 
     class TestListener : public MidiKeyboardState::Listener
@@ -79,6 +212,15 @@ protected:
 
         bool allowPress = true;
         std::vector<int> releasedKeys;
+    };
+
+    /** Handles its enablement without the keyboard, as a subclass written before the keyboard did. */
+    class OwnEnablementKeyboard : public MidiKeyboardComponent
+    {
+    public:
+        using MidiKeyboardComponent::MidiKeyboardComponent;
+
+        void enablementChanged() override {}
     };
 
     void SetUp() override
@@ -169,6 +311,21 @@ protected:
         const auto center = button->getLocalBounds().getCenter();
         button->mouseDown (makePointerEvent (center, touchIndex, true));
         button->mouseUp (makePointerEvent (center, touchIndex, false));
+    }
+
+    /** Expects the rectangle of every key shown to be the one the keyboard works out for it now. */
+    void expectKeyRectanglesAreCurrent() const
+    {
+        const auto keyWidth = keyboard->getKeyWidth();
+
+        for (int note = keyboard->getLowestVisibleKey(); note <= keyboard->getHighestVisibleKey(); ++note)
+        {
+            Rectangle<float> expected;
+            bool isBlack = false;
+            keyboard->getKeyPosition (note, keyWidth, expected, isBlack);
+
+            EXPECT_EQ (expected, keyboard->getRectangleForKey (note)) << "note " << note;
+        }
     }
 
     std::unique_ptr<MidiKeyboardState> state;
@@ -692,6 +849,87 @@ TEST_F (MidiKeyboardComponentTests, TappingScrollButtonKeepsHeldNotes)
     EXPECT_TRUE (listener->noteOffCalls.empty());
 }
 
+TEST_F (MidiKeyboardComponentTests, DisablingReleasesTheNotesHeld)
+{
+    press (60);
+    press (64, 0);
+    keyboard->handleNoteKey (KeyPress ('z'), true);
+    ASSERT_EQ (3, (int) listener->noteOnCalls.size());
+
+    keyboard->setEnabled (false);
+
+    EXPECT_EQ (3, (int) listener->noteOffCalls.size());
+    EXPECT_FALSE (state->isNoteOn (1, 60));
+    EXPECT_FALSE (state->isNoteOn (1, 64));
+    EXPECT_FALSE (state->isNoteOn (1, kDefaultOctaveOffset));
+    EXPECT_FALSE (keyboard->isMouseOverNote (60));
+
+    // The releases that come later find nothing left to end
+    release (60);
+    release (64, 0);
+    EXPECT_EQ (3, (int) listener->noteOffCalls.size());
+    EXPECT_FALSE (keyboard->isMouseOverNote (60));
+}
+
+TEST_F (MidiKeyboardComponentTests, DisablingAParentReleasesTheNotesHeld)
+{
+    Component parent;
+    parent.addChildComponent (*keyboard);
+
+    press (60);
+    parent.setEnabled (false);
+
+    EXPECT_FALSE (keyboard->isEnabled());
+    EXPECT_FALSE (state->isNoteOn (1, 60));
+}
+
+TEST_F (MidiKeyboardComponentTests, HidingReleasesTheNotesHeld)
+{
+    Component parent;
+    parent.setVisible (true);
+    parent.addAndMakeVisible (*keyboard);
+
+    press (60);
+    keyboard->handleNoteKey (KeyPress ('z'), true);
+    ASSERT_EQ (2, (int) listener->noteOnCalls.size());
+
+    // Hidden through its parent, the keyboard is still visible itself
+    parent.setVisible (false);
+
+    EXPECT_TRUE (keyboard->isVisible());
+    EXPECT_EQ (2, (int) listener->noteOffCalls.size());
+    EXPECT_FALSE (state->isNoteOn (1, 60));
+    EXPECT_FALSE (state->isNoteOn (1, kDefaultOctaveOffset));
+
+    // The release that comes later finds nothing left to end
+    release (60);
+    EXPECT_EQ (2, (int) listener->noteOffCalls.size());
+
+    // Hidden itself, it lets go of what it was played since
+    parent.setVisible (true);
+    press (62);
+    keyboard->setVisible (false);
+
+    EXPECT_FALSE (state->isNoteOn (1, 62));
+}
+
+TEST_F (MidiKeyboardComponentTests, AReleaseOnADisabledKeyboardEndsTheNoteASubclassLeftHeld)
+{
+    OwnEnablementKeyboard own (*state, MidiKeyboardComponent::horizontalKeyboard);
+    own.setBounds (0.0f, 0.0f, 1000.0f, 200.0f);
+
+    const auto keyCenter = own.getRectangleForKey (60).getCenter();
+
+    own.mouseDown (makePointerEvent (keyCenter, -1, true));
+    own.setEnabled (false);
+    ASSERT_TRUE (state->isNoteOn (1, 60));
+
+    own.mouseUp (makePointerEvent (keyCenter, -1, false));
+
+    EXPECT_FALSE (state->isNoteOn (1, 60));
+    EXPECT_FALSE (own.isMouseOverNote (60));
+}
+
 //==============================================================================
 TEST_F (MidiKeyboardComponentTests, PressNearFrontEdgeIsLouderThanNearBackEdge)
 {
@@ -929,6 +1167,92 @@ TEST_F (MidiKeyboardComponentTests, BlackKeyAtVisibleEdgeIsNotHitOverScrollButto
     EXPECT_EQ (-1, keyboard->getNoteAtPosition ({ keyboard->getScrollButtonWidth() - 1.0f, 20.0f }));
 }
 
+TEST_F (MidiKeyboardComponentTests, KeysAreLaidOutAgainWhenWhatTheyAreLaidOutFromChanges)
+{
+    expectKeyRectanglesAreCurrent();
+
+    keyboard->setVisibleRange (36, 72);
+    expectKeyRectanglesAreCurrent();
+    EXPECT_TRUE (keyboard->getRectangleForKey (35).isEmpty());
+    EXPECT_TRUE (keyboard->getRectangleForKey (73).isEmpty());
+
+    keyboard->setBounds (0.0f, 0.0f, 640.0f, 120.0f);
+    expectKeyRectanglesAreCurrent();
+
+    keyboard->setScrollButtonWidth (40.0f);
+    expectKeyRectanglesAreCurrent();
+
+    keyboard->setBlackNoteWidthProportion (0.5f);
+    expectKeyRectanglesAreCurrent();
+
+    keyboard->setBlackNoteLengthProportion (0.8f);
+    expectKeyRectanglesAreCurrent();
+
+    for (const auto orientation : { MidiKeyboardComponent::verticalKeyboardFacingLeft, MidiKeyboardComponent::verticalKeyboardFacingRight })
+    {
+        keyboard->setOrientation (orientation);
+        expectKeyRectanglesAreCurrent();
+
+        keyboard->setBounds (0.0f, 0.0f, 120.0f, 640.0f);
+        expectKeyRectanglesAreCurrent();
+    }
+
+    keyboard->setScrollButtonsVisible (false);
+    expectKeyRectanglesAreCurrent();
+
+    keyboard->setAvailableRange (21, 108);
+    expectKeyRectanglesAreCurrent();
+
+    // The keys a drawing reads are the same ones
+    const auto keyBounds = keyboard->getProperty ("keyBounds");
+    ASSERT_EQ (keyBounds.size(), 88);
+    EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (keyBounds[87]), keyboard->getRectangleForKey (108));
+}
+
+TEST_F (MidiKeyboardComponentTests, ANoteThatChangesAsksToRepaintItsKeyOnly)
+{
+    Component window ("window");
+    auto* native = new StubWindow (window);
+    ComponentTestHelper<MidiKeyboardComponentTests>::attachNative (window, native);
+
+    window.setBounds (0.0f, 0.0f, 1000.0f, 200.0f);
+    window.setVisible (true);
+    window.addAndMakeVisible (*keyboard);
+
+    const auto expectOnlyKeyAsked = [&] (int note)
+    {
+        const auto key = keyboard->getRectangleForKey (note);
+        const auto asked = native->repaintAreas.getBoundingBox();
+
+        EXPECT_TRUE (asked.contains (key)) << "note " << note;
+        EXPECT_TRUE (key.enlarged (2.0f).contains (asked)) << "note " << note;
+    };
+
+    // The state tells of its notes on whatever thread plays them, and the keyboard repaints on the message thread
+    native->repaintAreas.clearQuick();
+    state->noteOn (1, 61, 1.0f);
+    EXPECT_TRUE (native->repaintAreas.isEmpty());
+
+    keyboard->handleAsyncUpdate();
+    expectOnlyKeyAsked (61);
+
+    native->repaintAreas.clearQuick();
+    state->noteOff (1, 61, 0.0f);
+    keyboard->handleAsyncUpdate();
+    expectOnlyKeyAsked (61);
+
+    // A key played with the mouse
+    native->repaintAreas.clearQuick();
+    press (60);
+    keyboard->handleAsyncUpdate();
+    expectOnlyKeyAsked (60);
+
+    // A change of the keys shown repaints them all
+    native->repaintAreas.clearQuick();
+    keyboard->setVisibleRange (36, 72);
+    EXPECT_TRUE (native->repaintAreas.getBoundingBox().contains (keyboard->getBounds()));
+}
+
 //==============================================================================
 TEST_F (MidiKeyboardComponentTests, ChannelsToDisplayFiltersNoteState)
 {
@@ -1042,6 +1366,156 @@ TEST_F (MidiKeyboardComponentTests, KeyHooksCanSuppressNotes)
 
     ASSERT_EQ (1, (int) hooked.releasedKeys.size());
     EXPECT_EQ (62, hooked.releasedKeys[0]);
+}
+
+TEST_F (MidiKeyboardComponentTests, AKeyboardWithoutAStateShowsTheKeysHeldOnIt)
+{
+    MidiKeyboardComponent stateless;
+    stateless.setBounds (0.0f, 0.0f, 1000.0f, 200.0f);
+
+    EXPECT_EQ (nullptr, stateless.getState());
+    EXPECT_EQ (MidiKeyboardComponent::horizontalKeyboard, stateless.getOrientation());
+
+    EXPECT_TRUE (stateless.handleNoteKey (KeyPress ('z'), true));
+    stateless.mouseDown (makePointerEvent (stateless.getRectangleForKey (60).getCenter(), -1, true));
+
+    // It plays into a state of its own, that it doesn't give away: the keys held are shown
+    EXPECT_EQ (nullptr, stateless.getState());
+    EXPECT_TRUE (stateless.isNoteOn (60));
+    EXPECT_TRUE (stateless.isNoteOn (kDefaultOctaveOffset));
+
+    // What was held before a state is there is let go, and isn't played into it nor released on it
+    stateless.setState (state.get());
+
+    EXPECT_EQ (state.get(), stateless.getState());
+    EXPECT_TRUE (listener->noteOnCalls.empty());
+    EXPECT_TRUE (listener->noteOffCalls.empty());
+    EXPECT_FALSE (stateless.isNoteOn (60));
+
+    stateless.handleNoteKey (KeyPress ('z'), true);
+
+    ASSERT_EQ (1, (int) listener->noteOnCalls.size());
+    EXPECT_TRUE (stateless.isNoteOn (kDefaultOctaveOffset));
+}
+
+TEST_F (MidiKeyboardComponentTests, SetStateReleasesTheHeldNotesAndFollowsTheNewState)
+{
+    MidiKeyboardState other;
+    TestListener otherListener;
+    other.addListener (&otherListener);
+
+    press (60);
+    keyboard->handleNoteKey (KeyPress ('z'), true);
+    ASSERT_EQ (2, (int) listener->noteOnCalls.size());
+
+    keyboard->setState (&other);
+
+    // The notes held are released on the state they were played into
+    EXPECT_EQ (&other, keyboard->getState());
+    EXPECT_EQ (2, (int) listener->noteOffCalls.size());
+    EXPECT_FALSE (state->isNoteOn (1, 60));
+    EXPECT_TRUE (otherListener.noteOffCalls.empty());
+
+    press (62);
+
+    EXPECT_EQ (2, (int) listener->noteOnCalls.size());
+    ASSERT_EQ (1, (int) otherListener.noteOnCalls.size());
+    EXPECT_EQ (62, otherListener.noteOnCalls[0].note);
+    EXPECT_TRUE (keyboard->isNoteOn (62));
+
+    // The keys show the notes of the new state only
+    state->noteOn (1, 64, 1.0f);
+    EXPECT_FALSE (keyboard->isNoteOn (64));
+
+    keyboard->setState (nullptr);
+
+    EXPECT_EQ (nullptr, keyboard->getState());
+    EXPECT_FALSE (other.isNoteOn (1, 62));
+    EXPECT_FALSE (keyboard->isNoteOn (62));
+
+    other.removeListener (&otherListener);
+}
+
+TEST_F (MidiKeyboardComponentTests, TheTypeInfoCreatesAKeyboardAndSetsItsRangesInAnyOrder)
+{
+    const auto& type = MidiKeyboardComponent::getClassTypeInfo();
+    EXPECT_EQ (type.getTypeName().toString(), "MidiKeyboard");
+    EXPECT_EQ (&keyboard->getTypeInfo(), &type);
+
+    const auto created = type.createInstance();
+    auto* instance = dynamic_cast<MidiKeyboardComponent*> (created.get());
+    ASSERT_NE (nullptr, instance);
+    EXPECT_EQ (nullptr, instance->getState());
+
+    // Each end of the visible range moves the other one out of its way
+    instance->setProperty ("lowestVisibleKey", 100);
+    instance->setProperty ("highestVisibleKey", 110);
+    EXPECT_EQ (100, instance->getLowestVisibleKey());
+    EXPECT_EQ (110, instance->getHighestVisibleKey());
+
+    instance->setProperty ("highestVisibleKey", 40);
+    EXPECT_EQ (40, instance->getLowestVisibleKey());
+    EXPECT_EQ (40, instance->getHighestVisibleKey());
+
+    // So does each end of the available range, which keeps the keys shown
+    instance->setProperty ("rangeEnd", 60);
+    instance->setProperty ("rangeStart", 24);
+    EXPECT_EQ (24, instance->getRangeStart());
+    EXPECT_EQ (60, instance->getRangeEnd());
+    EXPECT_EQ (40, instance->getLowestVisibleKey());
+    EXPECT_EQ (40, instance->getHighestVisibleKey());
+
+    instance->setProperty ("orientation", "verticalFacingRight");
+    EXPECT_EQ (MidiKeyboardComponent::verticalKeyboardFacingRight, instance->getOrientation());
+    EXPECT_EQ (instance->getProperty ("orientation").toString(), "verticalFacingRight");
+
+    // A value a document writes is brought into the range the keyboard takes
+    instance->setProperty ("midiChannel", 40);
+    EXPECT_EQ (16, instance->getMidiChannel());
+}
+
+TEST_F (MidiKeyboardComponentTests, TheRangePropertiesKeepTheKeysShownInsideTheRange)
+{
+    keyboard->setVisibleRange (36, 60);
+
+    // A range that holds the keys shown leaves them where they are
+    keyboard->setProperty ("rangeStart", 24);
+    keyboard->setProperty ("rangeEnd", 96);
+    EXPECT_EQ (24, keyboard->getRangeStart());
+    EXPECT_EQ (96, keyboard->getRangeEnd());
+    EXPECT_EQ (36, keyboard->getLowestVisibleKey());
+    EXPECT_EQ (60, keyboard->getHighestVisibleKey());
+
+    // One that doesn't moves them inside it, as many as they were
+    keyboard->setProperty ("rangeStart", 48);
+    EXPECT_EQ (48, keyboard->getLowestVisibleKey());
+    EXPECT_EQ (72, keyboard->getHighestVisibleKey());
+
+    // And one with fewer keys than them is shown whole
+    keyboard->setProperty ("rangeEnd", 60);
+    EXPECT_EQ (48, keyboard->getLowestVisibleKey());
+    EXPECT_EQ (60, keyboard->getHighestVisibleKey());
+}
+
+TEST_F (MidiKeyboardComponentTests, ChangingTheVisibleRangeTellsWhichOfItsEndsMoved)
+{
+    struct PropertyRecorder : ComponentListener
+    {
+        void componentPropertyChanged (Component&, const Identifier& name) override { names.add (name.toString()); }
+
+        StringArray names;
+    };
+
+    PropertyRecorder recorder;
+    keyboard->addComponentListener (&recorder);
+
+    keyboard->setVisibleRange (24, keyboard->getHighestVisibleKey());
+    EXPECT_EQ (recorder.names.joinIntoString (", "), "lowestVisibleKey");
+
+    keyboard->setVisibleRange (36, 72);
+    EXPECT_EQ (recorder.names.joinIntoString (", "), "lowestVisibleKey, lowestVisibleKey, highestVisibleKey");
+
+    keyboard->removeComponentListener (&recorder);
 }
 
 //==============================================================================

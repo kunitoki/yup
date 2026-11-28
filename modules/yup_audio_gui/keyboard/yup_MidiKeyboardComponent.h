@@ -34,7 +34,9 @@ namespace yup
     screen hold, slide and release their own note, so chords can be played with
     several fingers. The note-on velocity comes from where the key is pressed,
     growing from the back edge of the key to its front edge and scaled by
-    setVelocity(), unless setMidiVelocitySensitive() turns that off.
+    setVelocity(), unless setMidiVelocitySensitive() turns that off. Disabling or
+    hiding the keyboard, itself or through one of its parents, releases every note
+    held on it, by a pointer or by a computer key.
 
     The keyboard shows a visible window (setVisibleRange()) into a wider available
     range (setAvailableRange()). When the window doesn't cover the whole available
@@ -51,11 +53,18 @@ namespace yup
     the matching note-off. Keys pressed with command or control held are shortcuts
     and play nothing.
 
-    The actual drawing is delegated to the ApplicationTheme system.
+    The actual drawing is delegated to the ApplicationTheme system. A style paints each key
+    inside getRectangleForKey(), the area that is repainted when its note goes on or off or
+    the pointer moves over it.
 
     The key state may be updated from any thread (for example from an audio or MIDI
-    input callback via MidiKeyboardState::processNextMidiEvent()); note repaints are
-    coalesced and applied on the message thread.
+    input callback via MidiKeyboardState::processNextMidiEvent()); the keys of the notes
+    that changed are repainted on the message thread.
+
+    The state can be given after construction with setState(), which is how a keyboard
+    created by a `.yui` document as `MidiKeyboard` gets it (see YuiDocument::setInitializer).
+    Without a state the keyboard plays into one of its own, that nothing else hears: it still
+    shows the keys held on it, which is how it is tried out where no application gives it a state.
 
     @tags{AudioGUI}
 */
@@ -122,6 +131,12 @@ public:
     };
 
     //==============================================================================
+    /** Creates a MidiKeyboardComponent with no state, to be given one with setState().
+
+        @param orientation     whether the keyboard is horizontal or vertical
+    */
+    explicit MidiKeyboardComponent (Orientation orientation = horizontalKeyboard);
+
     /** Creates a MidiKeyboardComponent.
 
         @param state           the MidiKeyboardState object that this keyboard will use to show
@@ -132,6 +147,27 @@ public:
 
     /** Destructor. */
     ~MidiKeyboardComponent() override;
+
+    //==============================================================================
+    /** Changes the state the keyboard plays into and shows the pressed keys of.
+
+        Any notes currently held down are released on the previous state. Call it on the
+        message thread. The state must outlive the keyboard, or be removed first by
+        setting a null one.
+
+        @param newState   the state to use, or nullptr for the keyboard to play into its own
+    */
+    void setState (MidiKeyboardState* newState);
+
+    /** Returns the state the keyboard was given, or nullptr when it plays into its own. */
+    MidiKeyboardState* getState() const noexcept { return state; }
+
+    //==============================================================================
+    /** Returns the static type info describing the MidiKeyboardComponent type, `MidiKeyboard` in `.yui`. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
     //==============================================================================
     /** Changes the velocity used in midi note-on messages that are triggered by clicking
@@ -400,6 +436,9 @@ public:
 
     /** Returns whether a given note is a black key.
 
+        The keys are laid out with it, which is done when their size, their range or their orientation
+        changes: an override has to give the same answer for a note every time.
+
         @param midiNoteNumber  the note to check
 
         @returns true if the note is a black key, false otherwise
@@ -473,8 +512,6 @@ public:
 
     //==============================================================================
     /** @internal */
-    void paint (Graphics& g) override;
-    /** @internal */
     void mouseDown (const MouseEvent& e) override;
     /** @internal */
     void mouseDrag (const MouseEvent& e) override;
@@ -502,12 +539,22 @@ public:
     bool keyUp (const KeyPress& key, const Point<float>& position) override;
     /** @internal */
     void focusLost() override;
+    /** @internal */
+    void enablementChanged() override;
+    /** @internal */
+    void visibilityChanged() override;
 
 private:
     //==============================================================================
     static constexpr int maxPointers = 32;
 
+    void changeAvailableRange (int lowestNote, int highestNote, bool keepVisibleKeys);
     void repaintNote (int midiNoteNumber);
+    void repaintNoteLater (int midiChannelNumber, int midiNoteNumber);
+    Rectangle<float> getKeyRectangle (int numWhiteKeysBefore, float keyWidth, bool isBlack) const;
+    Span<const Rectangle<float>> getKeyRectangles() const;
+    void sendNoteOn (int midiNoteNumber, float noteVelocity);
+    void sendNoteOff (int midiNoteNumber, float noteVelocity);
     void updateNoteUnderMouse (Point<float> pos, bool isDown, int pointerSlot);
     void updateNoteUnderMouse (const MouseEvent& e, bool isDown);
     bool isNoteHeldByPointer (int midiNoteNumber) const;
@@ -521,7 +568,12 @@ private:
     void zoomBy (float zoomDelta, int anchorNote);
     int whiteKeyToNote (int whiteKeyIndex) const;
 
-    MidiKeyboardState& state;
+    MidiKeyboardState& getActiveState() noexcept { return state != nullptr ? *state : ownState; }
+    const MidiKeyboardState& getActiveState() const noexcept { return state != nullptr ? *state : ownState; }
+
+    // What is played on a keyboard given no state, so that it shows the keys held on it
+    MidiKeyboardState ownState;
+    MidiKeyboardState* state = nullptr;
 
     int midiChannel = 1;
     int midiInChannelMask = 0xffff;
@@ -544,10 +596,54 @@ private:
     Array<int> keyDownNotes;
     int mouseOverNote = -1;
 
+    // The notes the state told of, on whatever thread plays them, whose keys are repainted on the message thread
+    std::array<std::atomic<bool>, 128> notesToRepaint {};
+
     ScrollButton scrollDownButton;
     ScrollButton scrollUpButton;
     float scrollButtonWidth = 16.0f;
     bool scrollButtonsVisible = true;
+
+    // What the rectangles of the visible keys are worked out from: they are worked out again when any of it changes
+    struct KeyLayoutInputs
+    {
+        int lowestKey = 0;
+        int highestKey = -1;
+        Orientation orientation = horizontalKeyboard;
+        float width = 0.0f;
+        float height = 0.0f;
+        float keysStart = 0.0f;
+        float keysEnd = 0.0f;
+        float blackNoteLength = 0.0f;
+        float blackNoteWidth = 0.0f;
+
+        bool operator== (const KeyLayoutInputs&) const = default;
+    };
+
+    mutable KeyLayoutInputs keyLayoutInputs;
+    mutable std::vector<Rectangle<float>> keyRectangles;
+
+    // What a drawing reads of the visible keys: one array for each thing told of them, all read with the index of a key
+    struct KeySeries
+    {
+        Array<int> notes;
+        Array<bool> black, pressed, hovered;
+    };
+
+    /* Fills an array with one value for each visible key, from the lowest, and returns it as the series a property gives. */
+    template <class ValueType, class Reader>
+    Span<const ValueType> readKeys (Array<ValueType>& values, Reader&& read) const
+    {
+        values.clearQuick();
+        values.ensureStorageAllocated (jmax (0, highestVisibleKey - lowestVisibleKey + 1));
+
+        for (int note = lowestVisibleKey; note <= highestVisibleKey; ++note)
+            values.add (read (note));
+
+        return { values.data(), static_cast<size_t> (values.size()) };
+    }
+
+    mutable KeySeries keySeries;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MidiKeyboardComponent)
 };

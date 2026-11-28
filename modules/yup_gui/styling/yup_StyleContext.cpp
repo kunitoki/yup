@@ -41,6 +41,25 @@ Identifier resolveStyleStorageId (const ComponentProperty* descriptor, const Ide
     return propertyName;
 }
 
+/* The compiled bundle of a shader is the file next to its source, with `.ysl` added to its name: nothing for a path that is a bundle already. */
+String getShaderBundlePath (const String& sourcePath)
+{
+    return sourcePath.endsWithIgnoreCase (".ysl") ? String() : sourcePath + ".ysl";
+}
+
+/* Returns the graphics API of the window a component is in, or nothing when it is in none that draws with a GPU. */
+std::optional<GpuPlatform> findWindowGraphicsApi (Component& component)
+{
+    const auto device = detail::findWindowDevice (&component);
+
+    return device != nullptr && device->isGpuAvailable() ? std::optional<GpuPlatform> (device->getPlatform()) : std::nullopt;
+}
+
+} // namespace
+
+namespace detail
+{
+
 /* Tracks one component state property (style, cursor, effect, paint margin) owned by a
    stylesheet while leaving later explicit application overrides untouched. */
 template <class T>
@@ -96,6 +115,11 @@ struct StyledOverride
     }
 };
 
+} // namespace detail
+
+namespace
+{
+
 bool isManagedByRoot (const Component& component, const Component& root)
 {
     for (auto* c = &component; c != nullptr; c = c->getParentComponent())
@@ -122,6 +146,30 @@ bool hasAncestorInSet (Component& component, const Component& root, const std::s
     }
 
     return false;
+}
+
+int countAncestors (const Component& component)
+{
+    int count = 0;
+
+    for (auto* parent = component.getParentComponent(); parent != nullptr; parent = parent->getParentComponent())
+        ++count;
+
+    return count;
+}
+
+/* Tells whether a property is a state of the component alone: one a pseudo-class reads on the component, that each
+   component it changes for is told about, and that no descendant takes from it as it would a value of its store. */
+bool isOwnStyleState (const Component& component, const Identifier& name)
+{
+    const auto* descriptor = component.getTypeInfo().findProperty (name);
+
+    // No property: each component the focus is within is told
+    if (descriptor == nullptr)
+        return name == StringRef ("focus-within");
+
+    // The enablement is told to each descendant it changes for
+    return descriptor->isStateBacked() && (descriptor->isState || name == StringRef ("enabled"));
 }
 
 /* The type an animated value interpolates as, guessed from the value when no descriptor types it. */
@@ -225,12 +273,19 @@ struct StyleContext::ComponentCache
 
     String drawingName;
     DrawingStyle::Ptr drawingStyle;
-    StyledOverride<ComponentStyle::Ptr> drawingOverride;
+    detail::StyledOverride<ComponentStyle::Ptr> drawingOverride;
+
+    // The drawing made again here for one the component was given itself, kept to tell it from another one set since
+    DrawingStyle::Ptr attachedDrawing;
+
+    // What the context had loaded of its shaders when each of these drawings was last found to run them
+    std::optional<uint32> drawingShaderGeneration;
+    std::optional<uint32> attachedShaderGeneration;
 
     String effectName;
-    StyledOverride<ComponentEffect::Ptr> effectOverride;
-    StyledOverride<MouseCursor> cursorOverride;
-    StyledOverride<EdgeSpacing<float>> paintMarginOverride;
+    detail::StyledOverride<ComponentEffect::Ptr> effectOverride;
+    detail::StyledOverride<MouseCursor> cursorOverride;
+    detail::StyledOverride<EdgeSpacing<float>> paintMarginOverride;
 };
 
 struct StyleContext::CacheMap : std::map<Component*, ComponentCache>
@@ -238,6 +293,36 @@ struct StyleContext::CacheMap : std::map<Component*, ComponentCache>
 };
 
 struct StyleContext::PopupMap : std::map<Component*, std::pair<WeakReference<Component>, WeakReference<Component>>>
+{
+};
+
+/* A shader of the stylesheet as it was loaded last, with the defaults of its properties as the declarations they are applied as, and what
+   prevented its last load. One that could not be loaded is kept too, without a compiled shader, so that it is read once. */
+struct StyleContext::ShaderEntry
+{
+    Shader loaded;
+    std::vector<StyleSheet::Declaration> defaults;
+    std::vector<DataTreeDiagnostic> problems;
+
+    // What a device refused of the shader loaded, found by the paints of the components drawn with it: each is told once
+    std::vector<DataTreeDiagnostic> drawProblems;
+
+    // Set when a file of the shader changed, for the next restyle to load it again
+    bool isStale = false;
+
+    // Set when the problems of the stylesheet are found again, for the next restyle to report the ones kept here with them
+    bool reportsAgain = false;
+
+    // The graphics API the last load compiled the source of the shader for, whatever came of it, so that a source is
+    // compiled once for an API: nothing for a bundle, loaded with the variants it holds, and for a source compiled for all
+    std::optional<GpuPlatform> sourceApi;
+
+    // Set once a paint in no window could not draw the shader, where nothing tells which graphics API paints: its source
+    // is compiled for all of them from then on
+    bool compilesForEveryApi = false;
+};
+
+struct StyleContext::ShaderMap : std::map<String, ShaderEntry>
 {
 };
 
@@ -266,6 +351,7 @@ StyleContext::StyleContext (Component& rootToUse, StyleSheet::Ptr sheetToUse)
     , styleSheet (std::move (sheetToUse))
     , caches (std::make_unique<CacheMap>())
     , popups (std::make_unique<PopupMap>())
+    , shaders (std::make_unique<ShaderMap>())
 {
     observer.onChanged = [this] (Component& component, const Identifier& property)
     {
@@ -336,6 +422,23 @@ bool StyleContext::isManagedPopup (const Component& component) const noexcept
     return false;
 }
 
+bool StyleContext::isInsidePopup (const Component& component) const noexcept
+{
+    if (popups->empty())
+        return false;
+
+    for (auto* current = &component; current != nullptr; current = current->getParentComponent())
+    {
+        if (isManagedPopup (*current))
+            return true;
+
+        if (current == &root)
+            break;
+    }
+
+    return false;
+}
+
 Component* StyleContext::findPopupOwner (const Component& component) const noexcept
 {
     if (const auto it = popups->find (const_cast<Component*> (&component));
@@ -380,8 +483,13 @@ void StyleContext::resetCompiledValues()
             cache.drawingName = {};
             cache.drawingStyle = nullptr;
             cache.drawingOverride = {};
+            cache.attachedDrawing = nullptr;
         }
     }
+
+    // What prevents a shader from loading is reported with the values, so it is again once they are compiled again
+    for (auto& [name, entry] : *shaders)
+        entry.reportsAgain = true;
 
     if (observerDirty)
         rebuildObserver();
@@ -393,10 +501,21 @@ void StyleContext::resetCompiledValues()
 
 void StyleContext::markDirty (Component& component)
 {
-    if (! dirtyComponents.isEmpty() && dirtyComponents.getLast().get() == &component)
-        return;
+    addDirtyComponent (component, true);
+}
 
-    dirtyComponents.add (WeakReference<Component> (&component));
+void StyleContext::addDirtyComponent (Component& component, bool withDescendants)
+{
+    // The frame that follows restyles the component before it is painted
+    frameAttachment.setActive (true);
+
+    if (! dirtyComponents.empty() && dirtyComponents.back().component.get() == &component)
+    {
+        dirtyComponents.back().withDescendants |= withDescendants;
+        return;
+    }
+
+    dirtyComponents.push_back ({ WeakReference<Component> (&component), withDescendants });
 }
 
 void StyleContext::propertyChanged (Component& component, const Identifier& name)
@@ -405,7 +524,8 @@ void StyleContext::propertyChanged (Component& component, const Identifier& name
 
     if (styleSheet != nullptr && styleSheet->watchesProperty (name))
     {
-        markDirty (component);
+        // A state the rules read on the component they match alone leaves its descendants to what its restyle changes
+        addDirtyComponent (component, styleSheet->watchesPropertyForDescendants (name) || ! isOwnStyleState (component, name));
     }
     else if (! isRestyling && name == paletteProperty)
     {
@@ -441,17 +561,26 @@ void StyleContext::refresh (double elapsedSeconds)
             showAnimatedValue (component, storageId, value);
         });
     }
+
+    // With every style applied and nothing left running, the window is free to skip its frames
+    frameAttachment.setActive (! dirtyComponents.empty() || animator.isAnimating());
+}
+
+void StyleContext::themeChanged()
+{
+    frameAttachment.setActive (true);
 }
 
 void StyleContext::restyleNow()
 {
-    if (dirtyComponents.isEmpty())
+    if (dirtyComponents.empty())
         return;
 
     const ScopedValueSetter<bool> restyling (isRestyling, true);
     diagnostics.clear();
+    refreshShaders();
 
-    for (int pass = 0; pass < 4 && ! dirtyComponents.isEmpty(); ++pass)
+    for (int pass = 0; pass < 4 && ! dirtyComponents.empty(); ++pass)
     {
         const LayoutComponent::ScopedLayoutBatch layouts;
 
@@ -460,16 +589,56 @@ void StyleContext::restyleNow()
 
         std::vector<Component*> ordered;
         std::set<Component*> candidates;
+        std::vector<std::pair<int, Component*>> states;
+        std::set<Component*> stateCandidates;
 
         for (const auto& dirty : pending)
         {
-            auto* component = dirty.get();
+            auto* component = dirty.component.get();
 
             if (component == nullptr || (! isManagedByRoot (*component, root) && ! isManagedPopup (*component)))
                 continue;
 
+            // A popup is styled as a child of its owner and not of its parent: what is in one takes its descendants along
+            if (! dirty.withDescendants && ! isInsidePopup (*component))
+            {
+                if (stateCandidates.insert (component).second)
+                    states.emplace_back (countAncestors (*component), component);
+
+                continue;
+            }
+
             if (candidates.insert (component).second)
                 ordered.push_back (component);
+        }
+
+        // The components a state of their own changed on are restyled alone, the parents first. One whose style changed
+        // takes its descendants along, which read it, and is then a component restyled with them like the others
+        if (candidates.find (&root) == candidates.end())
+        {
+            std::stable_sort (states.begin(), states.end(), [] (const auto& a, const auto& b)
+            {
+                return a.first < b.first;
+            });
+
+            std::set<Component*> changed;
+
+            for (const auto& state : states)
+            {
+                auto* component = state.second;
+
+                if (candidates.find (component) != candidates.end() || hasAncestorInSet (*component, root, candidates))
+                    continue;
+
+                if (restyleSubtree (*component, collectInherited (*component), true))
+                {
+                    candidates.insert (component);
+                    changed.insert (component);
+                }
+            }
+
+            if (! changed.empty())
+                markReadersDirty (changed);
         }
 
         const bool rootRestyled = candidates.find (&root) != candidates.end();
@@ -512,22 +681,33 @@ void StyleContext::restyleNow()
 
 //==============================================================================
 
-void StyleContext::restyleSubtree (Component& component, const DeclarationMap& inherited)
+/* Restyles a component, then its descendants: all of them, or only when the restyle changed the style of the component
+   for one that is dirty by a state of its own. Returns whether the descendants were restyled. */
+bool StyleContext::restyleSubtree (Component& component, const DeclarationMap& inherited, bool descendantsOnlyWhenChanged)
 {
     if (&component != &root && component.getStyleContext() != nullptr)
-        return;
+        return false;
 
     if (const auto* menu = dynamic_cast<const PopupMenu*> (&component); menu != nullptr && menu->isSubmenu())
-        return;
+        return false;
 
-    DeclarationMap inheritedForChildren;
+    std::optional<DeclarationMap> popupInherited;
+    const auto* base = &inherited;
+
     if (isManagedPopup (component))
-        applyToComponent (component, collectInherited (component), inheritedForChildren);
-    else
-        applyToComponent (component, inherited, inheritedForChildren);
+        base = &popupInherited.emplace (collectInherited (component));
+
+    // The children inherit what the component does, as it is, unless the component adds to it
+    DeclarationMap extended;
+    const bool changed = applyToComponent (component, *base, extended);
+    const auto& inheritedForChildren = extended.empty() ? *base : extended;
 
     if (auto* menu = dynamic_cast<PopupMenu*> (&component))
         menu->refreshSubmenuStyle();
+
+    // No rule reads the state for the descendants: it reaches them through what they read of the style of the component
+    if (descendantsOnlyWhenChanged && ! changed)
+        return false;
 
     for (int i = 0; i < component.getNumChildComponents(); ++i)
         if (auto* child = component.getChildComponent (i))
@@ -556,9 +736,11 @@ void StyleContext::restyleSubtree (Component& component, const DeclarationMap& i
             if (auto* popup = popupRef.get())
                 restyleSubtree (*popup, collectInherited (*popup));
     }
+
+    return true;
 }
 
-StyleContext::DeclarationMap StyleContext::collectInherited (Component& component) const
+StyleContext::DeclarationMap StyleContext::collectInherited (Component& component)
 {
     std::vector<Component*> chain;
 
@@ -588,23 +770,26 @@ StyleContext::DeclarationMap StyleContext::collectInherited (Component& componen
     return inherited;
 }
 
-void StyleContext::collectDeclarations (Component& component, DeclarationMap& direct, DeclarationMap& qualified) const
+void StyleContext::collectDeclarations (Component& component, DeclarationMap& direct, DeclarationMap& qualified)
 {
     if (styleSheet == nullptr)
         return;
 
     auto* parentOverride = findPopupOwner (component);
 
-    for (const auto& rule : styleSheet->getRules())
+    // The rules the component can match, in the order of the sheet: the others need an id, a class or a type it has not
+    styleSheet->findCandidateRules (component, candidateRules);
+
+    for (const auto* rule : candidateRules)
     {
-        if (! rule.selector.matches (component, &root, parentOverride))
+        if (! rule->selector.matches (component, &root, parentOverride))
             continue;
 
-        const auto specificity = rule.selector.getSpecificity();
+        const auto specificity = rule->selector.getSpecificity();
 
-        for (const auto& declaration : rule.declarations)
+        for (const auto& declaration : rule->declarations)
         {
-            const ResolvedDeclaration resolved { &declaration, specificity, rule.order, true };
+            const ResolvedDeclaration resolved { &declaration, specificity, rule->order, true };
             auto& target = declaration.qualifier.isValid() ? qualified : direct;
             const auto& key = declaration.cascadeKey.isValid() ? declaration.cascadeKey : declaration.name;
 
@@ -613,16 +798,28 @@ void StyleContext::collectDeclarations (Component& component, DeclarationMap& di
     }
 }
 
-void StyleContext::applyToComponent (Component& component, const DeclarationMap& inherited, DeclarationMap& inheritedForChildren)
+/* Applies the rules matching a component to it. `extended` is left empty when the children of the component inherit
+   what it does, and else receives what they inherit. Returns whether anything of the style of the component changed,
+   which is what its descendants may read of it. */
+bool StyleContext::applyToComponent (Component& component, const DeclarationMap& inherited, DeclarationMap& extended)
 {
+    // What its last paint found of the shaders the component is drawn with, before any of them is replaced
+    reportShaderFailures (component);
+
     DeclarationMap direct, qualified;
     collectDeclarations (component, direct, qualified);
 
-    // The qualified declarations of the ancestors keep flowing down, the closer ones winning
-    inheritedForChildren = inherited;
+    // The qualified declarations of the ancestors keep flowing down, the closer ones winning: as they are, unless the
+    // component has its own
+    if (! qualified.empty())
+    {
+        extended = inherited;
 
-    for (const auto& [key, declaration] : qualified)
-        mergeResolvedDeclaration (inheritedForChildren, key, declaration);
+        for (const auto& [key, declaration] : qualified)
+            mergeResolvedDeclaration (extended, key, declaration);
+    }
+
+    const auto& inheritedForChildren = qualified.empty() ? inherited : extended;
 
     // An inherited qualified declaration applies when the component is of the type it names
     const auto& typeInfo = component.getTypeInfo();
@@ -639,6 +836,18 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
 
     bool firstStyle = false;
     auto& cache = getCache (component, firstStyle);
+
+    // A DrawingStyle set on the component itself takes precedence over the stylesheet rules. It runs the shaders of the
+    // sheet, whether a rule styles the component or not
+    static constexpr auto getComponentStyle = [] (const Component& c) { return c.getStyle(); };
+    const auto* explicitDrawing = ! cache.drawingOverride.isActive (component, getComponentStyle)
+                                    ? dynamic_cast<const DrawingStyle*> (component.getStyle().get())
+                                    : nullptr;
+
+    if (explicitDrawing != nullptr)
+        explicitDrawing = attachDrawingShaders (component, cache, *explicitDrawing);
+    else
+        cache.attachedDrawing = nullptr;
 
     using LayoutEffect = ComponentProperty::LayoutEffect;
     bool ownLayoutChanged = false;
@@ -674,6 +883,9 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
 
     if (direct.empty())
     {
+        // Every value the style holds is cleared below, with whatever a descendant read of them
+        bool hadValues = false;
+
         if (const auto* styleState = component.styleState.get())
         {
             const auto& computed = styleState->getComputedValues();
@@ -683,6 +895,8 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
             const auto& animated = styleState->getAnimatedValues();
             for (int i = 0; i < animated.size(); ++i)
                 recordStoredLayoutEffect (animated.getName (i));
+
+            hadValues = computed.size() > 0 || animated.size() > 0;
         }
 
         animator.removeComponent (component);
@@ -697,7 +911,7 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
             component.repaint();
 
         notifyLayoutEffects();
-        return;
+        return changed || hadValues || firstStyle;
     }
 
     auto& state = component.getOrCreateStyleState();
@@ -760,19 +974,12 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
 
     changed |= paletteChanged;
 
-    // The drawing comes next, the properties it declares type the declarations setting them.
-    // An explicit DrawingStyle already installed on the component instance takes precedence over stylesheet rules.
-    static constexpr auto getComponentStyle = [] (const Component& c) { return c.getStyle(); };
-    const auto* explicitDrawing = ! cache.drawingOverride.isActive (component, getComponentStyle)
-                                    ? dynamic_cast<const DrawingStyle*> (component.getStyle().get())
-                                    : nullptr;
-    const DrawingStyle* drawing = nullptr;
+    // The drawing comes next, the properties it declares type the declarations setting them
+    const DrawingStyle* drawing = explicitDrawing;
 
-    if (explicitDrawing != nullptr)
-        drawing = explicitDrawing;
-    else if (drawingDecl != nullptr)
+    if (drawing == nullptr && drawingDecl != nullptr)
         drawing = installDrawing (component, cache, *drawingDecl);
-    else
+    else if (drawing == nullptr)
         restoreDrawing (component, cache);
 
     // The transitions of the new style apply, starting from the values shown before any is written
@@ -811,6 +1018,17 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
 
                 pendingTransitions.push_back ({ transition, descriptor, storageId, std::move (from) });
             }
+        }
+    }
+
+    // The defaults of the shader selected as the effect are the declarations of lowest priority, for what the component doesn't hold itself
+    if (effectDecl != nullptr)
+    {
+        if (const auto* shaderEntry = findShaderEntry (effectDecl->parsedName))
+        {
+            for (const auto& fallback : shaderEntry->defaults)
+                if (! typeInfo.hasProperty (fallback.name))
+                    direct.try_emplace (fallback.name, ResolvedDeclaration { &fallback, -1, -1, false });
         }
     }
 
@@ -858,7 +1076,7 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
             report ({
                 .message = "Undeclared property '" + name.toString() + "' on " + typeInfo.getTypeName().toString(),
                 .element = declaration.element,
-                .severity = YuiDiagnostic::Severity::warning
+                .severity = DataTreeDiagnostic::Severity::warning
             });
         }
 
@@ -914,9 +1132,12 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
             recordStoredLayoutEffect (storageId);
     }
 
-    // A property the component holds itself can only be styled through its setter
+    // A property the component holds itself can only be styled through its setter. One the component was given another
+    // value of since is set again here with no value of the style changing: its descendants read it as they do the others
+    bool stateChanged = false;
+
     for (const auto& storageId : touched)
-        syncStateBacked (component, cache, storageId);
+        stateChanged |= syncStateBacked (component, cache, storageId);
 
     changed |= applyEffects (component, cache, cursorDecl, effectDecl, shadowDecl, glowDecl, &paletteDependent);
     cache.paletteDependent = paletteDependent;
@@ -932,6 +1153,7 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
     }
 
     notifyLayoutEffects();
+    return changed || stateChanged || firstStyle;
 }
 
 //==============================================================================
@@ -961,6 +1183,10 @@ bool StyleContext::evaluate (Component& component,
 
         const auto isEnum = type == ComponentProperty::Type::enumeration && descriptor != nullptr;
 
+        // The name of a drawing or of a shader of the sheet is written bare, as an element writes it
+        const auto isName = type == ComponentProperty::Type::drawing;
+        const auto named = isName ? valueText.unquoted().trim() : String();
+
         if (isEnum)
         {
             const auto enumValue = valueText.unquoted().trim();
@@ -974,7 +1200,20 @@ bool StyleContext::evaluate (Component& component,
             }
         }
 
-        const auto compileType = isEnum ? std::optional (ComponentProperty::Type::string) : type;
+        if (isName)
+        {
+            const bool isDeclared = styleSheet != nullptr && (styleSheet->findDrawing (named).isValid() || styleSheet->findShader (named).isValid());
+
+            if (isDeclared || named.isEmpty() || named == "none")
+            {
+                entry.constantValue = isDeclared ? named : String();
+                paletteDependent = false;
+                result = entry.constantValue;
+                return true;
+            }
+        }
+
+        const auto compileType = (isEnum || isName) ? std::optional (ComponentProperty::Type::string) : type;
         auto compiled = PropertyExpression::compile (component, valueText, compileType, componentResolver);
 
         if (compiled.failed())
@@ -993,7 +1232,8 @@ bool StyleContext::evaluate (Component& component,
                 label = String (prefix) + String (key.layer) + "]";
             }
 
-            const auto detail = isEnum ? ("expected one of " + descriptor->enumValues.joinIntoString (", ")) : compiled.getErrorMessage();
+            const auto detail = isEnum ? ("expected one of " + descriptor->enumValues.joinIntoString (", "))
+                                       : (isName ? ("unknown drawing or shader '" + named + "'") : compiled.getErrorMessage());
             report ({ .message = label + ": " + detail, .element = element });
             return false;
         }
@@ -1032,33 +1272,35 @@ bool StyleContext::evaluate (Component& component,
     return ! result.isVoid();
 }
 
-void StyleContext::syncStateBacked (Component& component, ComponentCache& cache, const Identifier& storageId)
+/* Gives the component the value its style has for a property it holds itself. Returns whether that changed the component. */
+bool StyleContext::syncStateBacked (Component& component, ComponentCache& cache, const Identifier& storageId)
 {
     if (storageId == styleContextTransformId)
     {
         const auto* styled = component.styleState != nullptr ? component.styleState->getStyleValue (storageId) : nullptr;
-        component.setStyleTransform (styled != nullptr ? VariantConverter<AffineTransform>::fromVar (*styled) : AffineTransform());
-        return;
+        const auto next = styled != nullptr ? VariantConverter<AffineTransform>::fromVar (*styled) : AffineTransform();
+        const bool differs = (component.styleState != nullptr ? component.styleState->getStyleTransform() : AffineTransform()) != next;
+
+        component.setStyleTransform (next);
+        return differs;
     }
 
     // The paint margin a rule sets is widened by what the shadows and the filter reach, so it is set with them
     if (storageId == styleContextFilterStorageId || storageId == styleContextPaintMarginId)
-    {
-        syncStyledFilterAndMargins (component, cache);
-        return;
-    }
+        return syncStyledFilterAndMargins (component, cache);
 
     const auto* descriptor = findStoredProperty (component.getTypeInfo(), storageId);
 
     if (descriptor == nullptr || ! descriptor->isStateBacked() || descriptor->setter == nullptr)
-        return;
+        return false;
 
     const auto* styled = component.styleState != nullptr ? component.styleState->getStyleValue (storageId) : nullptr;
 
     if (styled == nullptr)
     {
+        const bool isRestored = cache.savedState.contains (storageId);
         restoreStateBacked (component, cache, storageId);
-        return;
+        return isRestored;
     }
 
     const auto value = *styled;
@@ -1066,8 +1308,11 @@ void StyleContext::syncStateBacked (Component& component, ComponentCache& cache,
     if (! cache.savedState.contains (storageId))
         cache.savedState.set (storageId, descriptor->getter (component));
 
-    if (! descriptor->getter (component).equals (value))
-        descriptor->setter (component, value);
+    if (descriptor->getter (component).equals (value))
+        return false;
+
+    descriptor->setter (component, value);
+    return true;
 }
 
 void StyleContext::restoreStateBacked (Component& component, ComponentCache& cache, const Identifier& storageId)
@@ -1100,8 +1345,14 @@ const DrawingStyle* StyleContext::installDrawing (Component& component, Componen
 
     const auto& name = declaration.parsedName;
 
-    if (cache.drawingName == name && cache.drawingStyle != nullptr && cache.drawingOverride.isActive (component, getStyle))
+    // The drawing installed is kept while it runs the shaders the sheet has loaded
+    if (cache.drawingName == name
+        && cache.drawingStyle != nullptr
+        && cache.drawingOverride.isActive (component, getStyle)
+        && runsLoadedShaders (*cache.drawingStyle, cache.drawingShaderGeneration))
+    {
         return cache.drawingStyle.get();
+    }
 
     const auto drawing = styleSheet != nullptr ? styleSheet->findDrawing (name) : DataTree();
 
@@ -1112,11 +1363,13 @@ const DrawingStyle* StyleContext::installDrawing (Component& component, Componen
         return nullptr;
     }
 
-    YuiDiagnostic failure;
-    auto created = DrawingStyle::create (component, drawing, componentResolver, &failure, [this] (const String& drawingName)
+    const auto findDrawing = [this] (const String& drawingName)
     {
         return styleSheet != nullptr ? styleSheet->findDrawing (drawingName) : DataTree();
-    });
+    };
+
+    DataTreeDiagnostic failure;
+    auto created = DrawingStyle::create (component, drawing, componentResolver, &failure, findDrawing, bindFront (&StyleContext::findDrawingShader, this));
 
     if (created.failed())
     {
@@ -1133,6 +1386,7 @@ const DrawingStyle* StyleContext::installDrawing (Component& component, Componen
 
     cache.drawingName = name;
     cache.drawingStyle = created.getReference();
+    cache.drawingShaderGeneration.reset();
     cache.drawingOverride.apply (component, ComponentStyle::Ptr (cache.drawingStyle.get()), getStyle, setStyle);
     return cache.drawingStyle.get();
 }
@@ -1181,6 +1435,86 @@ void StyleContext::restoreDrawing (Component& component, ComponentCache& cache)
                                    [] (Component& c, ComponentStyle::Ptr style) { c.setStyle (std::move (style)); });
     cache.drawingName = {};
     cache.drawingStyle = nullptr;
+}
+
+/* Finds a shader of the sheet for a drawing using it: its block, and the shader it is loaded as the first time it is asked
+   for, which reports what prevents it. One that is not loaded leaves the drawing running nothing where it uses it. */
+DrawingStyle::Shader StyleContext::findDrawingShader (const String& name)
+{
+    DrawingStyle::Shader found;
+    found.block = styleSheet != nullptr ? styleSheet->findShader (name) : DataTree();
+
+    if (const auto* loaded = findShader (name))
+        found.shader = loaded->shader;
+
+    return found;
+}
+
+/* Tells whether a drawing runs a shader of the sheet as another one than the sheet has loaded: none, for a drawing made
+   before the shader was there, or the one its file was loaded as before it changed. */
+bool StyleContext::holdsOtherShaders (const DrawingStyle& drawing)
+{
+    if (styleSheet == nullptr)
+        return false;
+
+    for (const auto& used : drawing.getShaders())
+    {
+        const auto name = used.block.getProperty ("name").toString();
+        const auto block = styleSheet->findShader (name);
+
+        // A shader of another block is not one of the sheet, whatever its name: nothing is loaded for it
+        if (block != used.block && ! block.isEquivalentTo (used.block))
+            continue;
+
+        if (const auto* loaded = findShader (name); loaded != nullptr && loaded->shader != used.shader)
+            return true;
+    }
+
+    return false;
+}
+
+/* Tells whether a drawing the context keeps for a component runs the shaders the sheet has loaded. It does while none is
+   loaded after it was found to, so it is compared with them again only once one was. */
+bool StyleContext::runsLoadedShaders (const DrawingStyle& drawing, std::optional<uint32>& generation)
+{
+    if (generation == shaderGeneration)
+        return true;
+
+    if (holdsOtherShaders (drawing))
+        return false;
+
+    generation = shaderGeneration;
+    return true;
+}
+
+/* A drawing set on the component itself, by its element or from C++, runs the shaders of the sheet as one a rule selects
+   does: it is made again with the ones the sheet has loaded when it holds others, which repaints the component. The
+   builder of a document makes such a drawing before the sheet is there, with no shader at all. */
+const DrawingStyle* StyleContext::attachDrawingShaders (Component& component, ComponentCache& cache, const DrawingStyle& drawing)
+{
+    // Only the drawing made here is kept, so only that one is known to be the one compared before
+    if (cache.attachedDrawing.get() != &drawing)
+        cache.attachedDrawing = nullptr;
+
+    const bool isCurrent = cache.attachedDrawing != nullptr ? runsLoadedShaders (drawing, cache.attachedShaderGeneration)
+                                                            : ! holdsOtherShaders (drawing);
+
+    if (isCurrent)
+        return &drawing;
+
+    DataTreeDiagnostic failure;
+    const auto remade = drawing.createWithShaders (bindFront (&StyleContext::findDrawingShader, this), &failure);
+
+    if (remade.failed())
+    {
+        report ({ .message = "drawing " + drawing.getName() + ": " + remade.getErrorMessage(), .element = failure.element, .property = failure.property });
+        return &drawing;
+    }
+
+    cache.attachedDrawing = remade.getReference();
+    cache.attachedShaderGeneration.reset();
+    component.setStyle (remade.getReference());
+    return remade.getReference().get();
 }
 
 bool StyleContext::evaluateFilterDeclaration (Component& component,
@@ -1331,6 +1665,335 @@ bool StyleContext::syncStyledFilterAndMargins (Component& component, ComponentCa
     return changed;
 }
 
+//==============================================================================
+
+const StyleContext::Shader* StyleContext::findShader (const String& name)
+{
+    const auto* entry = findShaderEntry (name);
+    return entry != nullptr ? &entry->loaded : nullptr;
+}
+
+StyleContext::ShaderEntry* StyleContext::findShaderEntry (const String& name)
+{
+    auto found = shaders->find (name);
+
+    if (found == shaders->end())
+    {
+        const auto block = styleSheet != nullptr ? styleSheet->findShader (name) : DataTree();
+
+        // A material is not drawn over a picture: what uses one as such tells
+        if (! block.isValid() || ! block.hasProperty ("fragment"))
+            return nullptr;
+
+        found = shaders->try_emplace (name).first;
+
+        auto& entry = found->second;
+        entry.loaded.block = block;
+
+        for (const auto& property : ShaderProperty::readBlock (block, name))
+        {
+            const auto value = property.element.getProperty ("value").toString().trim();
+
+            if (value.isEmpty())
+                continue;
+
+            auto& fallback = entry.defaults.emplace_back();
+            fallback.name = property.name;
+            fallback.cascadeKey = fallback.name;
+            fallback.value = value;
+            fallback.element = property.element;
+        }
+
+        loadShader (name, entry);
+    }
+
+    auto& entry = found->second;
+    return entry.loaded.shader != nullptr ? &entry : nullptr;
+}
+
+bool StyleContext::loadShader (const String& name, ShaderEntry& entry)
+{
+    // What prevents the load is reported now, and kept for the restyles that report the problems of the sheet again
+    entry.problems.clear();
+    entry.isStale = false;
+    entry.reportsAgain = false;
+
+    const auto fail = [this, &entry] (DataTreeDiagnostic problem)
+    {
+        report (problem);
+        entry.problems.push_back (std::move (problem));
+        return false;
+    };
+
+    const auto& block = entry.loaded.block;
+    const auto path = block.getProperty ("fragment").toString();
+    const auto bundlePath = getShaderBundlePath (path);
+
+    // A source is compiled for the graphics API that draws it: the one of the window the root is in, or the one a window
+    // is given by default while it is in none. What a paint in no window could not draw is compiled for all of them
+    const auto windowApi = findWindowGraphicsApi (root);
+    std::optional<GpuPlatform> api;
+
+    if (! entry.compilesForEveryApi)
+        api = windowApi.has_value() ? *windowApi : ComponentNative::getDefaultGraphicsApi();
+
+    entry.sourceApi = api;
+
+    auto bytes = ComponentDocument::readAssetFor (&root, bundlePath);
+    const bool hasBundle = bytes.has_value();
+
+    if (! hasBundle)
+        bytes = ComponentDocument::readAssetFor (&root, path);
+
+    if (! bytes.has_value())
+    {
+        const auto missing = bundlePath.isNotEmpty() ? "'" + path + "' nor its compiled bundle '" + bundlePath + "'" : "'" + path + "'";
+
+        return fail ({ .message = "The shader '" + name + "' can't read " + missing, .element = block, .property = "fragment" });
+    }
+
+    // A bundle is loaded with the variants it was built with, whichever API draws it
+    if (GpuImageShader::isCompiledBundle (bytes->getData(), bytes->getSize()))
+        entry.sourceApi.reset();
+
+    auto created = GpuImageShader::createFromData (bytes->getData(), bytes->getSize(), api);
+
+    if (created.failed())
+    {
+        auto message = "shader " + name + ": " + created.getErrorMessage();
+
+#if ! YUP_ENABLE_SHADER_TRANSPILER
+        // A source is not compiled here, so what is missing is the bundle a build makes of it
+        if (! hasBundle && bundlePath.isNotEmpty())
+            message << ", and there is no '" << bundlePath << "'";
+#endif
+
+        return fail ({ .message = message, .element = block, .property = "fragment" });
+    }
+
+    // A bundle built for other graphics APIs than the one of the window is told now when the window is known, and else
+    // by the first paint drawing the shader
+    if (windowApi.has_value() && ! created.getReference()->canDrawWith (*windowApi))
+    {
+        return fail ({ .message = "The shader '" + name + "' has no variant for the graphics API of its window: compile it for every language yup_shader_bundler targets",
+                       .element = block,
+                       .property = "fragment" });
+    }
+
+    // The members of the shader, which `created` keeps until the load is over
+    const auto& uniforms = created.getReference()->getUniformLayout();
+    std::vector<ShaderProperty> properties;
+    StringArray declared;
+
+    for (const auto& property : ShaderProperty::readBlock (block, name, &uniforms, created.getReference()->getInputTextureNames()))
+    {
+        declared.add (property.name.toString());
+
+        if (property.problem.isEmpty())
+            properties.push_back ({ property.name, property.type });
+        else
+            fail ({ .message = property.problem, .element = property.element });
+    }
+
+    // What a shader is given beside its properties fills the members of their names, whatever the shader means by them:
+    // one declared as something else is a value of its own, which a property has to set
+    for (const auto& given : detail::shaderStandardUniforms)
+    {
+        if (declared.contains (given.name) || ! detail::isShaderStandardUniformMismatched (uniforms, given))
+            continue;
+
+        fail ({ .message = String ("The member '") + given.name + "' of the uniform block of the shader '" + name + "' is not " + given.shape
+                               + ", which is what a shader is given there: declare a property '" + given.name + "' to set it",
+                .element = block,
+                .property = "fragment" });
+    }
+
+    if (! entry.problems.empty())
+        return false;
+
+    entry.loaded.shader = created.getValue();
+    entry.loaded.properties = std::move (properties);
+    entry.drawProblems.clear();
+
+    // The drawings made with the shaders loaded before are compared with them again
+    ++shaderGeneration;
+    return true;
+}
+
+void StyleContext::refreshShaders()
+{
+    if (shaders->empty())
+        return;
+
+    const auto windowApi = findWindowGraphicsApi (root);
+
+    for (auto& [name, entry] : *shaders)
+    {
+        // A window drawing with another graphics API than the one the source of a shader was compiled for, as one created
+        // with an API of its own does: the source is compiled for that one, once whatever comes of it
+        if (entry.loaded.shader != nullptr && windowApi.has_value() && entry.sourceApi.has_value() && entry.sourceApi != windowApi)
+        {
+            entry.isStale = true;
+            markDirty (root);
+        }
+
+        if (! entry.isStale)
+        {
+            if (std::exchange (entry.reportsAgain, false))
+            {
+                for (const auto& problem : entry.problems)
+                    report (problem);
+
+                for (const auto& problem : entry.drawProblems)
+                    report (problem);
+            }
+
+            continue;
+        }
+
+        reloadShader (name, entry);
+    }
+}
+
+/* Loads a shader again and gives it to the effects running the one it replaces. The drawings using it are made again by
+   the restyle of their components. */
+void StyleContext::reloadShader (const String& name, ShaderEntry& entry)
+{
+    // A shader that fails to load leaves the one it was to replace running
+    if (! loadShader (name, entry))
+        return;
+
+    // The effects running the shader take the new one, unless it now reads more textures than an effect has: those are made again
+    const bool runsAsEffect = ShaderProperty::getNumPictures (*entry.loaded.shader, entry.loaded.properties) <= 1;
+
+    for (auto& [component, cache] : *caches)
+    {
+        if (cache.effectName != name)
+            continue;
+
+        auto* effect = cache.effectOverride.applied.has_value() ? dynamic_cast<ShaderEffect*> (cache.effectOverride.applied->get()) : nullptr;
+
+        if (runsAsEffect && effect != nullptr)
+            effect->setShader (entry.loaded.shader);
+        else
+            cache.effectName = {};
+    }
+}
+
+/* Tells what a device refused of the shaders of the sheet a component is drawn with. It was found while the component was
+   painted, where nothing is reported, and had the component restyled: it is told here, at the block declaring the shader,
+   once for as long as that shader is loaded and however many components it could not be drawn for. And again with the
+   problems of the sheet when they are told again, as what prevents a shader from loading is.
+
+   A source compiled for one graphics API that a root in no window could not be painted with is not told at first: nothing
+   says which API painted there, so it is compiled for all of them, once, and what the next paint can't draw of it is told. */
+void StyleContext::reportShaderFailures (const Component& component)
+{
+    if (shaders->empty())
+        return;
+
+    const auto reportFailure = [this] (const GpuImageShader* shader, const String& error)
+    {
+        if (shader == nullptr || error.isEmpty())
+            return;
+
+        for (auto& [name, entry] : *shaders)
+        {
+            if (entry.loaded.shader.get() != shader)
+                continue;
+
+            if (entry.sourceApi.has_value() && ! entry.compilesForEveryApi && ! findWindowGraphicsApi (root).has_value())
+            {
+                entry.compilesForEveryApi = true;
+                reloadShader (name, entry);
+                markDirty (root);
+                return;
+            }
+
+            const DataTreeDiagnostic problem { .message = "The shader '" + name + "' can't be drawn: " + error, .element = entry.loaded.block, .property = "fragment" };
+
+            const bool isKnown = std::any_of (entry.drawProblems.begin(), entry.drawProblems.end(), [&problem] (const DataTreeDiagnostic& known)
+            {
+                return known.message == problem.message;
+            });
+
+            // Kept before it is told: who hears about it may have the shaders loaded again
+            if (! isKnown)
+            {
+                entry.drawProblems.push_back (problem);
+                report (problem);
+            }
+
+            return;
+        }
+    };
+
+    if (const auto* effect = dynamic_cast<const ShaderEffect*> (component.getComponentEffect().get()))
+        reportFailure (effect->getShader().get(), effect->getDrawError());
+
+    if (const auto* drawing = dynamic_cast<const DrawingStyle*> (component.getStyle().get()))
+    {
+        for (const auto& failure : drawing->getShaderFailures())
+            reportFailure (failure.shader.shader.get(), failure.message);
+    }
+}
+
+void StyleContext::assetChanged (const String& path)
+{
+    if (path.isEmpty())
+        return;
+
+    for (auto& [name, entry] : *shaders)
+    {
+        const auto source = entry.loaded.block.getProperty ("fragment").toString();
+
+        if (path != source && path != getShaderBundlePath (source))
+            continue;
+
+        // Loaded by the next restyle: once, however many of its files changed, and after a document that tells before it loads
+        // cleared its problems, so that what prevents the load is one of them
+        entry.isStale = true;
+        markDirty (root);
+    }
+}
+
+ComponentEffect::Ptr StyleContext::createEffect (Component& component, const StyleSheet::Declaration& effectDecl)
+{
+    const auto& name = effectDecl.parsedName;
+    const auto block = styleSheet != nullptr ? styleSheet->findShader (name) : DataTree();
+
+    // A shader of the sheet comes before a registered effect of the same name
+    if (! block.isValid())
+    {
+        auto created = ComponentEffectRegistry::getInstance().createEffect (name);
+
+        if (created == nullptr)
+            report ({ .message = "Unknown effect '" + name + "'", .element = effectDecl.element });
+
+        return created;
+    }
+
+    if (block.hasProperty ("material"))
+    {
+        report ({ .message = "The shader '" + name + "' is a material, an effect takes a shader with a 'fragment'", .element = effectDecl.element });
+        return nullptr;
+    }
+
+    // What prevents a shader from loading was reported when it was loaded
+    const auto* loaded = findShader (name);
+
+    if (loaded == nullptr)
+        return nullptr;
+
+    if (ShaderProperty::getNumPictures (*loaded->shader, loaded->properties) > 1)
+    {
+        report ({ .message = "The shader '" + name + "' reads two textures, an effect gives it one", .element = effectDecl.element });
+        return nullptr;
+    }
+
+    return ComponentEffect::Ptr (new ShaderEffect (component, loaded->shader, loaded->properties));
+}
+
 bool StyleContext::applyEffects (Component& component,
                                  ComponentCache& cache,
                                  const StyleSheet::Declaration* cursorDecl,
@@ -1372,14 +2035,13 @@ bool StyleContext::applyEffects (Component& component,
                 cache.effectName = name;
                 changed |= cache.effectOverride.apply (component, ComponentEffect::Ptr {}, getEffect, setEffect);
             }
-            else if (auto created = ComponentEffectRegistry::getInstance().createEffect (name); created != nullptr)
+            else if (auto created = createEffect (component, *effectDecl); created != nullptr)
             {
                 cache.effectName = name;
                 changed |= cache.effectOverride.apply (component, std::move (created), getEffect, setEffect);
             }
             else
             {
-                report ({ .message = "Unknown effect '" + name + "'", .element = effectDecl->element });
                 cache.effectName = {};
                 changed |= cache.effectOverride.restore (component, getEffect, setEffect);
             }
@@ -1824,9 +2486,11 @@ void StyleContext::release (Component& subtreeRoot, ReleaseMode mode)
     {
         animator.removeComponent (component);
 
-        for (int i = dirtyComponents.size(); --i >= 0;)
-            if (dirtyComponents.getReference (i).get() == &component || dirtyComponents.getReference (i).get() == nullptr)
-                dirtyComponents.remove (i);
+        std::erase_if (dirtyComponents, [&component] (const DirtyComponent& dirty)
+        {
+            const auto* dirtyComponent = dirty.component.get();
+            return dirtyComponent == &component || dirtyComponent == nullptr;
+        });
 
         const auto it = caches->find (&component);
         auto* cache = it != caches->end() ? &it->second : nullptr;
@@ -1864,6 +2528,8 @@ void StyleContext::detach()
 
     popups->clear();
     clearAllCaches();
+    shaders->clear();
+    ++shaderGeneration;
     animator.clear();
     dirtyComponents.clear();
     diagnostics.clear();
@@ -1983,7 +2649,48 @@ void StyleContext::invalidateDependencies (const Component& sourceComponent, con
     }
 }
 
-void StyleContext::report (const YuiDiagnostic& diagnostic)
+/* The values reading a component by its name, as `knob.thumbColor`, read what the sheet computed for it too, which no
+   listener is told about. They followed the restyle of everything a state used to cause: the components holding them
+   follow the ones a state restyled with their descendants, in the pass that comes next. One restyled with what it
+   reads, below the same component, has read it. */
+void StyleContext::markReadersDirty (const std::set<Component*>& restyled)
+{
+    const auto findRestyled = [this, &restyled] (const Component* component) -> const Component*
+    {
+        for (; component != nullptr; component = component->getParentComponent())
+        {
+            if (restyled.find (const_cast<Component*> (component)) != restyled.end())
+                return component;
+
+            if (component == &root)
+                break;
+        }
+
+        return nullptr;
+    };
+
+    for (const auto& [ptr, cache] : *caches)
+    {
+        auto* styled = cache.component.get();
+        if (styled == nullptr || styled != ptr)
+            continue;
+
+        const bool reads = std::any_of (cache.values.begin(), cache.values.end(), [&] (const auto& entry)
+        {
+            const auto& dependencies = entry.second.dependencies;
+            return std::any_of (dependencies.begin(), dependencies.end(), [&] (const auto& dependency)
+            {
+                const auto* source = findRestyled (dependency.component);
+                return source != nullptr && source != findRestyled (styled);
+            });
+        });
+
+        if (reads)
+            markDirty (*styled);
+    }
+}
+
+void StyleContext::report (const DataTreeDiagnostic& diagnostic)
 {
     diagnostics.push_back (diagnostic);
 

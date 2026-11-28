@@ -389,6 +389,25 @@ public:
     */
     void clearShaderBundleCache();
 
+    /** Releases what the device keeps to make its next frames cheaper.
+
+        A device keeps the resources of the frames it finished, its shader caches and the
+        buffers and contexts 2D drawing uses, so that steady rendering stops allocating. Once
+        a heavy scene is gone they are memory nothing uses: this releases the ones selected
+        by @p resources, see GpuUnusedResources for what each costs to get back. Whatever is
+        still referenced elsewhere stays valid, and whatever is needed again is created
+        again on its next use.
+
+        Call it between frames, from the thread that draws with the device: for the device
+        of a window that is the message thread, outside Component::paint(). It never waits
+        for the GPU: what the GPU may still be using is kept, for a later call to release.
+
+        @param resources  What to release, everything by default.
+
+        @see GpuUnusedResources, clearShaderBundleCache
+    */
+    void releaseUnusedResources (GpuUnusedResources resources = GpuUnusedResources::all);
+
     //==============================================================================
     /** Returns true if textures of the given format can be created and sampled.
 
@@ -491,11 +510,10 @@ public:
     //==============================================================================
     /** Creates platform-specific GPU offscreen resources for the given dimensions.
 
-        The returned target is backed by the device's main render context and does
-        not reserve a dedicated one, so it cannot drive a 2D Graphics frame. Use it
-        for render-pass-only surfaces. A target must outlive its corresponding
-        beginOffscreen()/endOffscreen() pair and the GpuDevice must outlive every
-        target it creates.
+        The returned target leases no render context for a frame, so it cannot
+        drive a 2D Graphics frame. Use it for render-pass-only surfaces. A target
+        must outlive its corresponding beginOffscreen()/endOffscreen() pair and the
+        GpuDevice must outlive every target it creates.
 
         @param width The width of the offscreen target in pixels.
         @param height The height of the offscreen target in pixels.
@@ -504,16 +522,16 @@ public:
     */
     virtual std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) = 0;
 
-    /** Creates platform-specific GPU offscreen resources backed by a dedicated render context.
+    /** Creates platform-specific GPU offscreen resources a 2D Graphics frame can draw into.
 
-        Unlike createOffscreenTarget(), the returned RenderableTarget reserves a
-        backend-owned RenderContext, which is required to drive a 2D Graphics frame
-        (GpuCanvas::beginDraw). Prefer createOffscreenTarget() for render-pass-only
-        surfaces to avoid allocating a dedicated context.
+        Unlike createOffscreenTarget(), the returned RenderableTarget is drawn with
+        a backend-owned RenderContext, which is required to drive a 2D Graphics
+        frame (GpuCanvas::beginDraw).
 
-        The reservation is exclusive and lasts for the target's whole lifetime; the
-        context returns to the pool when the target is destroyed. Two live targets
-        therefore never share a context, which is what allows their frames to nest.
+        The context is leased from a pool by beginOffscreen() and returns to it at
+        endOffscreen(). The lease is exclusive while the frame is open, which is
+        what allows the frames of two targets to nest; between frames a target
+        keeps no context.
 
         @param width The width of the offscreen target in pixels.
         @param height The height of the offscreen target in pixels.
@@ -704,6 +722,24 @@ protected:
 
     /** Returns the latest generation handed out by beginFrameGeneration(). */
     uint64_t getCurrentFrameGeneration() const noexcept { return frameGeneration; }
+
+    /** Returns the latest generation whose resources releaseUnusedResources() may release.
+
+        The default is the latest one: submitted commands keep what they use alive on most
+        backends. A backend whose resources are destroyed at once returns the latest
+        generation the GPU finished.
+    */
+    virtual uint64_t getReleasableFrameGeneration() const noexcept { return frameGeneration; }
+
+    /** Releases the offscreen render contexts no frame is using, for releaseUnusedResources().
+
+        Called with the rendering context current (see runOnGraphicsContext()). A backend
+        releases the buffers of its idle contexts for GpuUnusedResources::renderBuffers,
+        and the contexts themselves for GpuUnusedResources::offscreenContexts.
+
+        @param resources  What releaseUnusedResources() was asked to release.
+    */
+    virtual void releaseUnusedOffscreenContexts (GpuUnusedResources resources) { ignoreUnused (resources); }
 
     //==============================================================================
     /** Provides the command buffer a GpuFrame records into, on backends where the
@@ -913,6 +949,7 @@ protected:
 
 private:
     friend class GpuFrame;
+    friend class GpuImageShader;
     friend class GpuPipeline;
 
     //==============================================================================
@@ -963,6 +1000,50 @@ private:
 
     CriticalSection embeddedBundlesLock;
     std::map<std::pair<const void*, size_t>, EmbeddedBundle> embeddedBundles;
+
+    //==============================================================================
+    /** A pipeline compiled for an owner that draws with the device without keeping it alive.
+
+        A shader drawn by several devices, as a GpuImageShader shared by the windows of an
+        application, cannot keep its pipelines itself: a pipeline must not outlive the
+        device it was compiled for, so the shader would have to keep alive every device it
+        was drawn with, and a device that outlives its window releases its GPU objects
+        without the rendering context they belong to. The device keeps them instead, under
+        a token of their owner, which it does not keep alive. They are always released
+        while the backend is alive: by releasePooledResources(), or once their owner is
+        gone by the next lookup, which a thread drawing with the device makes.
+
+        A GpuPipeline holds no reference to its device, so the device keeping one makes no cycle.
+    */
+    struct OwnerPipeline
+    {
+        std::weak_ptr<void> owner;
+        GpuTextureFormat format = GpuTextureFormat::rgba8unorm;
+
+        /** Null when the pipeline could not be compiled, for the reason error gives. */
+        ReferenceCountedObjectPtr<GpuPipeline> pipeline;
+        String error;
+    };
+
+    /** @internal Returns the pipeline the device keeps for @p owner and the color targets of
+        @p format, compiling it with @p compile the first time.
+
+        What @p compile returns is kept, a failure as well, so a pipeline that cannot be
+        compiled is not compiled again by every draw. It runs with the lock of the kept
+        pipelines held, once for an owner and a format. Thread safe.
+
+        @param owner    The token of what draws with the pipeline, alive during the call.
+        @param format   The format of the color target the pipeline draws into.
+        @param compile  Compiles the pipeline for this device and the format it is given.
+
+        @returns What @p compile returned, now or the first time.
+    */
+    ResultValue<ReferenceCountedObjectPtr<GpuPipeline>> getOrCompilePipelineFor (const std::shared_ptr<void>& owner,
+                                                                                 GpuTextureFormat format,
+                                                                                 const std::function<ResultValue<ReferenceCountedObjectPtr<GpuPipeline>> (GpuTextureFormat)>& compile);
+
+    CriticalSection ownerPipelinesLock;
+    std::vector<OwnerPipeline> ownerPipelines;
 
     //==============================================================================
     /** Pool of small uniform buffers recycled across frames.

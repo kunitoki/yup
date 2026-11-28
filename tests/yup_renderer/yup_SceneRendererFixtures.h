@@ -4597,6 +4597,52 @@ vec4 encodeLuma(vec3 c)
         return { 22, 28, 20, 10 };
     }
 
+    /** buildOnScreenEmitterScene() with its emitter dim (red, 0.05) and a floor of @p floorRoughness,
+        plus five green emitters just in front of it, 0.02 wide and tall, 0.15 apart and 0.24 above
+        the floor, emitting 80: a pixel or two across at 256 x 256, which few of the rays the floor
+        reflects reach, among the many reaching the dim emitter. Under a black ambient light, the
+        root's AmbientLightNode, and a blue environment, which the floor reflects where its rays
+        leave the screen. Returns the small emitters, for tests that hide them.
+    */
+    static std::vector<Entity> buildGlintsScene (Scene& scene, float floorRoughness)
+    {
+        buildOnScreenEmitterScene (scene, 0.05f, floorRoughness);
+        setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.0f, 0.0f, 0.4f); }, 32, 3));
+        scene.getRoot().attach<AmbientLightNode> (Colors::black);
+
+        std::vector<Entity> glints;
+        for (int i = 0; i < 5; ++i)
+        {
+            const auto x = -0.3f + 0.15f * static_cast<float> (i);
+
+            std::vector<Mesh::Vertex> vertices (4);
+            vertices[0].position = { x - 0.01f, 0.23f, -0.49f };
+            vertices[1].position = { x + 0.01f, 0.23f, -0.49f };
+            vertices[2].position = { x + 0.01f, 0.25f, -0.49f };
+            vertices[3].position = { x - 0.01f, 0.25f, -0.49f };
+
+            for (auto& vertex : vertices)
+                vertex.normal = { 0.0f, 0.0f, 1.0f };
+
+            auto mesh = Mesh::Ptr (new Mesh ("glint"));
+            mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, makeEmitterMaterial ({ 0.0f, 80.0f, 0.0f }));
+
+            auto glint = scene.createEntity ("glint");
+            glint.attach<MeshNode> (mesh);
+            glints.push_back (glint);
+        }
+
+        return glints;
+    }
+
+    /** The floor of buildGlintsScene() reflecting its emitters, at 256 x 256: below the foot of the
+        dim emitter, clear of the row where the jitter alternates the two surfaces.
+    */
+    static Rectangle<int> reflectedGlintsRegion()
+    {
+        return { 72, 108, 112, 40 };
+    }
+
 #if YUP_ENABLE_SHADER_TRANSPILER
     /** The mean linear red of @p texture over @p area, below 1, read back in 16 bits: its 8 high
         bits in red, the next 8 in green. */

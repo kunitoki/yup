@@ -45,6 +45,7 @@
 
 #include "resources/yup_Texture.cpp"
 #include "resources/yup_Mesh.cpp"
+#include "resources/yup_AnimationClip.cpp"
 #include "scene/yup_EntityStore.cpp"
 #include "scene/yup_Entity.cpp"
 #include "scene/yup_Node.cpp"
@@ -53,6 +54,8 @@
 #include "nodes/yup_TransformNode.cpp"
 #include "nodes/yup_CameraNode.cpp"
 #include "nodes/yup_MeshNode.cpp"
+#include "nodes/yup_AnimationNode.cpp"
+#include "nodes/yup_DeformNode.cpp"
 #include "scene/yup_Scene.cpp"
 #include "scene/yup_Prefab.cpp"
 #include "gltf/yup_GltfModel.cpp"

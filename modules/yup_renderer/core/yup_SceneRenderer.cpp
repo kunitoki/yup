@@ -71,6 +71,35 @@ void addMaterialSignature (FrameSignature& signature, const Material& material)
         signature.addPointer (texture->get());
 }
 
+/** The shader a MaterialShaderNode colors its meshes with, and the values of its uniform block. */
+void addMaterialShaderSignature (FrameSignature& signature, const MaterialShaderNode& node)
+{
+    // Not its address, which a shader replacing a destroyed one can be created at
+    const auto& shader = node.getShader();
+    signature.addBits (shader != nullptr ? shader->getIdentity() : 0u);
+
+    // A block is a multiple of 16 bytes
+    const auto& uniforms = node.getUniforms();
+
+    for (size_t offset = 0; offset + sizeof (uint64) <= uniforms.getSizeInBytes(); offset += sizeof (uint64))
+    {
+        uint64 bits = 0;
+        std::memcpy (&bits, uniforms.getData() + offset, sizeof (bits));
+        signature.addBits (bits);
+    }
+}
+
+/** What prevented a draw list from drawing with a material shader, among the ones kept by identity, or nullptr. */
+const String* findMaterialShaderError (const std::vector<std::pair<uint64, String>>& errors, const MaterialShader& shader) noexcept
+{
+    const auto found = std::find_if (errors.begin(), errors.end(), [&shader] (const auto& error)
+    {
+        return error.first == shader.getIdentity();
+    });
+
+    return found != errors.end() ? &found->second : nullptr;
+}
+
 } // namespace
 
 //==============================================================================
@@ -129,7 +158,9 @@ struct SceneRenderer::Impl
         return forwardDraws ? forwardPass.prepare (device, targets, forwardSamples, areaLights) : Result::ok();
     }
 
-    /** The canvas-backed colorTarget of both tiers, plus the depth of the raster tier. */
+    /** The canvas-backed colorTarget of both tiers, plus the depth of the raster tier. New targets
+        hold no image for a frame to stand on, see canKeepImage().
+    */
     bool prepareTargets (int width, int height, bool raster)
     {
         if (colorTarget != nullptr && colorTarget->getWidth() == width && colorTarget->getHeight() == height
@@ -141,6 +172,7 @@ struct SceneRenderer::Impl
 
         colorTarget = GpuTarget::create (device, width, height);
         depthTexture = nullptr;
+        imageFrames = 0;
 
         if (! raster)
             return colorTarget != nullptr;
@@ -750,6 +782,21 @@ struct SceneRenderer::Impl
         releaseReflectionTargets();
     }
 
+    /** Lets go of the intermediate textures of the last frame, see SceneRenderer::getPassOutput(). */
+    void clearPassOutputs() noexcept
+    {
+        sceneColorOutput = nullptr;
+        velocityOutput = nullptr;
+        gbufferNormalOutput = nullptr;
+        prepassNormalOutput = nullptr;
+        ambientOcclusionOutput = nullptr;
+        reflectionsOutput = nullptr;
+        indirectDiffuseOutput = nullptr;
+        circleOfConfusionOutput = nullptr;
+        depthOfFieldOutput = nullptr;
+        motionBlurOutput = nullptr;
+    }
+
     /** Nodes this renderer did not draw in its previous frame have no motion: their previous world is the current one. */
     void resolvePreviousTransforms()
     {
@@ -908,11 +955,15 @@ struct SceneRenderer::Impl
         {
             itemSignature.addMatrix (item.world);
             itemSignature.addPointer (item.mesh);
+            itemSignature.addBits (item.mesh->getChangeCount()); // Vertices changed in place, see Mesh::setVertices()
             itemSignature.addBits (static_cast<uint64> (item.primitiveIndex));
             addMaterialSignature (itemSignature, *item.material);
 
             for (const auto* texture : getMaterialTextures (*item.material))
                 itemSignature.addBits (*texture != nullptr ? (*texture)->getChangeCount() : 0u);
+
+            if (item.materialShader != nullptr)
+                addMaterialShaderSignature (itemSignature, *item.materialShader);
         };
 
         for (const auto items : { drawList.getOpaqueItems(), drawList.getBlendItems() })
@@ -958,9 +1009,9 @@ struct SceneRenderer::Impl
 
     /** What every sun cascade depends on besides its fit and casters, which ShadowRenderer compares
         itself: the shadow settings of the tier and the shadow casting directional lights. Fills
-        shadowCasterSignatures with the signature of each caster (transform, mesh and what alpha
-        masking reads), in the order of the opaque items. The point and spot lights reach the atlas
-        through the matrices of their views.
+        shadowCasterSignatures with the signature of each caster (transform, mesh, the changes of
+        its vertices and what alpha masking reads), in the order of the opaque items. The point and
+        spot lights reach the atlas through the matrices of their views.
     */
     uint64 getShadowSignature (const RenderSettings& settings)
     {
@@ -989,6 +1040,7 @@ struct SceneRenderer::Impl
             FrameSignature itemSignature;
             itemSignature.addMatrix (item.world);
             itemSignature.addPointer (item.mesh);
+            itemSignature.addBits (item.mesh->getChangeCount());
             itemSignature.addBits (static_cast<uint64> (item.primitiveIndex));
 
             const auto& material = *item.material;
@@ -1008,17 +1060,14 @@ struct SceneRenderer::Impl
         return global.get();
     }
 
-    /** Full tier: compares this frame with the previous one. A new size, internal size, tier or TAA
+    /** Full tier: compares this frame, of the signatures @p invalidating (getInvalidatingSignature())
+        and @p restarting (getRestartingSignature()), with the previous one. A new size, internal size, tier or TAA
         sample count discards the history and starts over; any other change only restarts the convergence. The
         first unchanged frame after changes counts the history as a single sample, so the frames
         that follow average it out instead of keeping a share of the image before the changes.
     */
-    void trackChanges (const SceneSettings& sceneSettings, const RenderSettings& settings, int width, int height, int internalWidth, int internalHeight,
-                       const GpuTexture* environmentCube, int pendingBakes)
+    void trackChanges (uint64 invalidating, uint64 restarting)
     {
-        const auto invalidating = getInvalidatingSignature (width, height, internalWidth, internalHeight, settings.taaSamples);
-        const auto restarting = getRestartingSignature (sceneSettings, settings, environmentCube, pendingBakes);
-
         if (! hasSignature || invalidating != invalidatingSignature)
         {
             accumulatedSamples = 0;
@@ -1051,6 +1100,89 @@ struct SceneRenderer::Impl
         return jmin (accumulatedSamples, samplesToConverge - 1);
     }
 
+    /** What the image of a frame is made of, on both tiers: the two signatures above, the view,
+        of which the restarting one only holds the product with the projection, the raster sample
+        count, and what comes after the temporal accumulation, the background, the tone mapping and
+        what the depth of field reads of @p camera. The RenderSettings are left out: they are
+        compared whole, see canKeepImage(). @p blurs and @p fogs tell the routes the frame takes,
+        which an effect that gave up, or a prepass that does not compile, takes it off.
+    */
+    uint64 getImageSignature (uint64 invalidating, uint64 restarting, const SceneSettings& sceneSettings, const CameraNode* camera, bool blurs, bool fogs) const
+    {
+        FrameSignature signature;
+        signature.addBits (invalidating);
+        signature.addBits (restarting);
+        signature.addBits (sampleCount);
+        signature.addMatrix (viewData.getView());
+        signature.addMatrix (viewData.getProjection());
+        signature.addFloat (viewData.getBlock().clipPlanes[0]);
+        signature.addFloat (viewData.getBlock().clipPlanes[1]);
+        signature.addBits (sceneSettings.backgroundColor.getARGB());
+        signature.addBits (static_cast<uint64> (sceneSettings.toneMapping));
+        signature.addBits (blurs ? 1u : 0u);
+        signature.addBits (fogs ? 1u : 0u);
+        signature.addBits (camera != nullptr ? 1u : 0u);
+
+        if (camera != nullptr)
+        {
+            signature.addBits (static_cast<uint64> (camera->projection));
+            signature.addFloat (camera->yFov);
+            signature.addFloat (camera->fStop);
+            signature.addFloat (camera->focusDistance);
+            signature.addBits (static_cast<uint64> (static_cast<uint32> (camera->apertureBlades)));
+        }
+
+        return signature.get();
+    }
+
+    /** True when a drawn material shows a texture that lives on the GPU only (Texture::isGpuOnly()):
+        one that can be drawn again where it is, which only Texture::setGpuTexture() tells.
+    */
+    bool drawsGpuOnlyTextures() const
+    {
+        for (const auto items : { drawList.getOpaqueItems(), drawList.getBlendItems() })
+        {
+            for (const auto& item : items)
+            {
+                for (const auto* texture : getMaterialTextures (*item.material))
+                {
+                    if (*texture != nullptr && (*texture)->isGpuOnly())
+                        return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /** True when the image colorTarget holds stands for a frame of @p signature (getImageSignature())
+        drawn with @p settings, which then records nothing: two frames in a row drew it from what
+        this one is made of, it is final (SceneRenderer::isConverged()), and drawing it again would
+        give the same pixels. Two frames, as a frame the GPU did not execute is only found by the
+        render after it: the target then holds the image of the other one.
+
+        What the signatures cannot tell keeps the frame drawn:
+        - a probe or a volume left to bake (@p pendingBakes), which every frame tries again;
+        - with temporal anti-aliasing (@p temporal), the depth of field (@p blurs) and the debug
+          views, which read the jittered frame: everything else comes from the history, which a
+          converged frame keeps as it is whatever it shades;
+        - without it nothing is kept between frames, so a texture drawn again where it is shows
+          by itself (drawsGpuOnlyTextures()).
+    */
+    bool canKeepImage (uint64 signature, const RenderSettings& settings, bool temporal, bool blurs, int pendingBakes) const
+    {
+        if (imageFrames < 2 || signature != imageSignature || settings != imageSettings || pendingBakes > 0)
+            return false;
+
+        if (stillSamples < samplesToConverge || motionBlurOutput != nullptr)
+            return false;
+
+        if (temporal)
+            return ! blurs && settings.debugView == RenderSettings::DebugView::none;
+
+        return ! drawsGpuOnlyTextures();
+    }
+
     /** Frame stamps shared by every renderer, so two renderers never take each other's frames as their own. */
     static inline std::atomic<uint64> nextStamp { 0 };
 
@@ -1072,6 +1204,7 @@ struct SceneRenderer::Impl
     MaterialTable materialTable;
     LightingPass lightingPass;
     ForwardPass forwardPass;
+    std::vector<std::pair<uint64, String>> materialShaderErrors; // By MaterialShader::getIdentity(): what prevented the last draw list from drawing with a shader
     PostChain postChain;
     std::unique_ptr<FogApply> fogApply;            // Created by the first frame drawing the scene's fog, see renderWorldFog()
     std::unique_ptr<FullscreenPass> debugViewPass; // Created by the first full frame with a debug view, see renderDebugView(), for the format of colorTarget, which never changes
@@ -1109,6 +1242,11 @@ struct SceneRenderer::Impl
     int samplesToConverge = 0;  // full: the TAA samples (1 without TAA), raster: 0
     int accumulatedSamples = 0; // frames in the history since its last reset
     int stillSamples = 0;       // frames since anything last changed
+    uint64 imageSignature = 0;  // what the image colorTarget holds is made of (getImageSignature()), drawn with imageSettings
+    RenderSettings imageSettings;
+    int imageFrames = 0;        // the frames in a row that drew that image, 2 at most: 0 when the next frame is drawn whatever it is made of, see canKeepImage()
+    bool testHooksUsed = false; // a test hook of the renderer was used since it renders on this device: every frame is drawn
+    int numDrawnFrames = 0;     // see SceneRenderer::getNumDrawnFramesForTesting()
     bool measuring = false;     // the frame being rendered collects its stats, see beginScope()
     int numTimingCalls = 0;     // see SceneRenderer::getNumTimingCallsForTesting()
 
@@ -1179,6 +1317,7 @@ struct SceneRenderer::Impl
             hasSignature = false;
             accumulatedSamples = 0;
             stillSamples = 0;
+            imageFrames = 0;
         }
 
         return result;
@@ -1195,6 +1334,12 @@ SceneRenderer::~SceneRenderer() = default;
 const RenderCapabilities* SceneRenderer::getCapabilities() const noexcept
 {
     return impl != nullptr && impl->capabilities.has_value() ? &*impl->capabilities : nullptr;
+}
+
+String SceneRenderer::getMaterialShaderError (const MaterialShader& shader) const
+{
+    const auto* error = impl != nullptr ? findMaterialShaderError (impl->materialShaderErrors, shader) : nullptr;
+    return error != nullptr ? *error : String();
 }
 
 bool SceneRenderer::isConverged() const noexcept
@@ -1222,6 +1367,23 @@ void SceneRenderer::restartAccumulation() noexcept
     impl->shadowRenderer.invalidate();
     impl->accumulatedSamples = 0;
     impl->stillSamples = 0;
+    impl->imageFrames = 0;
+}
+
+void SceneRenderer::releaseTargets() noexcept
+{
+    if (impl == nullptr)
+        return;
+
+    // What a frame of another size leaves of the one before: nothing to draw into, and nothing to carry on from
+    impl->colorTarget = nullptr;
+    impl->depthTexture = nullptr;
+    impl->clearPassOutputs();
+    impl->releasePassTargets();
+    impl->frameResources.releaseTextures();
+    impl->shadowRenderer.releaseTextures();
+
+    restartAccumulation();
 }
 
 GpuTexture::Ptr SceneRenderer::getPassOutput (PassOutput output) const
@@ -1372,6 +1534,19 @@ int SceneRenderer::getNumTimingCallsForTesting() const noexcept
     return impl != nullptr ? impl->numTimingCalls : 0;
 }
 
+int SceneRenderer::getNumDrawnFramesForTesting() const noexcept
+{
+    return impl != nullptr ? impl->numDrawnFrames : 0;
+}
+
+bool SceneRenderer::usesTestHooks() const noexcept
+{
+    return deviceFactsOverride != nullptr || failLookupTables || failShadowCompareSampler || failShadowPipelines || failShadowMaps
+        || failDepthNormalPrepass || depthNormalPrepassTargetFailures > 0 || forceRgbmRadiance || failProbeCaptures || failVolumeCaptures
+        || failLocalIndirectLighting || failMaterialLayers || disableLightingClassification || failLightingClassification
+        || failScreenSpaceReflections || failScreenSpaceGI || depthOfFieldFailures > 0 || motionBlurFailures > 0 || worldFogFailures > 0;
+}
+
 void SceneRenderer::setDeviceFactsOverride (std::function<void (RenderCapabilities::DeviceFacts&)> newOverride)
 {
     deviceFactsOverride = std::move (newOverride);
@@ -1383,19 +1558,11 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
 {
     const auto fail = [this] (const String& error) -> GpuTexture::Ptr
     {
-        // A failed frame leaves no pass outputs behind
+        // A failed frame leaves no pass outputs behind, and no image for the next one to stand on
         if (impl != nullptr)
         {
-            impl->sceneColorOutput = nullptr;
-            impl->velocityOutput = nullptr;
-            impl->gbufferNormalOutput = nullptr;
-            impl->prepassNormalOutput = nullptr;
-            impl->ambientOcclusionOutput = nullptr;
-            impl->reflectionsOutput = nullptr;
-            impl->indirectDiffuseOutput = nullptr;
-            impl->circleOfConfusionOutput = nullptr;
-            impl->depthOfFieldOutput = nullptr;
-            impl->motionBlurOutput = nullptr;
+            impl->clearPassOutputs();
+            impl->imageFrames = 0;
         }
 
         lastError = error;
@@ -1444,7 +1611,8 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     // the depth of the prepass, so they take the route only while it compiles
     const auto full = impl->capabilities->getTier() == RenderCapabilities::Tier::full;
     const auto prepassCompiles = [&] { return full || impl->prepareDepthNormalPrepass (failDepthNormalPrepass); };
-    const auto blurs = impl->postChain.willBlur (*impl->capabilities, settings, scene.getActiveCamera()) && prepassCompiles();
+    const auto* camera = scene.getActiveCamera();
+    const auto blurs = impl->postChain.willBlur (*impl->capabilities, settings, camera) && prepassCompiles();
     const auto& worldFog = sceneSettings.fog;
     const auto fogs = impl->willDrawWorldFog (worldFog) && prepassCompiles();
     const auto hdr = full || impl->capabilities->isEnabled (RenderCapabilities::Feature::bloom, settings) || blurs || fogs;
@@ -1475,13 +1643,8 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     if (! impl->prepareTargets (widthPx, heightPx, ! full))
         return fail ("Unable to create the render targets");
 
-    // A new size releases the pool's textures, which the fullscreen passes' render targets would keep alive
-    if (widthPx != impl->frameResources.getWidth() || heightPx != impl->frameResources.getHeight())
-        impl->releasePassTargets();
-
-    impl->frameResources.beginFrame (widthPx, heightPx);
-
-    // Every exit from here on ends the frame of the resource pool
+    // Every failure from here on ends the frame of the resource pool, which then lets go of what
+    // the frame did not take, begun or not
     const auto failFrame = [&] (const String& error)
     {
         // The history, the shadow maps and the probe bakes may not have been written: the next frame starts over
@@ -1494,24 +1657,55 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
         return fail (error);
     };
 
-    const auto targets = full ? impl->acquireFullTargets (internalWidth, internalHeight)
-                              : (hdr ? impl->acquireRasterHdrTargets (widthPx, heightPx) : impl->getForwardTargets());
-    if (targets.color == nullptr || targets.depth == nullptr || (full && targets.velocity == nullptr))
-        return failFrame ("Unable to create the scene targets");
+    // The frame takes its targets from the pool once it is known to be drawn: when a material shader
+    // asks what it would be drawn into, or once the draw list has told that the image of the frames
+    // before does not stand for this one. A frame it stands for leaves the pool as it is
+    ForwardPass::Targets targets;
+    GBufferPass::Targets gbuffer;
+    auto hasTargets = false;
 
-    // Full: the G-buffer shares the depth and velocity the blended items are drawn over
-    const auto gbuffer = full ? GBufferPass::acquireTargets (impl->frameResources, targets.velocity, targets.depth) : GBufferPass::Targets();
-    if (full && (gbuffer.albedoOcclusion == nullptr || gbuffer.normalRoughness == nullptr || gbuffer.emissionMaterial == nullptr))
-        return failFrame ("Unable to create the G-buffer targets");
+    const auto acquireTargets = [&]
+    {
+        if (std::exchange (hasTargets, true))
+            return;
 
-    const auto stamp = ++Impl::nextStamp;
+        // A new size releases the pool's textures, which the fullscreen passes' render targets would keep alive
+        if (widthPx != impl->frameResources.getWidth() || heightPx != impl->frameResources.getHeight())
+            impl->releasePassTargets();
+
+        impl->frameResources.beginFrame (widthPx, heightPx);
+
+        targets = full ? impl->acquireFullTargets (internalWidth, internalHeight)
+                       : (hdr ? impl->acquireRasterHdrTargets (widthPx, heightPx) : impl->getForwardTargets());
+
+        // Full: the G-buffer shares the depth and velocity the blended items are drawn over
+        if (full && targets.color != nullptr && targets.depth != nullptr && targets.velocity != nullptr)
+            gbuffer = GBufferPass::acquireTargets (impl->frameResources, targets.velocity, targets.depth);
+    };
 
     // The jitter cycles with the frame index: any temporalSamples consecutive frames cover every point
     impl->viewData.update (scene, sceneSettings, internalWidth, internalHeight, temporalAntiAliasing, temporalSamples, impl->frameIndex++);
 
     auto& drawList = impl->drawList;
+
+    // The meshes of a material shader are colored by it where the forward pass can draw it into
+    // the targets of the frame: otherwise their materials shade them, deferred on the full tier,
+    // and what prevents it is kept for getMaterialShaderError()
+    impl->materialShaderErrors.clear();
+
+    const auto drawsMaterialShader = [&] (const MaterialShader::Ptr& shader)
+    {
+        acquireTargets();
+        const auto prepared = impl->forwardPass.prepareMaterialShader (device, shader, targets, forwardSamples);
+
+        if (prepared.failed() && shader != nullptr && findMaterialShaderError (impl->materialShaderErrors, *shader) == nullptr)
+            impl->materialShaderErrors.emplace_back (shader->getIdentity(), prepared.getErrorMessage());
+
+        return prepared.wasOk();
+    };
+
     // The raster tier lights each draw with its own selection, the full tier through the clusters
-    drawList.build (scene.getRoot(), impl->viewData.getView(), { sceneSettings.useDefaultLight, ! full });
+    drawList.build (scene.getRoot(), impl->viewData.getView(), { sceneSettings.useDefaultLight, ! full, std::cref (drawsMaterialShader), impl->viewData.getJitteredProjection() });
 
     // A light with a radius selects the area light variants of the shading passes. Only a change
     // of the lights switches variants, and the restarting signature hashes every light radius
@@ -1542,14 +1736,42 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     const auto pendingBakes = impl->probeBaker != nullptr ? impl->probeBaker->getNumPending (drawList)
                                                           : static_cast<int> (drawList.getReflectionProbes().size() + drawList.getIrradianceVolumes().size());
 
+    // A frame that is measured, runs a test hook, outlines entities, whose bounds no signature
+    // holds, or is given a lost device is always drawn, and leaves no image for the next one to
+    // stand on. The raster tier, which only hashes what it draws to tell that image, then does not
+    impl->testHooksUsed = impl->testHooksUsed || usesTestHooks();
+    const auto keepsImage = ! (frameStatsEnabled || impl->testHooksUsed || device->isDeviceLost()) && boundsOverlay.empty();
+
+    const auto invalidating = impl->getInvalidatingSignature (widthPx, heightPx, internalWidth, internalHeight, settings.taaSamples);
+    const auto restarting = full || keepsImage ? impl->getRestartingSignature (sceneSettings, settings, environmentCube.get(), pendingBakes) : 0u;
+
     if (full)
-        impl->trackChanges (sceneSettings, settings, widthPx, heightPx, internalWidth, internalHeight, environmentCube.get(), pendingBakes);
+        impl->trackChanges (invalidating, restarting);
+
+    // The image the frames before drew stands for this one, which then records nothing and leaves
+    // the pool as it is: not a frame that took its targets, for a material shader
+    const auto imageSignature = impl->getImageSignature (invalidating, restarting, sceneSettings, camera, blurs, fogs);
+    const auto isSameImage = impl->imageFrames > 0 && imageSignature == impl->imageSignature && settings == impl->imageSettings;
+
+    if (keepsImage && ! hasTargets && impl->canKeepImage (imageSignature, settings, temporalAntiAliasing, blurs, pendingBakes))
+        return impl->colorTarget->asTexture();
+
+    acquireTargets();
+
+    if (targets.color == nullptr || targets.depth == nullptr || (full && targets.velocity == nullptr))
+        return failFrame ("Unable to create the scene targets");
+
+    if (full && (gbuffer.albedoOcclusion == nullptr || gbuffer.normalRoughness == nullptr || gbuffer.emissionMaterial == nullptr))
+        return failFrame ("Unable to create the G-buffer targets");
+
+    const auto stamp = ++Impl::nextStamp;
 
     auto frame = GpuFrame::begin (device);
     if (! frame.isValid())
         return failFrame ("Unable to begin a GPU frame");
 
     impl->pendingFrames.push_back ({ frame.getStatus(), {} });
+    ++impl->numDrawnFrames;
 
     // Before the first pass, so every scope is measured
     impl->measuring = frameStatsEnabled;
@@ -1601,8 +1823,9 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     lighting.lookupTables = impl->lookupTables;
 
     // A clearcoat or a sheen selects the variants compiling the layers: raster for any item, full
-    // for the opaque items of the lighting pass (its forward pass always compiles them)
-    lighting.materialLayers = LightingInputs::hasMaterialLayers (drawList.getOpaqueItems())
+    // for the opaque items of the lighting pass (its forward pass always compiles them). The opaque
+    // items of a material shader are shaded by neither
+    lighting.materialLayers = LightingInputs::hasMaterialLayers (drawList.getDeferredItems())
                            || (! full && LightingInputs::hasMaterialLayers (drawList.getBlendItems()));
 
     // One flag for every radiance texture of the device, whether or not the scene has an environment
@@ -1619,7 +1842,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     // failure tells why, the shadow filter variants in the passes, which fall back to the defaults
     if (! lighting.shadowFilters)
     {
-        if (auto result = impl->prepareDefaultShading (targets, forwardSamples, full, areaLights, ! full || ! drawList.getBlendItems().empty()); result.failed())
+        if (auto result = impl->prepareDefaultShading (targets, forwardSamples, full, areaLights, ! full || ! drawList.getBlendItems().empty() || ! drawList.getForwardOpaqueItems().empty()); result.failed())
             return failFrame (result.getErrorMessage());
     }
 
@@ -1636,7 +1859,8 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
             YUP_PROFILE_NAMED_INTERNAL_TRACE (gbuffer);
             impl->beginScope (frame, "gbuffer");
 
-            if (! impl->gbufferPass.render (frame, impl->viewData, drawList.getOpaqueItems(), impl->materialTable, gbuffer))
+            // The opaque items of a material shader are drawn by the forward pass instead
+            if (! impl->gbufferPass.render (frame, impl->viewData, drawList.getDeferredItems(), impl->materialTable, gbuffer))
                 return failFrame ("Unable to render the G-buffer");
         }
 
@@ -1705,11 +1929,15 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     }
 
     // Raster: every item over the cleared targets, HDR scene color starting transparent for tone
-    // mapping to composite the display-referred background under it. Full: the blended items over
-    // the shaded G-buffer, depth tested against it, writing their motion over its velocity
+    // mapping to composite the display-referred background under it. Full: the opaque items of
+    // material shaders, which write their depth too, then the blended items, over the shaded
+    // G-buffer, depth tested against it, writing their motion over its velocity.
+    // Inline, the background is cleared premultiplied by its alpha: opaque surfaces write alpha 1
+    // and blended ones blend straight colors over it while their alpha accumulates, so the
+    // resolved texture is premultiplied for any background alpha, as tone mapping leaves it too
     const auto clear = full ? std::optional<GpuColor>()
-                            : std::optional<GpuColor> (output == ForwardPass::Output::ldrInline ? GpuColor (sceneSettings.backgroundColor) : GpuColor::transparentBlack());
-    const auto opaque = full ? Span<const SceneDrawList::DrawItem>() : drawList.getOpaqueItems();
+                            : std::optional<GpuColor> (output == ForwardPass::Output::ldrInline ? GpuColor (sceneSettings.backgroundColor.premultiplied()) : GpuColor::transparentBlack());
+    const auto opaque = full ? drawList.getForwardOpaqueItems() : drawList.getOpaqueItems();
 
     if (failMaterialLayers)
         impl->forwardPass.failMaterialLayersForTesting();
@@ -1717,8 +1945,8 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     {
         YUP_PROFILE_NAMED_INTERNAL_TRACE (forward);
 
-        // Full: only the blended items, when there are any
-        if (! full || ! drawList.getBlendItems().empty())
+        // Full: only the opaque items of material shaders and the blended items, when there are any
+        if (! full || ! opaque.empty() || ! drawList.getBlendItems().empty())
             impl->beginScope (frame, "forward");
 
         if (! impl->forwardPass.render (device, frame, impl->viewData, lighting, opaque, drawList.getBlendItems(), targets, output, forwardSamples, clear))
@@ -1799,6 +2027,11 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     const auto* motionBlur = hdr ? impl->postChain.getMotionBlur() : nullptr;
     impl->motionBlurOutput = motionBlur != nullptr ? motionBlur->getOutput() : nullptr;
     impl->previousExposure = impl->viewData.getBlock().cameraPosition[3];
+
+    // The image two frames in a row drew stands for the frames that follow, see Impl::canKeepImage()
+    impl->imageFrames = keepsImage ? (isSameImage ? 2 : 1) : 0;
+    impl->imageSignature = imageSignature;
+    impl->imageSettings = settings;
 
     lastError = {};
     return impl->colorTarget->asTexture();

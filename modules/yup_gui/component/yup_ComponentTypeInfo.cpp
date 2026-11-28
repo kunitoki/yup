@@ -22,18 +22,33 @@
 namespace yup
 {
 
+//==============================================================================
+
+Rectangle<float> ComponentPart::getArea (const Component& component) const
+{
+    return area != nullptr ? area (component) : component.getLocalBounds();
+}
+
+//==============================================================================
+
 ComponentTypeInfo::ComponentTypeInfo (Identifier typeNameToUse,
                                       const ComponentTypeInfo* baseTypeInfoToUse,
                                       std::vector<ComponentProperty> propertiesToUse,
                                       std::vector<ComponentSignal> signalsToUse,
                                       Factory factoryToUse,
-                                      ChildAttacher childAttacherToUse)
+                                      ChildAttacher childAttacherToUse,
+                                      std::vector<ComponentPart> partsToUse,
+                                      String descriptionToUse,
+                                      std::type_index classTypeToUse)
     : typeName (std::move (typeNameToUse))
     , baseTypeInfo (baseTypeInfoToUse)
     , properties (std::move (propertiesToUse))
     , signals (std::move (signalsToUse))
+    , parts (std::move (partsToUse))
     , factory (std::move (factoryToUse))
     , childAttacher (std::move (childAttacherToUse))
+    , description (std::move (descriptionToUse))
+    , classType (classTypeToUse)
 {
     rebuildIndices();
 }
@@ -105,7 +120,11 @@ bool ComponentTypeInfo::isSubtypeOf (const Identifier& otherTypeName) const
 
 bool ComponentTypeInfo::isSubtypeOf (const ComponentTypeInfo& other) const
 {
-    return isSubtypeOf (other.typeName);
+    for (const auto* info = this; info != nullptr; info = info->baseTypeInfo)
+        if (info == std::addressof (other))
+            return true;
+
+    return false;
 }
 
 const ComponentSignal* ComponentTypeInfo::findSignal (const Identifier& signalName) const
@@ -116,6 +135,37 @@ const ComponentSignal* ComponentTypeInfo::findSignal (const Identifier& signalNa
                 return &signal;
 
     return nullptr;
+}
+
+const ComponentPart* ComponentTypeInfo::findPart (const Identifier& partName) const
+{
+    for (const auto* info = this; info != nullptr; info = info->baseTypeInfo)
+        for (const auto& part : info->parts)
+            if (part.name == partName)
+                return &part;
+
+    return nullptr;
+}
+
+std::vector<const ComponentPart*> ComponentTypeInfo::getAllParts() const
+{
+    std::vector<const ComponentPart*> result;
+
+    for (const auto* info = this; info != nullptr; info = info->baseTypeInfo)
+    {
+        for (const auto& part : info->parts)
+        {
+            const auto isOverridden = std::any_of (result.begin(), result.end(), [&part] (const ComponentPart* known)
+            {
+                return known->name == part.name;
+            });
+
+            if (! isOverridden)
+                result.push_back (&part);
+        }
+    }
+
+    return result;
 }
 
 std::unique_ptr<Component> ComponentTypeInfo::createInstance() const

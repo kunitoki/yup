@@ -67,7 +67,7 @@ public:
     /** Compiles the pipelines once: a failure is remembered instead of retried every frame. */
     Result prepare();
 
-    /** Draws the opaque and masked items single-sampled at @p width x @p height.
+    /** Draws the opaque and masked items in view (SceneDrawList::DrawItem::inView) single-sampled at @p width x @p height.
 
         Targets the device cannot create leave the frame without the pass: it is logged once, nothing
         is drawn and the getters return nullptr, which is not a failure.

@@ -265,6 +265,21 @@ protected:
         return (static_cast<float> (row) + fraction) * tree->getDefaultItemHeight();
     }
 
+    /** Puts a component in a window of its own, and returns the native that sends its frames. */
+    static StubComponentNative& makeWindow (Component& component)
+    {
+        auto* native = new StubComponentNative (component, ComponentNative::defaultFlags);
+        yup::ComponentTestHelper<Component>::attachNative (component, native);
+        return *native;
+    }
+
+    /** Sends frames to a window until nothing in it asks for one, giving up after a second of them. */
+    static void runFramesUntilIdle (StubComponentNative& native)
+    {
+        for (int frame = 0; frame < 60 && native.hasFrameListeners(); ++frame)
+            native.callFrameListeners (1.0 / 60.0);
+    }
+
     std::unique_ptr<TreeView> tree;
 };
 
@@ -337,6 +352,72 @@ TEST_F (TreeViewTests, HiddenRootShowsItsSubItemsAtTheTop)
 
     tree->setRootItemVisible (true);
     EXPECT_EQ ("root,a,b,c", rowNames());
+}
+
+TEST_F (TreeViewTests, FillsItselfFromThePathsOfItsItems)
+{
+    const StringArray paths { "Sources/main.cpp", "Sources/Editor.cpp", "Resources/ui.yui", "README.md" };
+
+    tree->setItems (paths);
+
+    // An item is made for each level no path named before, under a root that has no row, and those holding others are open
+    EXPECT_FALSE (tree->isRootItemVisible());
+    EXPECT_EQ ("Sources,main.cpp,Editor.cpp,Resources,ui.yui,README.md", rowNames());
+
+    auto* root = tree->getRootItem();
+    ASSERT_NE (nullptr, root);
+    ASSERT_EQ (3, root->getNumSubItems());
+    EXPECT_EQ (2, root->getSubItem (0)->getNumSubItems());
+    EXPECT_TRUE (root->getSubItem (0)->isOpen());
+    EXPECT_FALSE (root->getSubItem (2)->mightContainSubItems());
+
+    // The paths are a property, which a document writes
+    EXPECT_EQ (paths, tree->getItems());
+    Array<var> others;
+    others.add ("One");
+    others.add ("Two/Three");
+    tree->setProperty (Identifier ("items"), others);
+    EXPECT_EQ ("One,Two,Three", rowNames());
+
+    // A root set another way is not one of paths
+    buildTree();
+    EXPECT_TRUE (tree->getItems().isEmpty());
+}
+
+TEST_F (TreeViewTests, TellsItsItemsChangedWhenAnotherRootReplacesTheOneMadeFromPaths)
+{
+    struct ItemsListener : ComponentListener
+    {
+        void componentPropertyChanged (Component&, const Identifier& name) override
+        {
+            if (name == Identifier ("items"))
+                ++numChanges;
+        }
+
+        int numChanges = 0;
+    };
+
+    ItemsListener listener;
+    tree->addComponentListener (&listener);
+
+    tree->setItems (StringArray { "Sources/main.cpp", "README.md" });
+    EXPECT_EQ (listener.numChanges, 1);
+
+    // The paths are no longer what the tree shows, which is told to what reads them
+    tree->setRootItem (std::make_unique<TestItem> ("root", true));
+    EXPECT_TRUE (tree->getItems().isEmpty());
+    EXPECT_EQ (listener.numChanges, 2);
+
+    // A root replacing one set that way leaves the items as they were: none
+    tree->setRootItem (nullptr);
+    EXPECT_EQ (listener.numChanges, 2);
+
+    // Paths replacing others are told once
+    tree->setItems (StringArray { "One" });
+    tree->setItems (StringArray { "One", "Two" });
+    EXPECT_EQ (listener.numChanges, 4);
+
+    tree->removeComponentListener (&listener);
 }
 
 TEST_F (TreeViewTests, RowsMakeRoomForItemsThatPaintAnIcon)
@@ -1150,6 +1231,110 @@ TEST_F (TreeViewTests, DraggingNearTheEdgeAutoScrolls)
     EXPECT_FLOAT_EQ (scrolled, tree->getScrollPosition());
 }
 
+TEST_F (TreeViewTests, AsksForFramesOnlyWhileItemsOpenOrClose)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.setBounds (0.0f, 0.0f, 300.0f, 240.0f);
+    window.setVisible (true);
+    window.addAndMakeVisible (*tree);
+
+    auto& root = buildTree();
+    root.setOpen (true);
+    tree->setExpandAnimationTime (0.2);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    find ("a").setOpen (true);
+    EXPECT_TRUE (native.hasFrameListeners());
+    EXPECT_LT (heightOf ("a0"), 1.0f);
+
+    runFramesUntilIdle (native);
+
+    EXPECT_FALSE (native.hasFrameListeners());
+    EXPECT_FLOAT_EQ (24.0f, heightOf ("a0"));
+
+    find ("a").setOpen (false);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    runFramesUntilIdle (native);
+
+    EXPECT_FALSE (native.hasFrameListeners());
+    EXPECT_EQ ("root,a,b,c", rowNames());
+
+    window.removeChildComponent (*tree);
+}
+
+TEST_F (TreeViewTests, AsksForFramesWhileADragScrollsItOrWaitsOverAClosedItem)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.setBounds (0.0f, 0.0f, 300.0f, 240.0f);
+    window.setVisible (true);
+    window.addAndMakeVisible (*tree);
+
+    buildFlatTree (40);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    // In the middle of the tree a drag over leaves waits for nothing
+    tree->itemDragMove (dragAt (tree->getHeight() * 0.5f));
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    tree->itemDragMove (dragAt (tree->getHeight() - 2.0f));
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    for (int frame = 0; frame < 10; ++frame)
+        native.callFrameListeners (1.0 / 60.0);
+
+    EXPECT_GT (tree->getScrollPosition(), 0.0f);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    tree->itemDragExit (dragAt (tree->getHeight() - 2.0f));
+    runFramesUntilIdle (native);
+
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    window.removeChildComponent (*tree);
+}
+
+TEST_F (TreeViewTests, AHiddenTreeAsksForNoFrameAndGoesOnOpeningWhenItShowsAgain)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.setBounds (0.0f, 0.0f, 300.0f, 240.0f);
+    window.setVisible (true);
+    window.addAndMakeVisible (*tree);
+
+    auto& root = buildTree();
+    root.setOpen (true);
+    tree->setExpandAnimationTime (0.2);
+
+    find ("a").setOpen (true);
+
+    for (int frame = 0; frame < 3; ++frame)
+        native.callFrameListeners (1.0 / 60.0);
+
+    ASSERT_TRUE (native.hasFrameListeners());
+
+    const auto grown = heightOf ("a0");
+    EXPECT_GT (grown, 1.0f);
+    EXPECT_LT (grown, 24.0f);
+
+    // Hiding a parent hides the tree
+    window.setVisible (false);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    window.setVisible (true);
+    EXPECT_TRUE (native.hasFrameListeners());
+    EXPECT_FLOAT_EQ (grown, heightOf ("a0"));
+
+    runFramesUntilIdle (native);
+
+    EXPECT_FALSE (native.hasFrameListeners());
+    EXPECT_FLOAT_EQ (24.0f, heightOf ("a0"));
+
+    window.removeChildComponent (*tree);
+}
+
 TEST_F (TreeViewTests, DraggedItemsLeaveOutItemsInsideOtherDraggedItems)
 {
     tree->setSelectionMode (ListBox::SelectionMode::multiple);
@@ -1276,4 +1461,62 @@ TEST_F (TreeViewTests, OpennessStateCanCarryTheScrollPosition)
     tree->restoreOpennessState (state, false);
 
     EXPECT_FLOAT_EQ (100.0f, tree->getScrollPosition());
+}
+
+TEST_F (TreeViewTests, ThePainterOfARowLaysTheTextOfItsItemOutAgainOnlyForAnotherTextOrOtherBounds)
+{
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    auto renderer = context->makeRenderer (300, 240);
+    Graphics g (*context, *renderer);
+
+    buildFlatTree (2);
+    auto& item = find ("0");
+
+    auto* row = dynamic_cast<TreeViewRow*> (list().getComponentForRow (0));
+    ASSERT_NE (nullptr, row);
+
+    // The row lays nothing out: whoever paints it does
+    auto& kept = row->getTextLayoutCache();
+    EXPECT_TRUE (kept.styledText.isEmpty());
+
+    row->paint (g);
+    EXPECT_EQ (kept.text, "0");
+    EXPECT_FALSE (kept.styledText.isEmpty());
+    EXPECT_EQ (kept.styledText.getMaxSize(), row->getTextBounds().getSize());
+
+    // What is kept is what is painted again: emptied here, it stays empty until the painter has to lay it out
+    const auto isLaidOutAgain = [&] (const std::function<void()>& change)
+    {
+        kept.styledText.startUpdate().clear();
+        change();
+        row->paint (g);
+        return ! kept.styledText.isEmpty();
+    };
+
+    // A row refreshed with nothing changed, then selected
+    EXPECT_FALSE (isLaidOutAgain ([&item] { item.itemChanged(); }));
+    EXPECT_FALSE (isLaidOutAgain ([&item] { item.setSelected (true); }));
+
+    EXPECT_TRUE (isLaidOutAgain ([&item]
+    {
+        item.name = "Another name";
+        item.itemChanged();
+    }));
+    EXPECT_EQ (kept.text, "Another name");
+
+    // Other bounds of the text: an icon before it, another indent, another width of the tree
+    EXPECT_TRUE (isLaidOutAgain ([&item]
+    {
+        item.paintsIcon = true;
+        item.itemChanged();
+    }));
+    EXPECT_EQ (kept.styledText.getMaxSize(), row->getTextBounds().getSize());
+
+    EXPECT_TRUE (isLaidOutAgain ([this] { tree->setIndentSize (32.0f); }));
+    EXPECT_EQ (kept.styledText.getMaxSize(), row->getTextBounds().getSize());
+
+    EXPECT_TRUE (isLaidOutAgain ([this] { tree->setBounds (0.0f, 0.0f, 200.0f, 240.0f); }));
+    EXPECT_EQ (kept.styledText.getMaxSize(), row->getTextBounds().getSize());
+
+    EXPECT_EQ (dynamic_cast<TreeViewRow*> (list().getComponentForRow (0)), row);
 }

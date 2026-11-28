@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include <yup_gui_markup/yup_gui_markup.h>
+
 //==============================================================================
 
 // Imports an SVG as a `.yui` drawing, painted next to the SVG itself. The drawing is edited
@@ -642,7 +644,7 @@ private:
                 if (problem.line > 0)
                     editor.setErrorLine (problem.line - 1, true);
 
-            setStatus (yup::YuiDiagnostic::join (parsed.diagnostics));
+            setStatus (yup::DataTreeDiagnostic::join (parsed.diagnostics));
             return;
         }
 
@@ -654,7 +656,7 @@ private:
             return;
         }
 
-        yup::YuiDiagnostic failure;
+        yup::DataTreeDiagnostic failure;
         const auto created = yup::DrawingStyle::create (drawingPreview, drawing, nullptr, &failure);
 
         if (created.failed())

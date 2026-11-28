@@ -24,25 +24,24 @@ namespace yup
 
 //==============================================================================
 SpectrumAnalyzerState::SpectrumAnalyzerState()
+    : SpectrumAnalyzerState (defaultFftSize, maxFftSize)
 {
-    initializeFifo();
 }
 
 SpectrumAnalyzerState::SpectrumAnalyzerState (int fftSizeToUse)
-    : fftSize (fftSizeToUse)
+    : SpectrumAnalyzerState (fftSizeToUse, maxFftSize)
 {
-    initializeFifo();
 }
 
-void SpectrumAnalyzerState::initializeFifo()
+SpectrumAnalyzerState::SpectrumAnalyzerState (int fftSizeToUse, int maxFftSizeToAllow)
+    : largestFftSize (isFftSizeUpTo (maxFftSizeToAllow, maxFftSize) ? maxFftSizeToAllow : maxFftSize)
+    , fftSize (jmin (defaultFftSize, largestFftSize))
+    , audioFifo (largestFftSize * fifoSizeInFrames)
+    , sampleBuffer (static_cast<size_t> (largestFftSize * fifoSizeInFrames), 0.0f)
 {
-    fftDataReady = false;
-    fifoSize = fftSize * 4;
-    hopSize = static_cast<int> (fftSize * (1.0f - overlapFactor));
+    jassert (isFftSizeUpTo (maxFftSizeToAllow, maxFftSize)); // The maximum is a power of 2 between minFftSize and maxFftSize
 
-    audioFifo = std::make_unique<AbstractFifo> (fifoSize);
-
-    sampleBuffer.resize (fifoSize, 0.0f);
+    setFftSize (fftSizeToUse);
 }
 
 SpectrumAnalyzerState::~SpectrumAnalyzerState()
@@ -52,17 +51,7 @@ SpectrumAnalyzerState::~SpectrumAnalyzerState()
 //==============================================================================
 void SpectrumAnalyzerState::pushSample (float sample) noexcept
 {
-    // Lock-free write to FIFO - safe for audio thread
-    {
-        const auto writeScope = audioFifo->write (1);
-
-        if (writeScope.blockSize1 > 0)
-            sampleBuffer[static_cast<size_t> (writeScope.startIndex1)] = sample;
-    }
-
-    // Check if we have enough samples for FFT processing with overlap
-    if (audioFifo->getNumReady() >= fftSize)
-        fftDataReady = true;
+    pushSamples (&sample, 1);
 }
 
 void SpectrumAnalyzerState::pushSamples (const float* samples, int numSamples) noexcept
@@ -73,127 +62,101 @@ void SpectrumAnalyzerState::pushSamples (const float* samples, int numSamples) n
     if (numSamples <= 0 || samples == nullptr)
         return;
 
-    // Lock-free write to FIFO - safe for audio thread
-    {
-        const auto writeScope = audioFifo->write (numSamples);
+    // What does not fit is dropped: the audio thread never waits for the reading side
+    const auto writeScope = audioFifo.write (jmin (numSamples, getFreeSpace()));
 
-        // Copy first block
-        if (writeScope.blockSize1 > 0)
-        {
-            std::copy_n (samples, writeScope.blockSize1, &sampleBuffer[static_cast<size_t> (writeScope.startIndex1)]);
-        }
+    if (writeScope.blockSize1 > 0)
+        std::copy_n (samples, writeScope.blockSize1, &sampleBuffer[static_cast<size_t> (writeScope.startIndex1)]);
 
-        // Copy second block (wrap-around case)
-        if (writeScope.blockSize2 > 0)
-        {
-            std::copy_n (samples + writeScope.blockSize1, writeScope.blockSize2, &sampleBuffer[static_cast<size_t> (writeScope.startIndex2)]);
-        }
-    }
-
-    // Check if we have enough samples for FFT processing with overlap
-    if (audioFifo->getNumReady() >= fftSize)
-        fftDataReady = true;
+    if (writeScope.blockSize2 > 0)
+        std::copy_n (samples + writeScope.blockSize1, writeScope.blockSize2, &sampleBuffer[static_cast<size_t> (writeScope.startIndex2)]);
 }
 
 //==============================================================================
 bool SpectrumAnalyzerState::isFFTDataReady() const noexcept
 {
-    return fftDataReady.load() && (audioFifo->getNumReady() >= fftSize);
+    return audioFifo.getNumReady() >= fftSize.load();
 }
 
 bool SpectrumAnalyzerState::getFFTData (float* destBuffer) noexcept
 {
     jassert (destBuffer != nullptr);
 
-    if (destBuffer == nullptr || ! isFFTDataReady())
+    return destBuffer != nullptr && readFrame (destBuffer, fftSize.load());
+}
+
+bool SpectrumAnalyzerState::getFFTData (Span<float> destBuffer) noexcept
+{
+    return destBuffer.size() == static_cast<size_t> (fftSize.load())
+        && readFrame (destBuffer.data(), static_cast<int> (destBuffer.size()));
+}
+
+bool SpectrumAnalyzerState::readFrame (float* destBuffer, int frameSize) noexcept
+{
+    int startIndex1, blockSize1, startIndex2, blockSize2;
+    audioFifo.prepareToRead (frameSize, startIndex1, blockSize1, startIndex2, blockSize2);
+
+    if (blockSize1 + blockSize2 != frameSize)
         return false;
 
-    // Use prepareToRead to get read positions without consuming data
-    int startIndex1, blockSize1, startIndex2, blockSize2;
-    audioFifo->prepareToRead (fftSize, startIndex1, blockSize1, startIndex2, blockSize2);
+    std::copy_n (&sampleBuffer[static_cast<size_t> (startIndex1)], blockSize1, destBuffer);
+    std::copy_n (&sampleBuffer[static_cast<size_t> (startIndex2)], blockSize2, destBuffer + blockSize1);
 
-    // Copy first block
-    if (blockSize1 > 0)
-    {
-        std::copy_n (&sampleBuffer[static_cast<size_t> (startIndex1)],
-                     blockSize1,
-                     destBuffer);
-    }
+    // Advance by the hop, not by the frame, so that consecutive frames overlap
+    audioFifo.finishedRead (jmin (getHopSize(), frameSize));
 
-    // Copy second block (wrap-around case)
-    if (blockSize2 > 0)
-    {
-        std::copy_n (&sampleBuffer[static_cast<size_t> (startIndex2)],
-                     blockSize2,
-                     destBuffer + blockSize1);
-    }
+    return true;
+}
 
-    // Check if we read the full FFT size
-    const int actualReadSize = blockSize1 + blockSize2;
-    if (actualReadSize == fftSize)
-    {
-        // Advance read position by hopSize (not full FFT size) for overlap processing
-        audioFifo->finishedRead (hopSize);
-
-        // Check if we still have enough samples for next FFT
-        fftDataReady = (audioFifo->getNumReady() >= fftSize);
-
-        return true;
-    }
-
-    // If we couldn't read the full FFT size, reset flag and return false
-    fftDataReady = false;
-    return false;
+void SpectrumAnalyzerState::skipSamples (int numSamples) noexcept
+{
+    audioFifo.finishedRead (jlimit (0, audioFifo.getNumReady(), numSamples));
 }
 
 //==============================================================================
 void SpectrumAnalyzerState::reset() noexcept
 {
-    audioFifo->reset();
-
-    fftDataReady = false;
-
-    // Clear the sample buffer
-    std::fill (sampleBuffer.begin(), sampleBuffer.end(), 0.0f);
+    skipSamples (audioFifo.getNumReady());
 }
 
-void SpectrumAnalyzerState::setFftSize (int newSize)
+void SpectrumAnalyzerState::setFftSize (int newSize) noexcept
 {
-    jassert (isPowerOfTwo (newSize) && newSize >= 64 && newSize <= 65536);
+    const bool isValidSize = isFftSizeUpTo (newSize, largestFftSize);
 
-    if (fftSize != newSize)
-    {
-        fftSize = newSize;
+    jassert (isValidSize);
 
-        initializeFifo();
-    }
+    if (isValidSize)
+        fftSize.store (newSize);
+}
+
+bool SpectrumAnalyzerState::isFftSizeUpTo (int size, int largestSize) noexcept
+{
+    return isPowerOfTwo (size) && size >= minFftSize && size <= largestSize;
 }
 
 int SpectrumAnalyzerState::getNumAvailableSamples() const noexcept
 {
-    return audioFifo->getNumReady();
+    return audioFifo.getNumReady();
 }
 
 int SpectrumAnalyzerState::getFreeSpace() const noexcept
 {
-    return audioFifo->getFreeSpace();
+    return jmax (0, fftSize.load() * fifoSizeInFrames - 1 - audioFifo.getNumReady());
 }
 
-void SpectrumAnalyzerState::setOverlapFactor (float newOverlapFactor)
+void SpectrumAnalyzerState::setOverlapFactor (float newOverlapFactor) noexcept
 {
     jassert (newOverlapFactor >= 0.0f && newOverlapFactor < 1.0f);
 
-    if (overlapFactor != newOverlapFactor)
-    {
-        overlapFactor = jlimit (0.0f, 0.95f, newOverlapFactor);
-        hopSize = static_cast<int> (fftSize * (1.0f - overlapFactor));
-        hopSize = jmax (1, hopSize); // Ensure minimum hop size of 1
-    }
+    if (std::isnan (newOverlapFactor))
+        return;
+
+    overlapFactor.store (jlimit (0.0f, 0.95f, newOverlapFactor));
 }
 
 int SpectrumAnalyzerState::getHopSize() const noexcept
 {
-    return hopSize;
+    return jmax (1, static_cast<int> (static_cast<float> (fftSize.load()) * (1.0f - overlapFactor.load())));
 }
 
 } // namespace yup

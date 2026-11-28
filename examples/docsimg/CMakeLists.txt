@@ -28,6 +28,7 @@ project (${target_name} VERSION ${target_version})
 # ==== Prepare target
 # Renders the figures of the documentation into docs/_static/images, see `just docs_images`.
 # The modules are compiled into the target: changing this list rebuilds all of it.
+# glslang and spirv_cross compile the GLSL of the shader figures when they are drawn.
 yup_standalone_app (
     TARGET_NAME ${target_name}
     TARGET_VERSION ${target_version}
@@ -36,17 +37,22 @@ yup_standalone_app (
     TARGET_APP_NAMESPACE "org.yup"
     DEFINITIONS
         "YUP_DOCSIMG_PATH=\"${CMAKE_CURRENT_LIST_DIR}\""
+    PRECOMPILE_HEADERS
+        <yup_gui/yup_gui.h>
     MODULES
         yup::yup_core
         yup::yup_events
         yup::yup_graphics
         yup::yup_gui
+        yup::yup_gui_markup
         yup::yup_audio_gui
         yup::yup_renderer
         tinygltf
         pffft_library
         libjpeg
-        libpng)
+        libpng
+        glslang
+        spirv_cross)
 
 # ==== Prepare sources
 # Listed rather than globbed: `just docs_images` regenerates the project when this file changes.

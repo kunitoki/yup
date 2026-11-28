@@ -108,7 +108,7 @@ if (YUP_PLATFORM_DESKTOP OR YUP_PLATFORM_EMSCRIPTEN)
 endif()
 
 if (NOT YUP_PLATFORM_EMSCRIPTEN)
-    list (APPEND target_modules yup_gui yup_audio_gui yup_3d yup_renderer tinygltf)
+    list (APPEND target_modules yup_gui yup_gui_markup yup_artboard yup_audio_gui yup_3d yup_renderer tinygltf)
     if (YUP_PLATFORM_DESKTOP AND NOT YUP_PLATFORM_WINDOWS)
         list (APPEND target_modules yup_python)
     endif()
@@ -205,14 +205,21 @@ if (YUP_PLATFORM_MAC AND "yup_python" IN_LIST target_modules)
     list (APPEND target_modules "${target_name}_python_stdlib_binary")
 endif()
 
-if ("yup_gui" IN_LIST target_modules)
+if ("yup_gui_markup" IN_LIST target_modules)
     set (yui_resources_dir "${CMAKE_CURRENT_LIST_DIR}/data/yui")
 
     yup_add_yui_resources (YuiTestResources
         BASE_DIR "${yui_resources_dir}"
         FILES
             "${yui_resources_dir}/ui.yui"
-            "${yui_resources_dir}/parts/style.yui")
+            "${yui_resources_dir}/parts/style.yui"
+            "${yui_resources_dir}/effects.yui"
+        ASSETS
+            "${yui_resources_dir}/assets/blob.bin"
+        SHADERS
+            "${yui_resources_dir}/fx/tint.frag"
+        MATERIAL_SHADERS
+            "${yui_resources_dir}/fx/rim.glsl")
 
     yup_add_yui_resources (yui-nested-resources
         BASE_DIR "${yui_resources_dir}"
@@ -242,6 +249,9 @@ yup_standalone_app (
     MODULES
         ${target_modules}
         ${target_gtest_modules})
+
+# The GoogleTest runner is the same for every test runner: compiled once here, they only define the entry point
+yup_add_test_runner (${runtime_target_name})
 
 # ==== One test runner per module, all built by the yup_tests target and run by ctest
 if (YUP_TEST_LINK_JOBS GREATER 0)
@@ -275,6 +285,21 @@ foreach (module ${target_test_modules})
     file (GLOB imported_sources "${CMAKE_CURRENT_LIST_DIR}/${module}/*.cpp")
     list (REMOVE_ITEM imported_sources "${module_main}")
 
+    # Only module.cpp and module.mm are compiled: a test file they don't include would
+    # silently never be built nor run, so it is an error
+    file (READ "${module_main}" module_includes)
+    if (EXISTS "${CMAKE_CURRENT_LIST_DIR}/${module}/module.mm")
+        file (READ "${CMAKE_CURRENT_LIST_DIR}/${module}/module.mm" module_mm_includes)
+        string (APPEND module_includes "\n${module_mm_includes}")
+    endif()
+
+    file (GLOB module_test_files RELATIVE "${CMAKE_CURRENT_LIST_DIR}/${module}" "${CMAKE_CURRENT_LIST_DIR}/${module}/yup_*.cpp")
+    foreach (test_file ${module_test_files})
+        if (NOT module_includes MATCHES "#[ \t]*include[ \t]+\"${test_file}\"")
+            _yup_message (FATAL_ERROR "tests/${module}/${test_file} is never compiled: add #include \"${test_file}\" to tests/${module}/module.cpp")
+        endif()
+    endforeach()
+
     yup_standalone_app (
         TARGET_NAME ${module_target_name}
         TARGET_VERSION ${target_version}
@@ -292,8 +317,6 @@ foreach (module ${target_test_modules})
     target_sources (${module_target_name} PRIVATE ${sources} ${imported_sources})
     source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources} ${imported_sources})
     set_source_files_properties (${imported_sources} PROPERTIES HEADER_FILE_ONLY TRUE)
-
-    yup_add_test_runner (${module_target_name})
 
     set_target_properties (${module_target_name} PROPERTIES
         XCODE_SCHEME_ARGUMENTS "--gtest_filter=*"

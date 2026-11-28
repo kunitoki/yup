@@ -14,12 +14,12 @@ any paint code.
 </p>
 
 These knobs are sliders painted by one drawing of the `YuiDrawing` graphics
-example, [`flutedknob.yui`](https://github.com/kunitoki/yup/blob/main/examples/graphics/data/yui/flutedknob.yui):
+example, [`flutedknob.yui`](https://github.com/kunitoki/yup/blob/main/examples/graphics/data/yui/filter/flutedknob.yui):
 gradients, feathered shadows, clipped notches and a repeated scale that follow
 the value, with no image and no paint code.
 
 ```cpp
-#include <yup_gui/yup_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 ```
 
 Drawings are written in `.yui` files as `drawing` blocks. The `.yui` parser
@@ -88,7 +88,7 @@ becomes a property of that element holding the expression text:
 | `let r: bounds.width / 2;`      | `let`, with `name` = `r` and `value` = `bounds.width / 2` |
 | `repeat i in 0 .. 11 { ... }`   | `repeat`, with `name` = `i`, `from` = `0`, `to` = `11` |
 | `pattern Dots { ... }`          | `pattern`, with `name` = `Dots` (`marker` and a nested `drawing` alike) |
-| `use Leaf { ... }`              | `use`, with `drawing` = `Leaf`                        |
+| `use Leaf { ... }`              | `use`, with `drawing` = `Leaf`, the name of a drawing or of a shader |
 
 The references below use the element and property names, which are the same in
 the text and in the tree.
@@ -105,6 +105,7 @@ the text and in the tree.
 | `path`    | `data`                                                       | A path from SVG path data or a `path()` value. |
 | `polygon` | `center`, `sides`, `radius`, `angle` (default `0`)           | A regular polygon.                 |
 | `star`    | `center`, `points`, `innerRadius`, `outerRadius`, `angle`    | A star, `angle` defaults to `0`.   |
+| `vertex`  | `at`                                                         | One point of a line, only inside a `repeat`: see [Data series](#data-series). |
 | `text`    | `bounds` or `anchor`, `text`                                 | A text label fitted in `bounds`, or starting from the `anchor` point on its baseline. |
 | `image`   | `source`, `bounds` (default `bounds`)                        | A raster image from a file path or `data:image/...;base64,...` URI. |
 | `svg`     | `source` or `data`, `bounds` (default `bounds`)              | An SVG from a file path (`source`) or inline SVG XML (`data` or `source`). |
@@ -257,7 +258,7 @@ overridden per component.
 | `clip`   | `bounds`/`rect`, `path`/`clipPath`, `visible` (optional) | yes | Clips its children to a rectangle and/or path. |
 | `group`  | `transform`, `opacity`, `blend`, `color`, `visible` and [paint](#paint-set-by-groups) (optional) | yes | Applies a transform, an opacity, a blend mode and a paint to all its children. |
 | `viewport` | `bounds`, `viewBox`, `fitting`, `justification`, `visible` (optional) | yes | Draws its children in a [view box](#view-boxes-and-viewports) mapped into `bounds`, clipped to them. |
-| `drawing`, `use` | see [Reusing drawings](#reusing-drawings) | yes, no | Defines a drawing inside another, and paints a drawing by name. |
+| `drawing`, `use` | see [Reusing drawings](#reusing-drawings) | yes, no | Defines a drawing inside another, and paints a drawing, or a [shader](#painting-a-shader), by name. |
 | `pattern`, `marker` | see [Patterns and markers](#patterns-and-markers) | yes | Define a tile to paint shapes with, and a shape drawn at the vertices of others. |
 | `clipPath` | none                             | shapes   | Inside a `clip` or a `layer`: the shapes to [clip to](#clipping-to-shapes). |
 | `repeat` | `name`, `from`, `to`               | yes      | Draws what it holds once per integer in `from .. to - 1`. |
@@ -276,14 +277,16 @@ overridden per component.
   through each other at an `opacity` below 1. Use a `layer` to fade them as one image.
 - `repeat` exposes the current index as an integer `let` named by `name`. Integer
   division truncates, so write `i / 10.0` for a fraction. Its iteration count is
-  capped at `4096` (constant ranges above `4096` fail to compile).
+  capped at `4096`: a constant range above `4096` fails to compile, and one
+  that is only known when painting runs its first `4096` turns, without a
+  diagnostic.
 - A `repeat` holding only shapes and `let`s runs each shape for every index
   before the next shape, as the rows of one program, which keeps long repeats
   cheap. One holding a `group`, a `clip`, a `viewport`, a `use` or another
   `repeat` is drawn turn after turn instead: everything it holds for the first
   index, then for the second. The turns of repeats inside one another count
-  together towards the `4096`. A `repeat` can't hold a `layer`, a `pattern` or
-  a `marker`, however deep, nor define a `drawing`:
+  together towards the `4096`. A `repeat` can't hold a `layer`, a `pattern`, a
+  `marker` or a `use` painting a shader, however deep, nor define a `drawing`:
 
   ```yui
   repeat i in 0 .. 12 {
@@ -456,6 +459,40 @@ drawing Toolbar {
   stylesheet, by name; from C++, `DrawingStyle::create` takes a function finding
   them. A drawing that ends up using itself fails to compile.
 
+## Painting a shader
+
+A `use` naming no drawing paints the [`shader`](shaders.md) of that name: a
+picture a fragment shader makes, among the shapes of the drawing.
+
+```yui
+shader Rings {
+    fragment: "fx/rings.frag";
+    property count: number = 4;
+    property tint: color = palette.accent;
+}
+
+drawing Sonar {
+    property level: number = 0.5;
+
+    rect { bounds: bounds; cornerRadius: 10; fill: palette.surface; }
+    use Rings { bounds: bounds.reduced (8); count: 2 + level * 6; }
+    circle { center: bounds.center; radius: 5; fill: palette.text; }
+}
+```
+
+- The `use` takes `bounds` (the bounds around it by default), `transform`,
+  `visible`, `opacity`, `blend`, `clip` and `clipPath`, as an `image` does, and
+  the properties the shader declares, as expressions. It has no paint.
+- The shader makes its picture alone: one that reads a picture runs in a
+  [filter](#filters), or as the `effect:` of a component.
+- The picture is drawn again only when one of its values or its size changes,
+  unless the shader is given the time, which repaints the component at every
+  frame.
+- It can't be painted inside a `repeat`.
+
+[Painted by a drawing](shaders.md#painted-by-a-drawing) has the fragment of
+this example, what it looks like, and what a shader is given.
+
 ## Patterns and markers
 
 A `pattern` is a tile, repeated to fill or stroke the shapes naming it with
@@ -501,8 +538,12 @@ drawing Chart {
 
 - Both are definitions, like nested drawings: visible to the elements after
   them, and painted with the paint of where they are written.
-- A tile is drawn once into an image and repeated. A tile reading the component
-  is drawn again on every paint. Its content is clipped to the tile.
+- A tile is drawn once into an image and repeated. It is drawn again when
+  something its elements read changes: a property, a palette color or a state of
+  the component, its bounds, the font. It is drawn again on every paint when it
+  holds a `part` or a shader given the time, when its elements read an array,
+  and when they read the component next to an `image`, an `svg` read from a
+  file or a shape with markers. Its content is clipped to the tile.
 - `markerStart` is drawn at the first vertex of every sub-path, `markerEnd` at
   the last one unless the sub-path is closed, `markerMid` at the others. A shape
   run as a row of a `repeat` can't have markers.
@@ -566,6 +607,7 @@ layer {
 | `lighting`     | `scale`, `constant`, `specular`, `exponent`, `color`, `azimuth`, `elevation`, `position`, `height` | The alpha of its input lit as a surface `scale` high: matte, or its highlights with `specular: true`. The light is far away along `azimuth` and `elevation`, or at a `position` and a `height`. |
 | `displacement` | `in2`, `scale`, `xChannel`, `yChannel`               | Its input with every pixel moved by up to `scale`, following the `red`, `green`, `blue` or `alpha` of `in2`. |
 | `dropShadow`   | `offset` (point), `deviation`, `color`               | Its input over its shadow.                                |
+| `use Name`     | `in2` for a shader reading two pictures, and the properties the shader declares | What a [`shader`](shaders.md#in-a-filter) makes of its input, of two inputs, or alone. |
 
 - Every primitive accepts `in` and `result`. A primitive reads the result of
   the one before it, the first one reading the layer, unless `in` (and `in2`)
@@ -579,12 +621,19 @@ layer {
   the `bounds` of the filter is lost, so leave room for blurs and shadows.
 - `linearColors: true` on the `filter` runs it on linear colors, as SVG does by
   default, instead of the sRGB colors drawings are made of.
-- The picture is kept from one paint to the next when the elements of the layer
-  read nothing of the component (no property, palette color or `bounds`), and is
-  drawn again on every paint otherwise. The filter only runs again when the
-  picture or one of its values changes. It needs a GPU: without one the layer is
-  drawn as it is.
+- The picture is kept from one paint to the next, and drawn again when
+  something the elements of the layer read changes: a property, a palette color
+  or a state of the component, its `bounds`, the font. It is drawn again on
+  every paint when the layer holds a `part` or a shader given the time, when its
+  elements read an array, whose numbers can change where they are, and when they
+  read the component next to an `image`, an `svg` read from a file or a shape
+  with markers. The filter only runs again when the picture or one of its values
+  changes. It needs a GPU: without one the layer is drawn as it is.
 - A layer with a `filter` can't have a `mask`: put it inside the masked layer.
+- A `use` in a filter names a shader, never a drawing. Its properties are
+  expressions, its `resolution` and `scale` are in pixels of the screen, and it
+  is given no `time`. With `linearColors: true` it reads and writes linear
+  pictures, and converts its `color` properties itself.
 
 Some of them on the same star, the last one lighting a blurred copy of its
 alpha to raise its edges:
@@ -765,6 +814,138 @@ Row {
 From C++, set them on the component with `setProperty ("bezelSize", 0.7)`, and
 list them with `DrawingStyle::getProperties()`.
 
+## Data series
+
+A level meter, a spectrum or a curve is many numbers, drawn as one line. A
+`vertex` is one point of that line: a `repeat` gives the others, and its turns
+are joined in order.
+
+```yui
+drawing Spectrum {
+    rect { bounds: bounds; cornerRadius: 6; fill: palette.surface; }
+
+    repeat i in 0 .. bounds.width {
+        let x: bounds.x + i;
+
+        vertex { at: point (x, bounds.bottom - sample (levels, i / bounds.width) * bounds.height);
+                 base: point (x, bounds.bottom); smooth: 0.5;
+                 fill: palette.accent.withAlpha (0.25); stroke: palette.accent; strokeWidth: 1.5; }
+    }
+}
+
+style {
+    SpectrumAnalyzer { drawing: Spectrum; }
+}
+```
+
+| Property | Meaning |
+| --- | --- |
+| `at` | The point of this turn. |
+| `series` | Which line it belongs to, `0` by default: vertices of several series in one `repeat` make as many lines. |
+| `base` | Where the line comes back to under this point. With it the fill takes the area between the points and their bases, and the stroke only the line through the points. |
+| `smooth` | `0` joins the points with straight lines, the default. Up to `1` it curves the line through them. |
+| paint | As any shape. The first turn of a series gives the whole line its paint and its smoothing. |
+
+- A `base` on one level closes the area under a curve. The points of another
+  curve as bases make the band between both, such as a range from a minimum
+  to a maximum.
+- Without a paint the line is stroked with the current color. It is filled
+  only when it is given a `fill`.
+- A `vertex` is a shape: it takes the paint of the groups around it, and a
+  `clipPath` clips to the area of a series. It has no `objectBounds`, as it is
+  one point of what has them.
+- Each `vertex` element draws lines of its own. Two elements in one `repeat`
+  are never joined, whatever their `series`, so a line has a `base` under
+  every one of its points or under none.
+
+**Where the numbers come from.** A component that keeps numbers to show
+declares them as a *series*, an array property a drawing reads where the
+component keeps it: nothing is copied or converted, however many numbers there
+are and however often the drawing is painted. `levels` above is one, the 512
+levels a `SpectrumAnalyzer` shows. [Widgets in drawings](widgets.md) lists the
+series of every widget, and `yup_yui_tool schema` marks them with
+`"series": true`. Any other array works the same way and is converted once
+for each paint: a `number[]` property of the drawing, or a value of a model.
+
+**As many points as there is room for.** A line has no use for more points
+than the pixels it is drawn across. One made of straight lines, whose points
+never go back along x, is drawn with what each column of pixels shows of it:
+the first, the lowest, the highest and the last of the points sharing the
+column, which looks the same and is faster to draw. Its points are still all
+evaluated though, a line with a `smooth` above 0, a `dash` or a `transform`
+of its own keeps every one of them, and a `repeat` runs 4096 turns at most.
+So the turns follow the width, as above, and each reads the series where it
+stands:
+
+| Function | Reads |
+| --- | --- |
+| `sample (levels, t)` | The value at `t`, from 0 at the first number to 1 at the last, interpolated between the two around it. |
+| `max (levels, from, to)`, `min (levels, from, to)` | The extreme of the numbers from the index `from` up to `to`, which is left out. A range narrower than one number still reads the one it starts at. |
+| `levels[i]`, `len (levels)` | One number, and how many there are. |
+
+`sample` suits what is already smooth. `max` over the numbers each pixel
+stands for keeps the peaks a long series would lose:
+
+```yui
+repeat i in 0 .. bounds.width {
+    let from: int (i * len (levels) / bounds.width);
+    let to: int ((i + 1) * len (levels) / bounds.width);
+
+    vertex { at: point (bounds.x + i, bounds.bottom - max (levels, from, to) * bounds.height); stroke: palette.accent; }
+}
+```
+
+A series can also be the input of a [shader](shaders.md#series), which reads
+it for every pixel instead of every point.
+
+## Parts of a widget
+
+Some of what a widget shows can't be told as shapes: the text it laid out, its
+caret and its selection, the icon it was given. A widget declares each as a
+*part*, the theme paints it, and a drawing places it among its shapes with a
+`part` element named after it:
+
+```yui
+drawing Field {
+    rect { bounds: bounds.reduced (1); cornerRadius: 6; fill: palette.surface;
+           stroke: focused ? palette.accent : palette.outline; strokeWidth: focused ? 2 : 1; }
+
+    part selection { fill: palette.accent.withAlpha (0.35); }
+    part text { fill: palette.text; }
+    part caret { fill: palette.accent; }
+}
+
+style {
+    TextEditor { drawing: Field; }
+}
+```
+
+The drawing decides what is painted around the parts, in which order, and
+with which paint. The widget still lays the text out, edits it and answers the
+pointer, so the editor above works as any other.
+
+| Property | Meaning |
+| --- | --- |
+| name | The part, written after `part`. One the type of the component doesn't declare is an error telling the ones it has. |
+| `fill`, `stroke`, `strokeWidth` | The paint the part uses: a text is filled with `fill`, a text outline is stroked with `stroke`. A part with colors of its own, as an image, ignores them. |
+| `bounds` | Where the part goes, for one that fits any area: an icon, an image. Without it the part is where the widget puts it. |
+| `opacity`, `blend`, `tint`, `transform`, `clip`, `clipPath`, `visible` | As for an `image`. |
+
+- A part the widget lays out itself, as a text, its caret and its selection,
+  can't be given `bounds`: what the pointer hits has to be where it is
+  painted. A `transform` moves it when only its look matters. The widget tells
+  where such a part is as a property, as `textBounds`, for the shapes drawn
+  around it.
+- A `repeat` holding a `part` paints it turn after turn.
+- A part takes its paint from its own `fill` and `stroke`: the paint a `group`
+  sets is for the shapes of the group.
+- [Widgets in drawings](widgets.md) lists the parts of every widget, and
+  `yup_yui_tool schema` lists them under `parts`.
+
+A component of your own declares its parts and its series with its type, and
+tells the theme how to paint the parts, see
+[Component styling](../component-styling.md#series-and-parts).
+
 ## Errors
 
 `DrawingStyle::create` fails with a message that starts with the path of the
@@ -774,14 +955,17 @@ offending element and property:
 Knob/layer[0]/arc#value.to: Unknown symbol 'avv'
 drawing/circle[0]: missing the required property 'radius'
 drawing/repeat[0]/layer[0]: a 'layer' can't be nested inside a repeat
+Screen/use[0]: the shader 'Crt' reads a picture, run it in the 'filter' of a layer or as an 'effect:'
+drawing/vertex[0]: a 'vertex' is one point of a line, it can only be among the shapes of a 'repeat' giving the others
+Field/part[1]: the component has no part 'icon', it has selection, text, caret
 ```
 
 Elements are numbered by type within their parent, or named by their `id`. The
 root is named by its `name` property, or `drawing`. Passing an optional
-`YuiDiagnostic*` to `DrawingStyle::create` also populates the offending child
+`DataTreeDiagnostic*` to `DrawingStyle::create` also populates the offending child
 `DataTree` element and property `Identifier`, so `YuiDocument`, `YuiBuilder` and
 `StyleContext` resolve errors to the exact child line and column through the
-parser's `SourceMap`.
+parser's `DataTreeSourceMap`.
 
 ## Using a drawing from C++
 
@@ -823,6 +1007,27 @@ style.getReference()->setImageResolver ([this] (const String& source) -> std::op
     return std::nullopt;
 });
 ```
+
+A drawing that paints or runs shaders is given them by a resolver, the last
+argument of `DrawingStyle::create`. It returns the `shader` block of a name
+and the shader compiled from its file, and is asked while the style is
+created, never while it paints:
+
+```cpp
+auto shader = GpuImageShader::createFromData (data, size);    // a .ysl bundle, or GLSL with the transpiler
+
+auto style = DrawingStyle::create (component, drawing, nullptr, nullptr, nullptr,
+                                   [&] (const String& name) -> DrawingStyle::Shader
+{
+    if (name != "Rings" || shader.failed())
+        return {};
+
+    return { ringsBlock, shader.getValue() };    // the DataTree of `shader Rings { ... }`
+});
+```
+
+A stylesheet does this by itself for the shaders of its document, which is the
+usual way: see [Shaders](shaders.md).
 
 A drawing is bound to the component it was created for, so install it on that
 component only. Creating it for many components is cheap: components that give
@@ -895,17 +1100,25 @@ component paints, not its children.
 - A semi-transparent or masked `layer` is rendered offscreen at the logical size
   of the component, so it can look soft on high-density displays.
 - A `repeat` can't hold a `layer`, a `pattern` or a `marker`: a glow inside
-  one is the `feather` of a shape, not a filter.
+  one is the `feather` of a shape, not a filter. It can't hold a `use` painting
+  a shader either: the shader draws the repetition itself.
 - The tile of a `pattern` is an image: it is drawn at the size it has in the
   component, and looks soft when the shape it fills is scaled up much further.
 - Text has no outline: it can't be part of a `clipPath`, and has no
   `objectBounds` when placed from an `anchor`.
+- A drawing has no time of its own: what moves is a property of the component,
+  as the `phase` of a `ProgressBar`, or a property a stylesheet animates with
+  a transition. A shader painted by a `use` is given the time.
+- A `part` is painted by the theme: a drawing chooses its paint and its
+  place, not what it is made of.
 
 ## See also
 
 - [The `.yui` language](language.md) - the syntax of every block.
 - [Stylesheets](styles.md) - selecting drawings and setting their
   properties from rules.
+- [Shaders](shaders.md) - the shaders a drawing paints and runs in its
+  filters.
 - [How YUI fits together](architecture.md) - how drawings share their
   compilation and where their values come from.
 - [Reactive bindings](reactivity.md) - the same expressions keeping

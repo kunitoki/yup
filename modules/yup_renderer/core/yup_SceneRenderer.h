@@ -61,6 +61,13 @@ namespace yup
     inline. The background color is display-referred on both tiers: it shows exactly as picked,
     never tone mapped. Silhouettes and transparent surfaces over the background blend with it after
     tone mapping on every path, so they look the same on both tiers and with or without bloom.
+    The returned texture is premultiplied by alpha, as Graphics::drawTexture() takes it. A
+    BackgroundNode color of alpha below 1 makes the scene see-through: the texels no surface covers
+    hold that color multiplied by its alpha, antialiased silhouettes and blended surfaces keep
+    their share of it, and drawing the texture composites the scene over what lies behind it, see
+    SceneComponent. There the glow of bloom is light without coverage, added to what lies behind,
+    and the world fog covers it by its own opacity. A visible environment (EnvironmentNode::visible)
+    covers every texel, whatever the background.
     RenderSettings::depthOfField blurs what lies away from the focus of the active camera, after
     the temporal accumulation and before bloom, on both tiers: on the raster tier where the device
     allows half-float targets and the depth and normal prepass (RenderCapabilities::Feature::depthOfField).
@@ -75,8 +82,21 @@ namespace yup
     Highlights of very smooth surfaces are widened where normals change quickly across a pixel, to
     keep them from sparkling.
 
+    The meshes under a MaterialShaderNode take their color from its MaterialShader instead of this
+    shading, on the tiers the shader has a variant for: a GLSL function of the surface, unlit. It
+    is exposed, tone mapped and encoded like any other color, and drawn with the alpha mode,
+    culling and depth of the material of the mesh. Both tiers shade those meshes forward: the full
+    tier draws the opaque ones over its shaded G-buffer, depth tested against it and writing their
+    own depth and motion, before the blended surfaces. They are not in the G-buffer, so the
+    ambient occlusion, the screen-space reflections and global illumination and the contact
+    shadows of the full tier neither see nor shade them, while the passes drawing their depth do
+    it with their material: the shadows they cast, and the depth and normal prepass of the raster
+    tier. Reflection probes and irradiance volumes capture them with their material too.
+
     The color and depth targets are kept between frames and created again when the size, the
-    tier, the raster sample count or the device changes, so render() can be called every frame.
+    tier, the raster sample count or the device changes, so render() can be called every frame:
+    a scene rendered again as the frames before drew it is not drawn again, see render().
+    releaseTargets() lets go of them for a scene that is not shown for a while.
 
     @see SceneComponent, SceneDrawList
 */
@@ -102,7 +122,29 @@ public:
         found by its next render, which restarts the accumulation, still renders, and reports the
         failure through getLastGpuFailure(); see also waitForGPU().
 
-        @return The rendered texture, valid until the next render, or nullptr on failure; see getLastError().
+        A scene rendered again as it was is not drawn again. Once two frames in a row drew its
+        image and that image is final (isConverged()), a render() that finds unchanged everything
+        the image is made of returns it and records nothing: the scene with its feature nodes, the
+        camera, the size, the RenderSettings and the sample count. Two frames, as a frame the GPU
+        failed to execute is only found by the render after it: the render() that follows a
+        change is drawn, and so is the one after it.
+
+        What the renderer cannot compare keeps a frame drawn, whatever the scene:
+        - while the frame stats are collected (setFrameStatsEnabled()), for each frame to have its own;
+        - while entities are outlined (setBoundsOverlay());
+        - a frame coloring meshes with a MaterialShader, and one with a reflection probe or an
+          irradiance volume left to bake;
+        - with temporal anti-aliasing, a frame the depth of field blurs or one showing a
+          RenderSettings::debugView, which both follow the jitter of each frame;
+        - without it (the raster tier, or RenderSettings::taaSamples of 1 or less), a frame drawing
+          a Texture that lives on the GPU only (Texture::isGpuOnly()): such a texture can be drawn
+          again where it is, which the renderer is only told by Texture::setGpuTexture().
+
+        After a change the renderer cannot see, restartAccumulation() has the next render() draw
+        the scene.
+
+        @return The rendered texture, premultiplied by alpha and valid until the next render, or
+                nullptr on failure; see getLastError().
     */
     GpuTexture::Ptr render (const GpuDevice::Ptr& device, Scene& scene, int widthPx, int heightPx);
 
@@ -170,6 +212,19 @@ public:
     /** Returns why the last render failed, or an empty string if it succeeded. */
     const String& getLastError() const noexcept { return lastError; }
 
+    /** Returns what prevented the last render from coloring the meshes of a material shader with it.
+
+        A shader the renderer can't draw with leaves its meshes to their materials, and the render
+        succeeds: one that has no variant for the tier in use, or whose pipelines the device does
+        not compile. A SceneMaterialComponent reports it in the diagnostics of its document.
+
+        @param shader The shader of a MaterialShaderNode of the scene.
+
+        @returns What prevents it, or an empty string when the last render that looked at the
+                 scene drew with the shader, or met no visible entity colored by it.
+    */
+    String getMaterialShaderError (const MaterialShader& shader) const;
+
     /** Returns the capabilities the last render ran with, or nullptr before the first render.
 
         The pointer stays valid until the next render.
@@ -181,11 +236,15 @@ public:
         The full tier accumulates RenderSettings::taaSamples jittered frames, then keeps the result
         until something changes. Changes come in three kinds:
         - most changes restart the convergence: the camera, entity transforms, new content in a
-          Texture (see Texture::setGpuTexture()), lights, the ambient light, the default light,
-          materials, the meshes drawn, exposure and the environment. The accumulated history is
-          kept, reprojected and clipped to the new frames, so moving parts blend in smoothly and
-          still parts stay antialiased. Once nothing changes any more, the history counts as one
-          frame of the accumulation that follows;
+          Texture (see Texture::setGpuTexture()), new vertices in a Mesh (see Mesh::setVertices()),
+          lights, the ambient light, the default light, materials, the shader and the uniform
+          values of a MaterialShaderNode, the meshes drawn, exposure and
+          the environment. The accumulated history is kept, reprojected and clipped to the new
+          frames, so moving parts blend in smoothly and still parts stay antialiased. New vertices
+          have no motion of their own, only the transform of their entity does: a mesh changing
+          shape is neither reprojected nor smeared by motion blur, the clipping alone fades its
+          previous shape out. Once nothing changes any more, the history counts as one frame of
+          the accumulation that follows;
         - the size, the tier, RenderSettings::taaSamples and restartAccumulation() discard the
           history, and the accumulation starts over from the next frame alone;
         - tone mapping, the bloom, depth of field and motion blur settings, the depth of field
@@ -203,14 +262,29 @@ public:
     bool isConverged() const noexcept;
 
     /** Discards the accumulated history and the shadow maps, so the next renders start over from
-        the next frame alone and isConverged() is false.
+        the next frame alone and isConverged() is false. The next render() draws a frame whatever
+        it finds of the scene, see render().
 
-        Call it after changes the renderer cannot see: vertices edited in place in a Mesh, or
-        a GpuTexture redrawn without calling Texture::setGpuTexture(). Also call it after a large
-        change, such as a camera cut: changes that only restart the convergence keep the history,
-        and silhouettes keep a faint trace of the image before them.
+        Call it after changes the renderer cannot see, such as a GpuTexture redrawn without calling
+        Texture::setGpuTexture(). Also call it after a large change, such as a camera cut: changes
+        that only restart the convergence keep the history, and silhouettes keep a faint trace of
+        the image before them.
     */
     void restartAccumulation() noexcept;
+
+    /** Releases what the frames are rendered into and carried over in: the texture render()
+        returned, the targets of the passes, the accumulated history and the shadow maps.
+
+        For a scene that is not shown for a while, as SceneComponent does while it is hidden. The
+        pipelines, the baked probes and the environment are kept, so the next render() only
+        creates its targets again, as after a change of size: it starts over from that frame
+        alone, draws the shadow maps again, and the full tier accumulates its frames anew, see
+        isConverged(). The frames the GPU has not finished keep the textures they use. Does
+        nothing before the first render.
+
+        @see restartAccumulation
+    */
+    void releaseTargets() noexcept;
 
     //==============================================================================
     /** What one frame of this renderer cost on the GPU and what it drew, see setFrameStatsEnabled(). */
@@ -229,7 +303,9 @@ public:
 
         Off by default, so frames pay nothing for it: they neither measure their GPU time nor open
         GPU scopes. Once a frame of the device measured, though, the device's later frames pay a
-        GPU timestamp pair each when they complete, stats on or off. While on, each frame measures its GPU time (see GpuFrame::setTimingEnabled()) and
+        GPU timestamp pair each when they complete, stats on or off. While on, every render() draws
+        a frame, for each to have its stats: a scene rendered again as it was is not spared, see
+        render(). Each frame then measures its GPU time (see GpuFrame::setTimingEnabled()) and
         opens a scope (see GpuFrame::beginScope()) for each pass it records, in frame order:
         probeBake, shadows, lightCulling, gbuffer, ambientOcclusion, hiZ, screenSpaceReflections,
         lighting, indirectDiffuse, depthNormalPrepass, ambientOcclusion (on the raster tier, after
@@ -285,7 +361,7 @@ public:
     };
 
     /** @internal Returns an intermediate texture of the last frame, valid until the next render,
-        or nullptr when the tier has none or the last render failed.
+        or nullptr when the tier has none, the last render failed or releaseTargets() was called since.
     */
     GpuTexture::Ptr getPassOutput (PassOutput output) const;
 
@@ -459,6 +535,11 @@ public:
     */
     int getNumTimingCallsForTesting() const noexcept;
 
+    /** @internal Test hook: how many render() calls drew a frame on the current device of this
+        renderer: one the image of the frames before stood for draws none, see render().
+    */
+    int getNumDrawnFramesForTesting() const noexcept;
+
     //==============================================================================
     /** Changes the number of MSAA samples per pixel of the raster tier.
 
@@ -475,6 +556,9 @@ public:
 
 private:
     struct Impl;
+
+    /** True while a test hook is set: a renderer one was used on draws every frame. */
+    bool usesTestHooks() const noexcept;
 
     std::unique_ptr<Impl> impl;
     std::function<void (RenderCapabilities::DeviceFacts&)> deviceFactsOverride;

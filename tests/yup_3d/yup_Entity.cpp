@@ -718,3 +718,151 @@ TEST_F (EntityTests, IntersectRayDistancesAreInWorldSpace)
     transform.setScale ({ 0.0f, 1.0f, 1.0f });
     EXPECT_FALSE (entity.intersectRay (ray).has_value());
 }
+
+//==============================================================================
+
+/** MeshNode::intersectTriangles(): the triangles of a mesh where its entity puts it, drawn or not by its material. */
+class MeshNodeTriangleTests : public EntityTests
+{
+protected:
+    /** A square facing +z, 2 wide, around the origin of its entity. */
+    static Mesh::Ptr makeSquareMesh()
+    {
+        std::vector<Mesh::Vertex> vertices (4);
+        vertices[0].position = { -1.0f, -1.0f, 0.0f };
+        vertices[1].position = { 1.0f, -1.0f, 0.0f };
+        vertices[2].position = { 1.0f, 1.0f, 0.0f };
+        vertices[3].position = { -1.0f, 1.0f, 0.0f };
+
+        auto mesh = Mesh::Ptr (new Mesh ("square"));
+        mesh->addPrimitive (vertices, { 0, 1, 2, 0, 2, 3 });
+        return mesh;
+    }
+
+    /** A ray looking down -z from 10 above the plane of z = 0. */
+    static Ray rayDown (float x, float y)
+    {
+        return Ray ({ x, y, 10.0f }, { 0.0f, 0.0f, -1.0f });
+    }
+};
+
+TEST_F (MeshNodeTriangleTests, TellsAPartFromTheBoundsThatEncloseIt)
+{
+    // A body whose bounds reach above the knob standing on it: a square, with a corner raised by 2
+    std::vector<Mesh::Vertex> corner (3);
+    corner[0].position = { -1.0f, -1.0f, 2.0f };
+    corner[1].position = { -0.5f, -1.0f, 2.0f };
+    corner[2].position = { -1.0f, -0.5f, 2.0f };
+
+    auto bodyMesh = makeSquareMesh();
+    bodyMesh->addPrimitive (corner, {});
+
+    auto body = scene.createEntity ("body");
+    const auto& bodyNode = body.attach<MeshNode> (bodyMesh);
+
+    auto knob = scene.createEntity ("knob", body);
+    knob.attach<TransformNode> (Vector3<float> { 0.5f, 0.5f, 1.0f }, Quaternion(), Vector3<float> { 0.25f, 0.25f, 1.0f });
+    const auto& knobNode = knob.attach<MeshNode> (makeSquareMesh());
+
+    const auto overKnob = rayDown (0.5f, 0.5f);
+
+    // The bounds of the body are entered before those of the knob, and its triangles are behind it
+    const auto bodyBounds = bodyNode.intersectRay (overKnob);
+    const auto knobBounds = knobNode.intersectRay (overKnob);
+
+    ASSERT_TRUE (bodyBounds.has_value());
+    ASSERT_TRUE (knobBounds.has_value());
+    EXPECT_LT (*bodyBounds, *knobBounds);
+    EXPECT_FLOAT_EQ (knobNode.intersectTriangles (overKnob).value_or (-1.0f), 9.0f);
+    EXPECT_FLOAT_EQ (bodyNode.intersectTriangles (overKnob).value_or (-1.0f), 10.0f);
+
+    // Beside the knob only the body is there, its raised corner before the rest of it, and beside both nothing
+    EXPECT_FALSE (knobNode.intersectTriangles (rayDown (-0.5f, 0.5f)).has_value());
+    EXPECT_FLOAT_EQ (bodyNode.intersectTriangles (rayDown (-0.5f, 0.5f)).value_or (-1.0f), 10.0f);
+    EXPECT_FLOAT_EQ (bodyNode.intersectTriangles (rayDown (-0.9f, -0.9f)).value_or (-1.0f), 8.0f);
+    EXPECT_FALSE (bodyNode.intersectTriangles (rayDown (3.0f, 0.0f)).has_value());
+
+    // Between two distances
+    EXPECT_FALSE (bodyNode.intersectTriangles (overKnob, 0.0f, 9.5f).has_value());
+    EXPECT_FALSE (bodyNode.intersectTriangles (overKnob, 10.5f).has_value());
+}
+
+TEST_F (MeshNodeTriangleTests, TestsTheTrianglesWhereTheEntityPutsThem)
+{
+    // A square made 4 long and 1 wide, turned by an eighth of a turn around z and moved 3 to the right
+    auto entity = scene.createEntity ("turned");
+    const auto& node = entity.attach<MeshNode> (makeSquareMesh());
+    auto& transform = entity.attach<TransformNode> (Vector3<float> { 3.0f, 0.0f, 0.0f },
+                                                    Quaternion::fromAxisAngle ({ 0.0f, 0.0f, 1.0f }, MathConstants<float>::halfPi * 0.5f),
+                                                    Vector3<float> { 2.0f, 0.5f, 1.0f });
+
+    // Along its length, beside its width, and inside the bounds it has in the scene but beside it
+    EXPECT_NEAR (node.intersectTriangles (rayDown (4.0f, 1.0f)).value_or (-1.0f), 10.0f, 1.0e-4f);
+    EXPECT_FALSE (node.intersectTriangles (rayDown (4.0f, -1.0f)).has_value());
+    EXPECT_GT (entity.computeWorldBounds().getMax().getY(), 1.5f);
+    EXPECT_FALSE (node.intersectTriangles (rayDown (3.0f, 1.0f)).has_value());
+
+    // A distance is one of the ray in the scene, whatever the scale of the entity and the length of the direction
+    transform.setScale ({ 4.0f, 4.0f, 4.0f });
+    EXPECT_NEAR (node.intersectTriangles (Ray ({ 3.0f, 0.0f, 10.0f }, { 0.0f, 0.0f, -2.0f })).value_or (-1.0f), 5.0f, 1.0e-4f);
+
+    // A mesh flattened by a zero scale, a node without a mesh and a node without an entity hit nothing
+    transform.setScale ({ 0.0f, 1.0f, 1.0f });
+    EXPECT_FALSE (node.intersectTriangles (rayDown (3.0f, 0.0f)).has_value());
+
+    auto empty = scene.createEntity ("empty");
+    EXPECT_FALSE (empty.attach<MeshNode>().intersectTriangles (rayDown (0.0f, 0.0f)).has_value());
+    EXPECT_FALSE (MeshNode (makeSquareMesh()).intersectTriangles (rayDown (0.0f, 0.0f)).has_value());
+}
+
+TEST_F (MeshNodeTriangleTests, HitsAMeshHoweverSmallItsEntityMakesIt)
+{
+    // A hundred thousand times smaller in the scene, through two entities: a square 0.00002 wide
+    auto group = scene.createEntity ("group");
+    group.attach<TransformNode> (Vector3<float> {}, Quaternion(), Vector3<float> { 0.01f, 0.01f, 0.01f });
+
+    auto entity = scene.createEntity ("small", group);
+    entity.attach<TransformNode> (Vector3<float> {}, Quaternion(), Vector3<float> { 0.001f, 0.001f, 0.001f });
+    const auto& node = entity.attach<MeshNode> (makeSquareMesh());
+
+    // Its triangles and its bounds are where it is drawn, at the distance the ray has in the scene
+    EXPECT_NEAR (node.intersectTriangles (rayDown (0.000005f, 0.000002f)).value_or (-1.0f), 10.0f, 1.0e-3f);
+    EXPECT_NEAR (node.intersectRay (rayDown (0.000005f, 0.000002f)).value_or (-1.0f), 10.0f, 1.0e-3f);
+
+    EXPECT_FALSE (node.intersectTriangles (rayDown (0.00003f, 0.0f)).has_value());
+    EXPECT_FALSE (node.intersectRay (rayDown (0.00003f, 0.0f)).has_value());
+}
+
+TEST_F (MeshNodeTriangleTests, HitsBackFacesAsTheMaterialOfTheEntityDrawsThem)
+{
+    auto doubleSided = Material::Ptr (new Material());
+    doubleSided->doubleSided = true;
+
+    auto group = scene.createEntity ("group");
+    auto entity = scene.createEntity ("square", group);
+    const auto& node = entity.attach<MeshNode> (makeSquareMesh());
+
+    const Ray fromBehind ({ 0.5f, 0.5f, -10.0f }, { 0.0f, 0.0f, 1.0f });
+
+    // Seen from behind the square is not drawn
+    EXPECT_FLOAT_EQ (node.intersectTriangles (rayDown (0.5f, 0.5f)).value_or (-1.0f), 10.0f);
+    EXPECT_FALSE (node.intersectTriangles (fromBehind).has_value());
+
+    // Unless the material it is drawn with is double sided: the one of the nearest MaterialNode up the tree
+    group.attach<MaterialNode> (doubleSided);
+    EXPECT_FLOAT_EQ (node.intersectTriangles (fromBehind).value_or (-1.0f), 10.0f);
+
+    auto& nearer = entity.attach<MaterialNode> (Material::Ptr (new Material()));
+    EXPECT_FALSE (node.intersectTriangles (fromBehind).has_value());
+
+    // A MaterialNode without a material overrides nothing
+    nearer.material = nullptr;
+    EXPECT_FLOAT_EQ (node.intersectTriangles (fromBehind).value_or (-1.0f), 10.0f);
+
+    // An entity that mirrors its mesh still shows the side its triangles face
+    group.detach<MaterialNode>();
+    entity.attach<TransformNode> (Vector3<float> {}, Quaternion(), Vector3<float> { -1.0f, 1.0f, 1.0f });
+
+    EXPECT_FLOAT_EQ (node.intersectTriangles (rayDown (0.5f, 0.5f)).value_or (-1.0f), 10.0f);
+    EXPECT_FALSE (node.intersectTriangles (fromBehind).has_value());
+}

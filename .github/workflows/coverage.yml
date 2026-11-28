@@ -84,14 +84,14 @@ jobs:
         fetch-depth: 0
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - uses: hendrikmuhs/ccache-action@v1.2
+    - uses: ./.github/actions/ccache
       with:
         key: linux-coverage
-        max-size: 1G
+        max-size: 800M
     - name: Configure CMake with Coverage
       run: |
         cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build \
-          -G "Ninja Multi-Config" \
+          -G "Ninja Multi-Config" -C ${{ github.workspace }}/.github/ci_settings.cmake \
           -DYUP_BUILD_TESTS=ON \
           -DYUP_BUILD_EXAMPLES=OFF \
           -DYUP_ENABLE_COVERAGE=ON \
@@ -109,6 +109,7 @@ jobs:
       working-directory: ${{ runner.workspace }}/build
       run: |
         mkdir -p coverage
+        find . -path "*/thirdparty/*" -name "*.gcda" -delete
         lcov --directory . --capture --output-file coverage/coverage.info --ignore-errors ${IGNORE_ERRORS}
         lcov --remove coverage/coverage.info \
           "*/pybind11/*" \

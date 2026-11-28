@@ -251,13 +251,12 @@ Point<float> JoystickComponent::getThumbPosition() const
              static_cast<float> (1.0 - getNormalizedValue (Axis::y)) * getHeight() };
 }
 
-//==============================================================================
-void JoystickComponent::paint (Graphics& g)
+Rectangle<float> JoystickComponent::getThumbBounds() const
 {
-    if (auto style = ApplicationTheme::findComponentStyle (*this))
-        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
+    return Rectangle<float> (0.0f, 0.0f, thumbSize, thumbSize).withCenter (getThumbPosition());
 }
 
+//==============================================================================
 bool JoystickComponent::hitTest (float x, float y)
 {
     if (grabMode == GrabMode::anywhere)

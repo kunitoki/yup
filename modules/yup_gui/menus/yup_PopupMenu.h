@@ -251,6 +251,10 @@ public:
         std::optional<Color> textColor;
         Rectangle<float> area;
 
+        /** Where whoever paints the menu keeps the text and the shortcut it laid out, to lay them out again only
+            when it has to. The item holds them and never looks into them: see TextLayoutCache. */
+        mutable TextLayoutCache textLayoutCache, shortcutKeyTextLayoutCache;
+
     private:
         YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Item)
     };
@@ -341,10 +345,50 @@ public:
     bool canScrollDown() const;
 
     /** Returns the bounds of the scroll up indicator. */
-    Rectangle<float> getScrollUpIndicatorBounds() const;
+    Rectangle<float> getScrollUpBounds() const;
 
     /** Returns the bounds of the scroll down indicator. */
-    Rectangle<float> getScrollDownIndicatorBounds() const;
+    Rectangle<float> getScrollDownBounds() const;
+
+    //==============================================================================
+    /** Returns the area of the text of an item, in the coordinates of the menu.
+
+        It is the area of the item inside its padding, less the room of what is beside the text: the
+        tick, which every item leaves room for as soon as one item of the menu is ticked, the shortcut
+        and the arrow of an item opening a menu.
+
+        As the areas of what else an item shows, it is empty for a separator, for an item that is a
+        component of its own and for an item scrolled out of the menu.
+
+        @param itemIndex  The index of the item among the items of the menu.
+
+        @see getItemTickBounds, getItemShortcutBounds, getItemArrowBounds
+    */
+    Rectangle<float> getItemTextBounds (int itemIndex) const;
+
+    /** Returns the area of the tick of an item, at its start. Empty for an item that is not ticked.
+
+        @param itemIndex  The index of the item among the items of the menu.
+
+        @see getItemTextBounds
+    */
+    Rectangle<float> getItemTickBounds (int itemIndex) const;
+
+    /** Returns the area of the shortcut of an item, at its end. Empty for an item without a shortcut.
+
+        @param itemIndex  The index of the item among the items of the menu.
+
+        @see getItemTextBounds
+    */
+    Rectangle<float> getItemShortcutBounds (int itemIndex) const;
+
+    /** Returns the area of the arrow of an item opening a menu, at its end. Empty for the other items.
+
+        @param itemIndex  The index of the item among the items of the menu.
+
+        @see getItemTextBounds
+    */
+    Rectangle<float> getItemArrowBounds (int itemIndex) const;
 
     //==============================================================================
     /** Dismisses all currently open popup menus. */
@@ -387,6 +431,8 @@ private:
     float getResolvedVerticalPadding() const;
     float getItemHeight (const Item& item) const;
     int getItemIndexAt (Point<float> position) const;
+    const Item* findTextItem (int itemIndex) const;
+    bool isAnyItemTicked() const;
     void dismiss (int itemID);
     void setSelectedItemIndex (int index, bool fromMouse);
     void setupMenuItems();
@@ -481,6 +527,30 @@ private:
     static constexpr float scrollIndicatorHeight = 12.0f;
     static constexpr float shadowMargin = 16.0f;
     static constexpr int scrollSpeed = 1; // Number of items to scroll per wheel event
+
+    // What a drawing reads of the items: one array for each thing told of them, all read with the index of an item
+    struct ItemSeries
+    {
+        Array<Rectangle<float>> bounds;
+        Array<String> texts, shortcuts;
+        Array<Color> colors;
+        Array<bool> enabled, ticked, hovered, separator, subMenu, active, custom;
+    };
+
+    /* Fills an array with one value for each item, and returns it as the series a property gives. */
+    template <class ValueType, class Reader>
+    Span<const ValueType> readItems (Array<ValueType>& values, Reader&& read) const
+    {
+        values.clearQuick();
+        values.ensureStorageAllocated (static_cast<int> (items.size()));
+
+        for (size_t index = 0; index < items.size(); ++index)
+            values.add (read (*items[index], static_cast<int> (index)));
+
+        return { values.data(), static_cast<size_t> (values.size()) };
+    }
+
+    mutable ItemSeries itemSeries;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PopupMenu)
 };

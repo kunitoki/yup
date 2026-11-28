@@ -30,7 +30,7 @@ namespace yup
 
     A provider is the model side of a data-driven UI: a set of typed values, such as the
     parameters of a synth or the settings of an application, that `.yui` reads and writes by
-    name once it is registered with YuiBuilder::setModel or YuiDocument::setModel:
+    name once it is registered as a model of the document, with its `setModel`:
 
     @code
     Slider { value <=> params.cutoff; }
@@ -40,11 +40,11 @@ namespace yup
     Implementations report every change of a value with @ref notifyValueChanged, whoever made
     it, so bound components stay up to date. A continuous edit, such as dragging a knob, is
     wrapped in @ref beginGesture and @ref endGesture, which lets the provider group it into one
-    undoable step or tell a host that a parameter is being automated. YuiBuilder wraps any other
+    undoable step or tell a host that a parameter is being automated. A BindingModel wraps any other
     change, from the keyboard, the mouse wheel or code, in a gesture of its own, and doesn't write
     a value equal to the current one.
 
-    @see DataTreeBindingProvider, YuiBuilder, BindingGraph
+    @see DataTreeBindingProvider, BindingModel, BindingGraph
 
     @tags{UI}
 */
@@ -97,7 +97,11 @@ public:
     /** Returns the values the provider exposes. */
     virtual std::vector<Property> getProperties() const = 0;
 
-    /** Finds a single exposed property by name, or std::nullopt when the provider doesn't expose it. */
+    /** Finds a single exposed property by name, or std::nullopt when the provider doesn't expose it.
+
+        A provider may find here a property that getProperties() does not list, such as one it
+        makes when it is first asked for: see BindingModel::ensureProperty().
+    */
     virtual std::optional<Property> findProperty (const Identifier& name) const
     {
         for (const auto& property : getProperties())
@@ -118,6 +122,32 @@ public:
 
     /** Called when a continuous edit of a property ends. */
     virtual void endGesture (const Identifier& name) {}
+
+    /** Returns the text a value of a property is shown with, such as "440 Hz", or nothing when
+        the provider has no text of its own for it, which is the default.
+
+        It is the text a value opens with when it is edited as text, as `edit (params.cutoff)` does in `.yui`.
+
+        @param name   The property.
+        @param value  The value to show, which may not be the current one.
+    */
+    virtual std::optional<String> getTextForValue (const Identifier& name, const var& value) const
+    {
+        ignoreUnused (name, value);
+        return std::nullopt;
+    }
+
+    /** Returns the value a text typed for a property stands for, or nothing when the provider
+        does not parse the texts of the property itself, which is the default.
+
+        @param name  The property.
+        @param text  The text, as getTextForValue() returns it or as someone typed it.
+    */
+    virtual std::optional<var> getValueForText (const Identifier& name, const String& text) const
+    {
+        ignoreUnused (name, text);
+        return std::nullopt;
+    }
 
     //==============================================================================
     /** Adds a listener, which must be removed before it is destroyed. */

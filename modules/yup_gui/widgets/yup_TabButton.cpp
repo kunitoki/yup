@@ -44,6 +44,11 @@ struct TabButtonIds
     static inline const Identifier selected { "selected" };
     static inline const Identifier overflowButton { "overflowButton" };
     static inline const Identifier closeButtonOver { "closeButtonOver" };
+    static inline const Identifier hasIcon { "hasIcon" };
+    static inline const Identifier iconBounds { "iconBounds" };
+    static inline const Identifier textBounds { "textBounds" };
+    static inline const Identifier closeBounds { "closeBounds" };
+    static inline const Identifier arrowBounds { "arrowBounds" };
 };
 
 } // namespace
@@ -54,6 +59,8 @@ const Identifier TabButton::Style::textSelectedColorId { "tabButtonTextSelected"
 const Identifier TabButton::Style::hoveredBackgroundColorId { "tabButtonHoveredBackground" };
 const Identifier TabButton::Style::closeButtonColorId { "tabButtonCloseButton" };
 const Identifier TabButton::Style::cornerRadiusId { "tabButtonCornerRadius" };
+const Identifier TabButton::Style::iconPartId { "icon" };
+const Identifier TabButton::Style::textPartId { "text" };
 
 //==============================================================================
 const ComponentTypeInfo& TabButton::getClassTypeInfo()
@@ -75,6 +82,13 @@ const ComponentTypeInfo& TabButton::getClassTypeInfo()
                                  .state (TabButtonIds::selected, &TabButton::isSelected, false, "Whether this tab is selected.")
                                  .readOnly (TabButtonIds::overflowButton, &TabButton::isOverflowButton, false, "Whether this button represents hidden overflow tabs.")
                                  .state (TabButtonIds::closeButtonOver, &TabButton::isCloseButtonOver, false, "Whether the mouse pointer is over the close button.")
+                                 .readOnly (TabButtonIds::hasIcon, &TabButton::hasIcon, false, "Whether the tab was given a glyph or an image as its icon, which the part 'icon' paints.")
+                                 .readOnly (TabButtonIds::iconBounds, &TabButton::getIconBounds, {}, "The area of the icon, empty for a tab without one.")
+                                 .readOnly (TabButtonIds::textBounds, &TabButton::getTextBounds, {}, "The area of the text, empty for a tab without one.")
+                                 .readOnly (TabButtonIds::closeBounds, &TabButton::getCloseBounds, {}, "The area of the close button, empty for a tab that can't be closed.")
+                                 .readOnly (TabButtonIds::arrowBounds, &TabButton::getArrowBounds, {}, "The area of the arrow of the overflow button, empty for a tab.")
+                                 .part (Style::iconPartId, &TabButton::getIconBounds, "The glyph or the image the tab was given as its icon. A glyph is filled with the fill color.")
+                                 .part (Style::textPartId, &TabButton::getTextBounds, "The text, laid out by the theme for the area it is given and filled with the fill color.")
                                  .build();
 
     return info;
@@ -210,23 +224,37 @@ Font TabButton::getFont (bool forSelectedTab) const
 {
     auto font = ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
-    if (forSelectedTab)
-        font = font.withAxisValue ("wght", tabButtonSelectedWeight);
+    if (! forSelectedTab)
+        return font;
 
-    return font;
+    // Made once for a font of the theme: a heavier font made again is another font to whoever compares it
+    if (selectedFontSource != font)
+    {
+        selectedFont = font.withAxisValue ("wght", tabButtonSelectedWeight);
+        selectedFontSource = std::move (font);
+    }
+
+    return selectedFont;
 }
 
 float TabButton::getTextWidth() const
 {
-    auto styledText = StyledText();
+    const auto font = getFont (true);
+
+    if (! textMeasure.has_value() || textMeasure->text != text || textMeasure->font != font)
     {
-        auto modifier = styledText.startUpdate();
-        modifier.setWrap (StyledText::noWrap);
-        modifier.appendText (text, getFont (true));
+        auto styledText = StyledText();
+        {
+            auto modifier = styledText.startUpdate();
+            modifier.setWrap (StyledText::noWrap);
+            modifier.appendText (text, font);
+        }
+
+        // Rounded up so the text never gets shortened in a tab of exactly its preferred length.
+        textMeasure = TextMeasure { text, font, std::ceil (styledText.getComputedTextBounds().getWidth()) + 1.0f };
     }
 
-    // Rounded up so the text never gets shortened in a tab of exactly its preferred length.
-    return std::ceil (styledText.getComputedTextBounds().getWidth()) + 1.0f;
+    return textMeasure->width;
 }
 
 //==============================================================================

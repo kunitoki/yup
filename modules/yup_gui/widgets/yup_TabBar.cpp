@@ -67,6 +67,8 @@ struct TabBarIds
     static inline const Identifier overflowText { "overflowText" };
     static inline const Identifier animationDuration { "animationDuration" };
     static inline const Identifier selectedTab { "selectedTab" };
+    static inline const Identifier indicatorBounds { "indicatorBounds" };
+    static inline const Identifier focusIndicatorVisible { "focusIndicatorVisible" };
 };
 
 } // namespace
@@ -90,20 +92,31 @@ const ComponentTypeInfo& TabBar::getClassTypeInfo()
                                  .property (
                                      TabBarIds::selectedTab,
                                      [] (const TabBar& c) { return c.getSelectedTabId().toString(); },
-                                     [] (TabBar& c, const String& v) { c.setSelectedTab (v.isEmpty() ? Identifier() : Identifier (v)); },
+                                     // No id is the first tab, the one selected as the tabs are added
+                                     [] (TabBar& c, const String& v) { c.setSelectedTab (v.isNotEmpty() ? Identifier (v) : c.getTabId (0)); },
                                      String(),
-                                     "The id of the selected tab.")
+                                     "The id of the selected tab, the first one when empty.")
+                                 .readOnly (TabBarIds::indicatorBounds, &TabBar::getIndicatorBounds, {}, "The area marking the selected tab, which slides to the one selected next. Empty when no tab is selected.")
+                                 .readOnly (TabBarIds::focusIndicatorVisible, &TabBar::isFocusIndicatorVisible, false, "Whether the bar shows that it has the keyboard focus.")
                                  .signal (ComponentSignal {
                                      .name = Identifier ("onSelectionChanged"),
                                      .connect = [] (Component& component, ComponentSignal::Handler handler)
                                      {
-                                         if (auto* bar = dynamic_cast<TabBar*> (&component))
+                                         auto* bar = dynamic_cast<TabBar*> (&component);
+
+                                         if (bar == nullptr)
+                                             return;
+
+                                         if (handler == nullptr)
                                          {
-                                             bar->onSelectionChanged = [handler = std::move (handler)] (const Identifier& tabId)
-                                             {
-                                                 handler ({ var (tabId.toString()) });
-                                             };
+                                             bar->onSelectionChanged = nullptr;
+                                             return;
                                          }
+
+                                         bar->onSelectionChanged = [handler = std::move (handler)] (const Identifier& tabId)
+                                         {
+                                             handler ({ var (tabId.toString()) });
+                                         };
                                      },
                                      .description = "Emitted with the selected tab id when the selection changes.",
                                      .arguments = { { Identifier ("tab"), ComponentProperty::Type::string } } })
@@ -471,15 +484,19 @@ void TabBar::removeListener (Listener* listener)
 }
 
 //==============================================================================
-void TabBar::paint (Graphics& g)
-{
-    if (auto style = ApplicationTheme::findComponentStyle (*this))
-        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
-}
-
 void TabBar::resized()
 {
     updateLayout (false, true);
+}
+
+void TabBar::visibilityChanged()
+{
+    updateFrameAttachment();
+}
+
+void TabBar::parentHierarchyChanged()
+{
+    updateFrameAttachment();
 }
 
 void TabBar::refreshDisplay (double lastFrameTimeSeconds)
@@ -507,6 +524,8 @@ void TabBar::refreshDisplay (double lastFrameTimeSeconds)
 
     if (advance (indicatorMotion))
         repaint();
+
+    updateFrameAttachment();
 }
 
 bool TabBar::keyDown (const KeyPress& key, const Point<float>& position)
@@ -592,7 +611,7 @@ void TabBar::buttonMouseDown (TabButton& button, const MouseEvent& event)
     newPress.button = &button;
     newPress.downPosition = position;
     newPress.grabOffset = (vertical ? position.getY() : position.getX()) - tabBarStart (button.getBounds(), vertical);
-    newPress.onCloseButton = button.isClosable() && button.getCloseButtonBounds().contains (event.getPosition());
+    newPress.onCloseButton = button.isClosable() && button.getCloseBounds().contains (event.getPosition());
     press = newPress;
 
     if (! newPress.onCloseButton)
@@ -645,7 +664,7 @@ void TabBar::buttonMouseUp (TabButton& button, const MouseEvent& event)
 
     if (released.onCloseButton)
     {
-        if (button.getCloseButtonBounds().contains (event.getPosition()))
+        if (button.getCloseBounds().contains (event.getPosition()))
             requestClose (button.getTabId());
 
         return;
@@ -817,7 +836,23 @@ void TabBar::updateLayout (bool animate, bool revealSelection)
                                   animate && ! appearing && animationDuration > 0.0);
     }
 
+    updateFrameAttachment();
     repaint();
+}
+
+void TabBar::updateFrameAttachment()
+{
+    const auto isMoving = [] (const Motion& motion)
+    {
+        return motion.progress < 1.0;
+    };
+
+    const auto needsFrames = isMoving (overflowMotion) || isMoving (indicatorMotion) || std::any_of (tabs.begin(), tabs.end(), [&isMoving] (const Tab& tab)
+    {
+        return isMoving (tab.motion);
+    });
+
+    frameAttachment.setActive (needsFrames && isShowing());
 }
 
 void TabBar::updateOverflowButtonContent (bool selectedIsHidden)

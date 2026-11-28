@@ -24,6 +24,7 @@
 #include <gtest/gtest.h>
 
 #include <thread>
+#include <vector>
 
 using namespace yup;
 
@@ -35,11 +36,25 @@ extern std::unique_ptr<yup::GraphicsContext> yup_constructHeadlessGraphicsContex
 class PitchWheelComponentTest : public ::testing::Test
 {
 protected:
+    /** Handles its enablement without the wheel, as a subclass written before the wheel did. */
+    class OwnEnablementPitchWheel : public PitchWheelComponent
+    {
+    public:
+        using PitchWheelComponent::PitchWheelComponent;
+
+        void enablementChanged() override {}
+    };
+
     void SetUp() override
     {
         state = std::make_unique<MidiKeyboardState>();
         wheel = std::make_unique<PitchWheelComponent> (*state, "testPitchWheel");
         wheel->setBounds (0, 0, 30, 120);
+    }
+
+    static MouseEvent makeButtonEvent (float y)
+    {
+        return MouseEvent (MouseEvent::Buttons::leftButton, {}, Point<float> (15.0f, y));
     }
 
     std::unique_ptr<MidiKeyboardState> state;
@@ -79,6 +94,21 @@ TEST_F (PitchWheelComponentTest, SetValueClampsToRange)
 
     wheel->setValue (-5.0);
     EXPECT_DOUBLE_EQ (-1.0, wheel->getValue());
+}
+
+TEST_F (PitchWheelComponentTest, TheNormalizedValueIsTheValueAlongItsRange)
+{
+    // At rest the wheel is in the middle of its travel
+    EXPECT_DOUBLE_EQ (0.5, wheel->getNormalizedValue());
+
+    wheel->setValue (-1.0);
+    EXPECT_DOUBLE_EQ (0.0, wheel->getNormalizedValue());
+
+    wheel->setValue (0.5);
+    EXPECT_DOUBLE_EQ (0.75, wheel->getNormalizedValue());
+
+    wheel->setValue (1.0);
+    EXPECT_DOUBLE_EQ (1.0, wheel->getNormalizedValue());
 }
 
 TEST_F (PitchWheelComponentTest, SetValueWithNotificationCallback)
@@ -173,6 +203,87 @@ TEST_F (PitchWheelComponentTest, DragEndCallback)
 }
 
 //==============================================================================
+TEST_F (PitchWheelComponentTest, DisablingWhileDraggedEndsTheDragAndSpringsBack)
+{
+    int dragEnds = 0;
+    MouseEvent lastDragEnd;
+    wheel->onDragEnd = [&] (const MouseEvent& event)
+    {
+        ++dragEnds;
+        lastDragEnd = event;
+    };
+
+    wheel->mouseDown (makeButtonEvent (60.0f));
+    wheel->mouseDrag (makeButtonEvent (30.0f));
+    ASSERT_DOUBLE_EQ (0.5, wheel->getValue());
+
+    wheel->setEnabled (false);
+
+    EXPECT_FALSE (wheel->isCurrentlyBeingDragged());
+    EXPECT_DOUBLE_EQ (0.0, wheel->getValue());
+    ASSERT_EQ (1, dragEnds);
+
+    // No release happened: the drag ends where it last was, with no button
+    EXPECT_FALSE (lastDragEnd.isAnyButtonDown());
+    EXPECT_FLOAT_EQ (30.0f, lastDragEnd.getPosition().getY());
+
+    // The release that comes later ends nothing
+    wheel->mouseUp (makeButtonEvent (30.0f));
+    EXPECT_EQ (1, dragEnds);
+}
+
+TEST_F (PitchWheelComponentTest, HidingAParentWhileDraggedEndsTheDragAndSpringsBack)
+{
+    Component parent;
+    parent.setVisible (true);
+    parent.addAndMakeVisible (*wheel);
+
+    int dragEnds = 0;
+    wheel->onDragEnd = [&dragEnds] (const MouseEvent&)
+    {
+        ++dragEnds;
+    };
+
+    wheel->mouseDown (makeButtonEvent (60.0f));
+    wheel->mouseDrag (makeButtonEvent (30.0f));
+    ASSERT_DOUBLE_EQ (0.5, wheel->getValue());
+
+    // Hidden through its parent, the wheel is still visible itself
+    parent.setVisible (false);
+
+    EXPECT_TRUE (wheel->isVisible());
+    EXPECT_FALSE (wheel->isCurrentlyBeingDragged());
+    EXPECT_DOUBLE_EQ (0.0, wheel->getValue());
+    EXPECT_EQ (1, dragEnds);
+
+    wheel->mouseUp (makeButtonEvent (30.0f));
+    EXPECT_EQ (1, dragEnds);
+}
+
+TEST_F (PitchWheelComponentTest, AReleaseOnADisabledWheelEndsTheDragASubclassLeftOpen)
+{
+    OwnEnablementPitchWheel own (*state, "ownEnablementPitchWheel");
+    own.setBounds (0, 0, 30, 120);
+
+    int dragEnds = 0;
+    own.onDragEnd = [&dragEnds] (const MouseEvent&)
+    {
+        ++dragEnds;
+    };
+
+    own.mouseDown (makeButtonEvent (60.0f));
+    own.mouseDrag (makeButtonEvent (30.0f));
+    own.setEnabled (false);
+    ASSERT_TRUE (own.isCurrentlyBeingDragged());
+
+    own.mouseUp (makeButtonEvent (30.0f));
+
+    EXPECT_FALSE (own.isCurrentlyBeingDragged());
+    EXPECT_DOUBLE_EQ (0.0, own.getValue());
+    EXPECT_EQ (1, dragEnds);
+}
+
+//==============================================================================
 TEST_F (PitchWheelComponentTest, PaintWithThemeDoesNotCrash)
 {
     auto context = yup_constructHeadlessGraphicsContext ({}, {});
@@ -233,6 +344,12 @@ protected:
     MouseEvent makeButtonEvent (float y) const
     {
         return MouseEvent (MouseEvent::Buttons::leftButton, {}, Point<float> (15.0f, y));
+    }
+
+    /** Applies what the state reported, as the message thread does when it gets to the update of the wheel. */
+    void deliverStateUpdate()
+    {
+        static_cast<PitchWheelComponent&> (*wheel).handleAsyncUpdate();
     }
 
     MessageManager* messageManager = nullptr;
@@ -345,4 +462,108 @@ TEST_F (PitchWheelComponentAsyncTests, MidiChannelSelection)
 
     EXPECT_NEAR ((12288.0 - 8192.0) / 8191.0, wheel->getValue(), 1e-9);
     EXPECT_EQ (2, wheel->getMidiChannel());
+}
+
+TEST_F (PitchWheelComponentAsyncTests, ThePositionReportedDuringADragIsAppliedWhenItEndsAfterTheSpringBack)
+{
+    wheel->setBounds (0, 0, 30, 120);
+
+    std::vector<double> changes;
+    wheel->onValueChanged = [&changes] (double newValue)
+    {
+        changes.push_back (newValue);
+    };
+
+    wheel->mouseDown (makeButtonEvent (60.0f));
+    wheel->mouseDrag (makeButtonEvent (30.0f));
+    ASSERT_DOUBLE_EQ (0.5, wheel->getValue());
+
+    // Only the latest of the positions held back is applied
+    state->processNextMidiEvent (MidiMessage::pitchWheel (1, 4096));
+    deliverStateUpdate();
+    state->processNextMidiEvent (MidiMessage::pitchWheel (1, 16383));
+    deliverStateUpdate();
+
+    EXPECT_DOUBLE_EQ (0.5, wheel->getValue());
+
+    wheel->mouseUp (makeButtonEvent (30.0f));
+
+    EXPECT_DOUBLE_EQ (1.0, wheel->getValue());
+
+    // The drag and the spring-back are changes of the user, following the state is not
+    ASSERT_EQ (2, static_cast<int> (changes.size()));
+    EXPECT_DOUBLE_EQ (0.5, changes[0]);
+    EXPECT_DOUBLE_EQ (0.0, changes[1]);
+}
+
+TEST_F (PitchWheelComponentAsyncTests, WhatAStateReportedDuringADragIsNotReadFromTheOneThatReplacesIt)
+{
+    MidiKeyboardState second;
+    PitchWheelComponent held (*state);
+    held.setBounds (0, 0, 30, 120);
+    held.setResetOnRelease (false);
+
+    held.mouseDown (makeButtonEvent (60.0f));
+    held.mouseDrag (makeButtonEvent (30.0f));
+
+    state->processNextMidiEvent (MidiMessage::pitchWheel (1, 16383));
+    held.handleAsyncUpdate();
+
+    held.setState (&second);
+    held.mouseUp (makeButtonEvent (30.0f));
+
+    // The new state never moved its wheel, so the one on screen stays where the user left it
+    EXPECT_DOUBLE_EQ (0.5, held.getValue());
+}
+
+TEST_F (PitchWheelComponentAsyncTests, FollowsTheStateItIsGivenAfterItsConstruction)
+{
+    MidiKeyboardState second;
+    PitchWheelComponent pitch;
+
+    EXPECT_EQ (pitch.getState(), nullptr);
+
+    // Without a state a wheel is moved by the user alone
+    pitch.setValue (0.5);
+    pitch.handleAsyncUpdate();
+    EXPECT_DOUBLE_EQ (pitch.getValue(), 0.5);
+
+    // A wheel keeps its value until its state reports another one
+    pitch.setState (state.get());
+    EXPECT_EQ (pitch.getState(), state.get());
+    EXPECT_DOUBLE_EQ (pitch.getValue(), 0.5);
+
+    state->processNextMidiEvent (MidiMessage::pitchWheel (1, 16383));
+    pitch.handleAsyncUpdate();
+    EXPECT_DOUBLE_EQ (pitch.getValue(), 1.0);
+
+    // And then follows the one it is given next
+    pitch.setState (&second);
+    EXPECT_EQ (pitch.getState(), &second);
+    EXPECT_DOUBLE_EQ (pitch.getValue(), 1.0);
+
+    second.processNextMidiEvent (MidiMessage::pitchWheel (1, 8192));
+    pitch.handleAsyncUpdate();
+    EXPECT_DOUBLE_EQ (pitch.getValue(), 0.0);
+
+    pitch.setState (nullptr);
+    EXPECT_EQ (pitch.getState(), nullptr);
+}
+
+TEST_F (PitchWheelComponentAsyncTests, WhatAStateReportedIsNotReadFromTheOneThatReplacesIt)
+{
+    MidiKeyboardState second;
+    ObservablePitchWheel replaced (*state, "replacedPitchWheel");
+
+    // The update is still pending when the state is replaced by one that never moved its wheel
+    state->processNextMidiEvent (MidiMessage::pitchWheel (1, 16383));
+    replaced.setState (&second);
+
+    // Only the state it has moves it
+    state->processNextMidiEvent (MidiMessage::pitchWheel (1, 0));
+
+    runDispatchLoopUntil (100);
+
+    EXPECT_EQ (0, replaced.asyncUpdateCount);
+    EXPECT_DOUBLE_EQ (0.0, replaced.getValue());
 }

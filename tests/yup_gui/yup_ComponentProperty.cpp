@@ -50,6 +50,78 @@ protected:
         Array<Identifier> names;
     };
 
+    /** A component whose setters tell their change as each test needs, or not at all. */
+    class QuietWidget : public Component
+    {
+    public:
+        const ComponentTypeInfo& getDefaultTypeInfo() const override
+        {
+            static const ComponentTypeInfo info = ComponentTypeBuilder<QuietWidget> ("QuietWidget")
+                .property ("level", &QuietWidget::getLevel, &QuietWidget::setLevel, 0)
+                .property ("gain", &QuietWidget::getGain, &QuietWidget::setGain, 0)
+                .property ("span", &QuietWidget::getSpan, &QuietWidget::setSpan, 0)
+                .property ("limit", &QuietWidget::getLimit, &QuietWidget::setLimit, 0)
+                .property ("names", &QuietWidget::getNames, &QuietWidget::setNames)
+                .build();
+            return info;
+        }
+
+        int getLevel() const noexcept { return level; }
+
+        /** Tells nothing, and keeps the level from 0 to 10. */
+        void setLevel (int newLevel) noexcept { level = jlimit (0, 10, newLevel); }
+
+        int getGain() const noexcept { return gain; }
+
+        /** Tells its change itself. */
+        void setGain (int newGain)
+        {
+            if (gain == newGain)
+                return;
+
+            gain = newGain;
+            notifyPropertyChanged (Identifier ("gain"));
+        }
+
+        int getSpan() const noexcept { return span; }
+
+        /** Tells the change of another property, and not its own. */
+        void setSpan (int newSpan)
+        {
+            span = newSpan;
+            notifyPropertyChanged (Identifier ("level"));
+        }
+
+        int getLimit() const noexcept { return limit; }
+
+        /** Tells nothing, and gives a limit above 10 again as 10 through setProperty(). */
+        void setLimit (int newLimit)
+        {
+            if (newLimit > 10)
+                setProperty (Identifier ("limit"), 10);
+            else
+                limit = newLimit;
+        }
+
+        StringArray getNames() const
+        {
+            ++numNamesReads;
+            return names;
+        }
+
+        /** Tells nothing. */
+        void setNames (const StringArray& newNames) { names = newNames; }
+
+        mutable int numNamesReads = 0;
+
+    private:
+        int level = 0;
+        int gain = 0;
+        int span = 0;
+        int limit = 0;
+        StringArray names;
+    };
+
     static const ComponentProperty* findByName (const std::vector<const ComponentProperty*>& properties, const Identifier& name)
     {
         for (const auto* property : properties)
@@ -125,6 +197,19 @@ TEST_F (ComponentPropertyTest, TypeNamesIncludeArrays)
     EXPECT_TRUE (ComponentProperty::isExpressionType (Type::font));
     EXPECT_FALSE (ComponentProperty::isExpressionType (Type::array));
     EXPECT_FALSE (ComponentProperty::isExpressionType (Type::drawing));
+}
+
+TEST_F (ComponentPropertyTest, ATypeIsNamedAsADeclarationNamesIt)
+{
+    using Type = ComponentProperty::Type;
+
+    EXPECT_EQ (ComponentProperty::getTypeName (Type::number), "number");
+    EXPECT_EQ (ComponentProperty::getTypeName (Type::font), "font");
+    EXPECT_EQ (ComponentProperty::getTypeName (Type::any), "any");
+
+    // The two a declaration can't name
+    EXPECT_EQ (ComponentProperty::getTypeName (Type::enumeration), "enumeration");
+    EXPECT_EQ (ComponentProperty::getTypeName (Type::array), "array");
 }
 
 TEST_F (ComponentPropertyTest, StorageKeyFallsBackToName){
@@ -346,6 +431,145 @@ TEST_F (ComponentPropertyTest, SetColorOnDescriptorMapsStorageKeyAndNotifiesProp
     slider.removeComponentListener (&listener);
 }
 
+TEST_F (ComponentPropertyTest, SetPropertyTellsTheChangeASetterKeptQuiet)
+{
+    RecordingListener listener;
+    QuietWidget widget;
+    widget.addComponentListener (&listener);
+
+    widget.setProperty (Identifier ("level"), 4);
+    EXPECT_EQ (widget.getLevel(), 4);
+    EXPECT_EQ (listener.callCount, 1);
+    EXPECT_EQ (listener.lastName, Identifier ("level"));
+
+    // The same value again changes nothing
+    widget.setProperty (Identifier ("level"), 4);
+    EXPECT_EQ (listener.callCount, 1);
+
+    widget.setProperty (Identifier ("level"), 10);
+    EXPECT_EQ (listener.callCount, 2);
+
+    // Nor does a value the setter brings back to the one the property has
+    widget.setProperty (Identifier ("level"), 25);
+    EXPECT_EQ (widget.getLevel(), 10);
+    EXPECT_EQ (listener.callCount, 2);
+
+    widget.removeComponentListener (&listener);
+}
+
+TEST_F (ComponentPropertyTest, SetPropertyTellsOnceTheChangeItsSetterTold)
+{
+    RecordingListener listener;
+    QuietWidget widget;
+    widget.addComponentListener (&listener);
+
+    widget.setProperty (Identifier ("gain"), 3);
+    ASSERT_EQ (listener.names.size(), 1);
+    EXPECT_EQ (listener.lastName, Identifier ("gain"));
+
+    // A setter telling another property than its own leaves its own to be told, after that one
+    listener.reset();
+    widget.setProperty (Identifier ("span"), 7);
+    ASSERT_EQ (listener.names.size(), 2);
+    EXPECT_EQ (listener.names[0], Identifier ("level"));
+    EXPECT_EQ (listener.names[1], Identifier ("span"));
+
+    widget.removeComponentListener (&listener);
+}
+
+TEST_F (ComponentPropertyTest, SetPropertyTellsOnceTheChangeItsSetterMadeThroughSetProperty)
+{
+    RecordingListener listener;
+    QuietWidget widget;
+    widget.addComponentListener (&listener);
+
+    // The limit is told for the write that changed it, the one its setter made, and not again for the one around it
+    widget.setProperty (Identifier ("limit"), 50);
+
+    EXPECT_EQ (widget.getLimit(), 10);
+    ASSERT_EQ (listener.names.size(), 1);
+    EXPECT_EQ (listener.lastName, Identifier ("limit"));
+
+    widget.removeComponentListener (&listener);
+}
+
+TEST_F (ComponentPropertyTest, SetPropertyDoesNotReadAnArrayToCompareIt)
+{
+    RecordingListener listener;
+    QuietWidget widget;
+    widget.addComponentListener (&listener);
+
+    widget.setProperty (Identifier ("names"), var (StringArray ({ "low", "high" })));
+
+    // An array may be long: it is not read before and after, and telling that it changed stays with its setter
+    EXPECT_EQ (widget.numNamesReads, 0);
+    EXPECT_EQ (listener.callCount, 0);
+    EXPECT_EQ (widget.getNames(), StringArray ({ "low", "high" }));
+
+    widget.removeComponentListener (&listener);
+}
+
+TEST_F (ComponentPropertyTest, AComponentMayBeDeletedByWhoIsToldOfItsStateBackedChange)
+{
+    /** Lets go of the widget it listens to when the property it waits for changes. */
+    struct Owner final : ComponentListener
+    {
+        void componentPropertyChanged (Component&, const Identifier& name) override
+        {
+            names.add (name);
+
+            if (name == awaited)
+                widget.reset();
+        }
+
+        const Identifier awaited { "level" };
+        Array<Identifier> names;
+        std::unique_ptr<QuietWidget> widget = std::make_unique<QuietWidget>();
+    };
+
+    // Told by setProperty(), for a setter that kept quiet
+    {
+        Owner owner;
+        owner.widget->addComponentListener (&owner);
+
+        owner.widget->setProperty (Identifier ("level"), 4);
+
+        EXPECT_TRUE (owner.widget == nullptr);
+        EXPECT_EQ (owner.names.size(), 1);
+    }
+
+    // Told by the setter, for another property than its own: no component is left to tell its own for
+    {
+        Owner owner;
+        owner.widget->addComponentListener (&owner);
+
+        owner.widget->setProperty (Identifier ("span"), 7);
+
+        EXPECT_TRUE (owner.widget == nullptr);
+        EXPECT_EQ (owner.names.size(), 1);
+    }
+}
+
+TEST_F (ComponentPropertyTest, ABindingFollowsAStateBackedPropertyItsSetterDoesNotTell)
+{
+    QuietWidget source;
+    Slider target (Slider::LinearHorizontal);
+    target.setRange (0.0, 10.0, 0.0);
+
+    BindingGraph graph;
+    const auto bound = graph.bind (target, Identifier ("value"), "source.level * 2", ComponentProperty::Type::number, [&source] (const String& id) -> Component*
+    {
+        return id == "source" ? &source : nullptr;
+    });
+
+    ASSERT_TRUE (bound.wasOk()) << bound.getErrorMessage();
+    ASSERT_EQ (graph.getNumBindings(), 1);
+
+    source.setProperty (Identifier ("level"), 3);
+
+    EXPECT_DOUBLE_EQ (target.getValue(), 6.0);
+}
+
 // =============================================================================
 // ComponentTypeInfo
 // =============================================================================
@@ -484,6 +708,7 @@ TEST_F (ComponentPropertyTest, AllWritableStateBackedPropertiesNotifyListeners)
         &SwitchButton::getClassTypeInfo(),
         &Label::getClassTypeInfo(),
         &Slider::getClassTypeInfo(),
+        &JoystickComponent::getClassTypeInfo(),
         &ComboBox::getClassTypeInfo(),
         &TextEditor::getClassTypeInfo(),
         &ProgressBar::getClassTypeInfo(),

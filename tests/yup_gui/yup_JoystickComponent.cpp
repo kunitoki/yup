@@ -159,6 +159,22 @@ TEST_F (JoystickComponentTests, ThumbModeHitsOnlyTheThumbAndDragsRelatively)
     EXPECT_DOUBLE_EQ (0.5, joystick.getValue (Axis::y));
 }
 
+TEST_F (JoystickComponentTests, TheThumbIsAsLargeAsItsSizeAroundItsPosition)
+{
+    EXPECT_EQ (Rectangle<float> (92.0f, 42.0f, 16.0f, 16.0f), joystick.getThumbBounds());
+
+    // It follows the values, around an edge of the joystick too
+    joystick.setThumbSize (24.0f);
+    joystick.setValues (0.25, 1.0);
+    EXPECT_EQ (Rectangle<float> (38.0f, -12.0f, 24.0f, 24.0f), joystick.getThumbBounds());
+    EXPECT_EQ (joystick.getThumbPosition(), joystick.getThumbBounds().getCenter());
+
+    // Grabbed by the thumb, the joystick takes a press across it and none beside it
+    joystick.setGrabMode (JoystickComponent::GrabMode::thumb);
+    EXPECT_TRUE (joystick.hitTest (61.0f, 0.0f));
+    EXPECT_FALSE (joystick.hitTest (64.0f, 0.0f));
+}
+
 TEST_F (JoystickComponentTests, SnapBackAndDoubleClickRestoreDefaults)
 {
     joystick.setDefaultValue (Axis::x, 0.2);

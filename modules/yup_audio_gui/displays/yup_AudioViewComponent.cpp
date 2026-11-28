@@ -23,6 +23,21 @@ namespace yup
 {
 
 //==============================================================================
+const ComponentTypeInfo& AudioViewComponent::getClassTypeInfo()
+{
+    using V = AudioViewComponent;
+
+    static const auto info = ComponentTypeBuilder<V> (Identifier ("AudioView"))
+                                 .property ("zoomFactor", &V::getZoomFactor, &V::setZoomFactor, 1.0, "How far the view is zoomed in: 1 fits the whole audio. Set while there is no audio, it applies to the audio the view is given next.")
+                                 .property ("labelWidth", &V::getLabelWidth, &V::setLabelWidth, 48, "The width of the channel labels.")
+                                 .property ("channelLabelsVisible", &V::isChannelLabelsVisible, &V::setChannelLabelsVisible, true, "Whether the channel labels are shown.")
+                                 .property ("selectable", &V::isSelectable, &V::setSelectable, false, "Whether the view takes the keyboard focus, to be scrolled and zoomed with the keys.")
+                                 .build();
+
+    return info;
+}
+
+//==============================================================================
 AudioViewComponent::AudioViewComponent (std::shared_ptr<AudioPeakProfileCache> cacheToUse)
 {
     ownedThumbnail = std::make_unique<AudioThumbnail> (cacheToUse);
@@ -64,7 +79,8 @@ void AudioViewComponent::setZoomFactor (double newZoomFactor)
     const int totalSamples = getTotalSamples();
     if (totalSamples <= 0)
     {
-        zoomFactor = 1.0;
+        // With no audio to zoom into, the factor is kept for the audio the view is given next
+        zoomFactor = jmax (1.0, newZoomFactor);
         viewRangeSamples = {};
         updateScrollBar();
         repaint();
@@ -189,6 +205,15 @@ Rectangle<float> AudioViewComponent::getWaveformBounds() const
 
 void AudioViewComponent::paint (Graphics& g)
 {
+    // What a repaint of a part of the view leaves out is not drawn again: the strip an overlay moved out of,
+    // as a playhead does, is repainted without the labels and the lanes beside it. A clip is the least the
+    // repaint is limited to, and without one everything is drawn
+    const auto repaintedArea = g.getClipPath().getBounds();
+    const auto isRepainted = [&repaintedArea] (const Rectangle<float>& area)
+    {
+        return repaintedArea.isEmpty() || repaintedArea.intersects (area);
+    };
+
     paintBackground (g, getLocalBounds());
 
     auto bounds = getLocalBounds().reduced (8);
@@ -233,18 +258,23 @@ void AudioViewComponent::paint (Graphics& g)
                                waveformArea.getWidth(),
                                laneHeight);
 
-        // Draw lane background
-        g.setFillColor (Color (0xFF181818));
-        g.fillRect (lane);
+        // The outline of a lane is half outside it
+        const bool isLaneRepainted = isRepainted (lane.enlarged (1.0f));
 
-        g.setStrokeColor (Color (0xFF2A2A2A));
-        g.setStrokeWidth (1.0f);
-        g.strokeRect (lane);
+        if (isLaneRepainted)
+        {
+            // Draw lane background
+            g.setFillColor (Color (0xFF181818));
+            g.fillRect (lane);
+
+            g.setStrokeColor (Color (0xFF2A2A2A));
+            g.setStrokeWidth (1.0f);
+            g.strokeRect (lane);
+        }
 
         // Draw channel label
-        if (shouldShowLabels)
+        if (auto labelBounds = labelArea.withY (lane.getY()).withHeight (lane.getHeight()); shouldShowLabels && isRepainted (labelBounds))
         {
-            auto labelBounds = labelArea.withY (lane.getY()).withHeight (lane.getHeight());
             g.setFillColor (Colors::white);
             g.fillFittedText (getChannelLabel (channel),
                               font,
@@ -253,7 +283,8 @@ void AudioViewComponent::paint (Graphics& g)
         }
 
         // Paint waveform using new simplified API
-        thumbnail->paintChannel (g, lane, channel, visibleSamples, waveformArea.getWidth());
+        if (isLaneRepainted)
+            thumbnail->paintChannel (g, lane, channel, visibleSamples, waveformArea.getWidth());
     }
 
     paintOverlay (g, waveformArea);
@@ -444,7 +475,6 @@ void AudioViewComponent::setViewRangeSamplesInternal (Range<double> range, bool 
     if (totalSamples <= 0.0)
     {
         viewRangeSamples = {};
-        zoomFactor = 1.0;
         if (notifyScrollBar)
             updateScrollBar();
         repaint();
@@ -547,7 +577,9 @@ void AudioViewComponent::ensureViewRangeIsValid()
         return;
     }
 
-    const auto defaultRange = Range<double>::withStartAndLength (0.0, static_cast<double> (totalSamples));
+    // Audio given to a view that had none is shown as zoomed in as the view was asked to be
+    const double viewLength = jmax (jmin (100.0, static_cast<double> (totalSamples)), static_cast<double> (totalSamples) / jmax (1.0, zoomFactor));
+    const auto defaultRange = Range<double>::withStartAndLength (0.0, viewLength);
     const auto rangeToUse = viewRangeSamples.isEmpty() ? defaultRange : viewRangeSamples;
     setViewRangeSamplesInternal (rangeToUse, true);
 }

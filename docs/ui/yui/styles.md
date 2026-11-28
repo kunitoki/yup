@@ -27,7 +27,7 @@ For a hand-written UI, parse a sheet and attach it to any component. It styles
 that component and everything inside it, including children added later:
 
 ```cpp
-auto sheet = StyleSheet::parse (text);
+auto sheet = YuiParser::parseStyleSheet (text);
 if (sheet.failed())
     DBG (sheet.getErrorMessage());
 else
@@ -37,11 +37,21 @@ cutoff.setComponentID ("cutoff");
 cutoff.addStyleClass ("knob");
 ```
 
+The text is parsed by `yup_gui_markup`. `yup_gui` alone takes a sheet as the
+tree that text is parsed into, so an application leaving the module out writes
+the tree in code and gives it to `StyleSheet::fromTree`:
+
+```cpp
+auto sheet = StyleSheet::fromTree (DataTree ("style", {
+    DataTree ("rule", { { "selector", "Slider:hover" } }, {
+        DataTree ("declaration", { { "name", "opacity" }, { "value", "0.5" } }) }) }));
+```
+
 `setStyleSheet (nullptr)` detaches it, removing every value it computed. A
 sheet is immutable and reference counted, so several trees can share it.
 `getStyleContext()->getDiagnostics()` lists the declarations that failed in the
 last restyle, such as an unknown palette or a value that doesn't compile, and
-`onDiagnostic` is called for each as it is met. Each `YuiDiagnostic` points at
+`onDiagnostic` is called for each as it is met. Each `DataTreeDiagnostic` points at
 the declaration element, which a `YuiDocument` turns into a line and column.
 
 In `.yui`, `id` and `class` set the same thing; `class` takes several names
@@ -170,10 +180,10 @@ stylesheet can reshape the built-in widgets without a drawing:
 
 | Widget | Properties (default) |
 |---|---|
-| `Slider` | `trackWidth` (4) and `thumbSize` (16) for linear sliders; for rotary ones, as proportions of the width, `rotaryInset` (0.1), `rotaryArcWidth` (0.075), `rotaryDialInset` (0.105), `rotaryDialOutlineWidth` (0.0175), `rotaryPointerInset` (0.175) and `rotaryPointerWidth` (0.03) |
+| `Slider` | `trackWidth` (4) and `thumbSize` (16) for linear sliders; for rotary ones, whose dial is a circle as large as the smaller side allows, as proportions of that side, `rotaryInset` (0.1), `rotaryArcWidth` (0.075), `rotaryDialInset` (0.105), `rotaryDialOutlineWidth` (0.0175), `rotaryPointerInset` (0.175) and `rotaryPointerWidth` (0.03) |
 | `TextButton`, `ToggleButton`, `TextEditor`, `ComboBox` | `cornerRadius` (4), `outlineWidth` (1), `focusedOutlineWidth` (2) |
 | `PopupMenu` | `cornerRadius` (4), `outlineWidth` (1), `itemCornerRadius` (2), `itemHeight` (22), `verticalPadding` (4) |
-| `SwitchButton` | `cornerRadius` (unset: a pill), `thumbInset` (4) |
+| `SwitchButton` | `cornerRadius` (unset: a pill), `thumbInset` (4), `thumbSize` (28: the thickness of the switch, twice as long) |
 | `ProgressBar` | `cornerRadius` (unset: a pill) |
 | `ScrollBar` | `thumbInset` (3), `cornerRadius` (unset: a pill) |
 | `Label` | `textHeightProportion` (unset: the font keeps its height) |
@@ -242,10 +252,10 @@ Row {
 
 ### Declaring properties
 
-A rule (or a `style`, `drawing`, `tokens` or `component` block) can declare a
-typed property, giving matched components a known type and optional default that
+A rule (or a `style`, `drawing`, `shader`, `tokens` or `component` block) can
+declare a typed property, giving matched components a known type and optional default that
 other rules and expressions can use without emitting an undeclared-property
-warning (`YuiDiagnostic::Severity::warning`):
+warning (`DataTreeDiagnostic::Severity::warning`):
 
 ```yui
 style { .knob { property glowAmount: number = 0; } }
@@ -501,6 +511,11 @@ and a fill mode (`none`, `forwards`, `backwards`, `both`).
   affecting parent layout bounds.
 - Animated values sit between explicit values and stylesheet values, so a
   value set from C++ still wins.
+- The inputs of a [shader](shaders.md#animating-a-shader) and the properties
+  of the [3D elements](scenes.md#styling-and-animating) are properties like the
+  others: a transition or an animation blends the uniform of an effect, the
+  position of a `Node3D`, the color of a `Light3D` or a factor of a
+  `Material3D`.
 
 ## Shadows, glows, filters, effects and cursors
 
@@ -548,8 +563,22 @@ style {
   runs in its own style layer so it never overwrites a C++ `setComponentEffect()`.
   The filter covers what the component paints in its paint margin and its
   `shadow:` and `glow:` layers too, as in CSS.
-- `effect:` is strictly for user-defined `ComponentEffect` factories registered
-  by the application in `ComponentEffectRegistry`, or `none`:
+- `effect:` draws the component through a shader, or `none`. It takes the name
+  of a [`shader` block](shaders.md#as-the-effect-of-a-component) of the
+  document, whose inputs are then properties the rules set and transition:
+
+  ```yui
+  shader Crt { fragment: "fx/crt.frag"; property intensity: number = 0.5; }
+
+  style {
+      .display       { effect: Crt; transition: intensity 200ms; }
+      .display:hover { intensity: 0.9; }
+  }
+  ```
+
+  or the name of a `ComponentEffect` factory registered by the application in
+  `ComponentEffectRegistry`. A shader of the document wins over a registered
+  effect of the same name:
 
   ```cpp
   ComponentEffectRegistry::getInstance().registerEffect ("customHalftone", []
@@ -654,6 +683,8 @@ between. Unknown names and malformed declarations are reported as diagnostics.
 
 - [The `.yui` language](language.md) - the syntax of every block.
 - [Data-driven drawing](drawing.md) - the drawings a rule selects.
+- [Shaders](shaders.md) - the shaders `effect:` runs, and their inputs.
+- [3D scenes](scenes.md) - styling and animating the elements of a `Scene3D`.
 - [How YUI fits together](architecture.md) - where stylesheet values sit in
   the property cascade.
 - [Component styling](../component-styling.md) - properties, the theme and

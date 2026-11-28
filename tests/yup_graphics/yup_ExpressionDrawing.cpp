@@ -61,6 +61,29 @@ protected:
         return loaded.wasOk() ? loaded.getValue().withHeight (height) : Font();
     }
 
+    /** Returns how many segments of a path are of a kind. */
+    static int countSegments (const Path& path, Path::Verb verb)
+    {
+        int count = 0;
+
+        for (const auto segment : path)
+            count += segment.verb == verb ? 1 : 0;
+
+        return count;
+    }
+
+    /** Returns the points the segments of a kind end at, in order. */
+    static std::vector<Point<float>> getSegmentPoints (const Path& path, Path::Verb verb)
+    {
+        std::vector<Point<float>> points;
+
+        for (const auto segment : path)
+            if (segment.verb == verb)
+                points.push_back (segment.point);
+
+        return points;
+    }
+
     ExpressionContext context;
     ExpressionArray<float> values;
     ExpressionInput<int> row;
@@ -508,6 +531,275 @@ TEST_F (ExpressionDrawingTests, OutlineJoinsTheVerticesOfASeriesAndSkipsLabels)
     EXPECT_EQ (drawing.getReference().getOutline (state, 4).getBounds(), Rectangle<float> (0.0f, 0.0f, 30.0f, 9.0f));
 }
 
+TEST_F (ExpressionDrawingTests, ASeriesWithBasesClosesTheAreaDownToThem)
+{
+    auto drawing = ExpressionDrawing::create (R"(
+        vertex = point (row * 10, row * 2);
+        vertexBase = point (row * 10, 20);
+    )", context);
+    ASSERT_TRUE (drawing.wasOk()) << drawing.getErrorMessage().toStdString();
+
+    ExpressionState state (drawing.getReference().getProgram());
+    state.bindRowIndex (row);
+
+    const auto area = drawing.getReference().getOutline (state, 3);
+
+    // The line goes through the vertices, then back along the bases, and closes
+    EXPECT_EQ (area.getBounds(), Rectangle<float> (0.0f, 0.0f, 20.0f, 20.0f));
+    EXPECT_EQ (countSegments (area, Path::Verb::MoveTo), 1);
+    EXPECT_EQ (countSegments (area, Path::Verb::Close), 1);
+
+    const auto corners = getSegmentPoints (area, Path::Verb::LineTo);
+    ASSERT_EQ (corners.size(), 5u);
+    EXPECT_EQ (corners[0], Point<float> (10.0f, 2.0f));
+    EXPECT_EQ (corners[1], Point<float> (20.0f, 4.0f));
+    EXPECT_EQ (corners[2], Point<float> (20.0f, 20.0f));
+    EXPECT_EQ (corners[3], Point<float> (10.0f, 20.0f));
+    EXPECT_EQ (corners[4], Point<float> (0.0f, 20.0f));
+
+    // Without bases the vertices are a line, left open
+    auto line = ExpressionDrawing::create ("vertex = point (row * 10, row * 2);", context);
+    ASSERT_TRUE (line.wasOk()) << line.getErrorMessage().toStdString();
+
+    ExpressionState lineState (line.getReference().getProgram());
+    lineState.bindRowIndex (row);
+
+    const auto open = line.getReference().getOutline (lineState, 3);
+    EXPECT_EQ (countSegments (open, Path::Verb::LineTo), 2);
+    EXPECT_EQ (countSegments (open, Path::Verb::Close), 0);
+}
+
+TEST_F (ExpressionDrawingTests, TheBasesOfASeriesCanBeAnotherCurveAndEachSeriesHasItsOwn)
+{
+    auto drawing = ExpressionDrawing::create (R"(
+        series = row % 2;
+        let x = (row / 2) * 10;
+        vertex = point (x, series * 100 + values[row / 2]);
+        vertexBase = point (x, series * 100 + values[row / 2] + 8);
+    )", context);
+    ASSERT_TRUE (drawing.wasOk()) << drawing.getErrorMessage().toStdString();
+
+    const float data[] = { 0.0f, 4.0f, 2.0f };
+
+    ExpressionState state (drawing.getReference().getProgram(), 4);
+    state.bindArray (values, data, 3);
+    state.bindRowIndex (row);
+
+    // Two bands of three vertices each, one above the other
+    const auto bands = drawing.getReference().getOutline (state, 6);
+
+    EXPECT_EQ (bands.getBounds(), Rectangle<float> (0.0f, 0.0f, 20.0f, 112.0f));
+    EXPECT_EQ (countSegments (bands, Path::Verb::MoveTo), 2);
+    EXPECT_EQ (countSegments (bands, Path::Verb::Close), 2);
+    EXPECT_EQ (countSegments (bands, Path::Verb::LineTo), 10);
+}
+
+TEST_F (ExpressionDrawingTests, ASmoothedSeriesCurvesThroughItsVertices)
+{
+    auto drawing = ExpressionDrawing::create (R"(
+        vertex = point (row * 10, values[row]);
+        vertexSmooth = 1;
+    )", context);
+    ASSERT_TRUE (drawing.wasOk()) << drawing.getErrorMessage().toStdString();
+
+    const float data[] = { 0.0f, 10.0f, 0.0f, 10.0f };
+
+    ExpressionState state (drawing.getReference().getProgram());
+    state.bindArray (values, data, 4);
+    state.bindRowIndex (row);
+
+    const auto curve = drawing.getReference().getOutline (state, 4);
+
+    EXPECT_EQ (countSegments (curve, Path::Verb::LineTo), 0);
+
+    // Every curve ends on a vertex
+    const auto ends = getSegmentPoints (curve, Path::Verb::CubicTo);
+    ASSERT_EQ (ends.size(), 3u);
+    EXPECT_EQ (ends[0], Point<float> (10.0f, 10.0f));
+    EXPECT_EQ (ends[1], Point<float> (20.0f, 0.0f));
+    EXPECT_EQ (ends[2], Point<float> (30.0f, 10.0f));
+
+    // Two vertices have no neighbours to follow: they are joined by a line
+    const auto pair = drawing.getReference().getOutline (state, 2);
+    EXPECT_EQ (countSegments (pair, Path::Verb::CubicTo), 0);
+    EXPECT_EQ (countSegments (pair, Path::Verb::LineTo), 1);
+
+    // The bases are smoothed as the vertices are, and no smoothing keeps the lines
+    auto band = ExpressionDrawing::create (R"(
+        vertex = point (row * 10, values[row]);
+        vertexBase = point (row * 10, values[row] + 20);
+        vertexSmooth = x;
+    )", [this] { auto smoothed = context; smoothed.addInput<float> ("x"); return smoothed; }());
+    ASSERT_TRUE (band.wasOk()) << band.getErrorMessage().toStdString();
+
+    const auto smoothing = band.getReference().getProgram().getInput<float> ("x");
+    ASSERT_TRUE (smoothing.wasOk());
+
+    ExpressionState bandState (band.getReference().getProgram());
+    bandState.bindArray (values, data, 4);
+    bandState.bindRowIndex (row);
+
+    bandState.set (smoothing.getValue(), 0.5f);
+    const auto smooth = band.getReference().getOutline (bandState, 4);
+    EXPECT_EQ (countSegments (smooth, Path::Verb::CubicTo), 6);
+    EXPECT_EQ (countSegments (smooth, Path::Verb::LineTo), 1);
+    EXPECT_EQ (countSegments (smooth, Path::Verb::Close), 1);
+
+    bandState.set (smoothing.getValue(), 0.0f);
+    const auto straight = band.getReference().getOutline (bandState, 4);
+    EXPECT_EQ (countSegments (straight, Path::Verb::CubicTo), 0);
+    EXPECT_EQ (countSegments (straight, Path::Verb::LineTo), 7);
+}
+
+TEST_F (ExpressionDrawingTests, CacheDrawsASeriesAgainWithTheBuffersItKept)
+{
+    auto graphicsContext = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    ASSERT_NE (graphicsContext, nullptr);
+    auto renderer = graphicsContext->makeRenderer (200, 200);
+    ASSERT_NE (renderer, nullptr);
+    Graphics g (*graphicsContext, *renderer);
+
+    auto drawing = ExpressionDrawing::create (R"(
+        series = row % 2;
+        vertex = point (row * 10, values[row] * 100);
+        vertexBase = point (row * 10, 150);
+        vertexSmooth = 0.5;
+        fill = rgb (0, 0, 255);
+        stroke = rgb (255, 0, 0);
+    )", context);
+    ASSERT_TRUE (drawing.wasOk()) << drawing.getErrorMessage().toStdString();
+
+    std::vector<float> data { 0.1f, 0.4f, 0.2f, 0.8f, 0.6f, 0.3f };
+
+    ExpressionState state (drawing.getReference().getProgram(), 4);
+    state.bindArray (values, data.data(), (int) data.size());
+    state.bindRowIndex (row);
+
+    ExpressionDrawing::Cache cache;
+
+    drawing.getReference().draw (g, state, (int) data.size(), nullptr, &cache);
+    EXPECT_TRUE (cache.wasRebuilt());
+
+    drawing.getReference().draw (g, state, (int) data.size(), nullptr, &cache);
+    EXPECT_FALSE (cache.wasRebuilt());
+
+    // Levels changing in place, with fewer rows then more, are drawn from the same buffers
+    for (int i = 0; i < 4; ++i)
+    {
+        data[1] = 0.1f * static_cast<float> (i);
+        drawing.getReference().draw (g, state, i % 2 == 0 ? 3 : (int) data.size(), nullptr, &cache);
+        EXPECT_TRUE (cache.wasRebuilt());
+    }
+}
+
+TEST_F (ExpressionDrawingTests, CacheBuildsASeriesReducedToItsPixelsAgainForALargerScale)
+{
+    auto graphicsContext = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    ASSERT_NE (graphicsContext, nullptr);
+    auto renderer = graphicsContext->makeRenderer (200, 200);
+    ASSERT_NE (renderer, nullptr);
+    Graphics g (*graphicsContext, *renderer);
+
+    // 16 vertices for each unit of x, across 64 units
+    auto drawing = ExpressionDrawing::create ("vertex = point (row / 16.0, values[row] * 100); stroke = rgb (255, 0, 0);", context);
+    ASSERT_TRUE (drawing.wasOk()) << drawing.getErrorMessage().toStdString();
+
+    std::vector<float> data (1024);
+    for (std::size_t i = 0; i < data.size(); ++i)
+        data[i] = static_cast<float> (i % 7) / 6.0f;
+
+    ExpressionState state (drawing.getReference().getProgram(), 4);
+    state.bindArray (values, data.data(), (int) data.size());
+    state.bindRowIndex (row);
+
+    ExpressionDrawing::Cache cache;
+
+    const auto drawAt = [&] (const AffineTransform& transform)
+    {
+        g.setTransform (transform);
+        drawing.getReference().draw (g, state, (int) data.size(), nullptr, &cache);
+        return cache.wasRebuilt();
+    };
+
+    // 16 vertices a pixel: the line is kept as what each column of pixels shows of it
+    EXPECT_TRUE (drawAt (AffineTransform()));
+    EXPECT_FALSE (drawAt (AffineTransform()));
+
+    // Twice the columns show what half of them could not: the line is built again from all its vertices
+    EXPECT_TRUE (drawAt (AffineTransform::scaling (2.0f)));
+    EXPECT_FALSE (drawAt (AffineTransform::scaling (2.0f)));
+
+    // Drawn smaller, taller or elsewhere it has all the vertices it takes
+    EXPECT_FALSE (drawAt (AffineTransform()));
+    EXPECT_FALSE (drawAt (AffineTransform::scaling (0.5f)));
+    EXPECT_FALSE (drawAt (AffineTransform::scaling (2.0f, 6.0f)));
+    EXPECT_FALSE (drawAt (AffineTransform::scaling (2.0f).translated (30.0f, 10.0f)));
+
+    // At 4 vertices a pixel none is taken away: the line is kept whole, for any scale after that
+    EXPECT_TRUE (drawAt (AffineTransform::scaling (4.0f)));
+    EXPECT_FALSE (drawAt (AffineTransform::scaling (4.0f)));
+    EXPECT_FALSE (drawAt (AffineTransform::scaling (8.0f)));
+    EXPECT_FALSE (drawAt (AffineTransform()));
+}
+
+TEST_F (ExpressionDrawingTests, OnlyADenseSeriesOfStraightLinesGoingOneWayIsReducedToItsPixels)
+{
+    auto graphicsContext = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    ASSERT_NE (graphicsContext, nullptr);
+    auto renderer = graphicsContext->makeRenderer (200, 200);
+    ASSERT_NE (renderer, nullptr);
+    Graphics g (*graphicsContext, *renderer);
+
+    std::vector<float> data (1024);
+    for (std::size_t i = 0; i < data.size(); ++i)
+        data[i] = static_cast<float> (i % 7) / 6.0f;
+
+    // A series kept with fewer vertices than it has is the one a cache builds again when it is drawn twice as large
+    const auto isReduced = [&] (const String& text, int numRows = 1024)
+    {
+        auto drawing = ExpressionDrawing::create (text, context);
+        EXPECT_TRUE (drawing.wasOk()) << drawing.getErrorMessage().toStdString();
+        if (drawing.failed())
+            return false;
+
+        ExpressionState state (drawing.getReference().getProgram(), 4);
+        state.bindArray (values, data.data(), (int) data.size());
+        state.bindRowIndex (row);
+
+        ExpressionDrawing::Cache cache;
+
+        g.setTransform (AffineTransform());
+        drawing.getReference().draw (g, state, numRows, nullptr, &cache);
+        drawing.getReference().draw (g, state, numRows, nullptr, &cache);
+        EXPECT_FALSE (cache.wasRebuilt());
+
+        g.setTransform (AffineTransform::scaling (2.0f));
+        drawing.getReference().draw (g, state, numRows, nullptr, &cache);
+        return cache.wasRebuilt();
+    };
+
+    // 16 vertices for each unit of x
+    const String dense ("vertex = point (row / 16.0, values[row] * 100);");
+    EXPECT_TRUE (isReduced (dense));
+
+    // Four vertices a pixel at most are all drawn
+    EXPECT_FALSE (isReduced ("vertex = point (row / 4.0, values[row] * 100);"));
+    EXPECT_FALSE (isReduced (dense, 4));
+
+    // A line coming back has no column of its own to be reduced to
+    EXPECT_FALSE (isReduced ("vertex = point ((row < 512 ? row : 1023 - row) / 16.0, values[row] * 100);"));
+
+    // A curve follows the vertices around each one, the transform of a row gives its units another size, and dashes
+    // are laid along the whole length of the line
+    EXPECT_FALSE (isReduced (dense + " vertexSmooth = 0.5;"));
+    EXPECT_FALSE (isReduced (dense + " transform = transform.translation (0, 5);"));
+    EXPECT_FALSE (isReduced (dense + " stroke = rgb (255, 0, 0); strokeDash = dash (6, 3);"));
+
+    // The bases are reduced as the vertices are, and each series alone
+    EXPECT_TRUE (isReduced (dense + " vertexBase = point (row / 16.0, 100); fill = rgb (0, 0, 255);"));
+    EXPECT_TRUE (isReduced ("series = row % 2; vertex = point (row / 32.0, values[row] * 50 + series * 50);"));
+}
+
 TEST_F (ExpressionDrawingTests, RoundsRectanglesWithEllipticalCorners)
 {
     auto drawing = ExpressionDrawing::create ("rect = rect (0, 0, 100, 60); cornerSize = size (20, 5); cornerRadius = 30", context);
@@ -596,8 +888,8 @@ protected:
         host->makeCurrent();
     }
 
-    /** Compiles a drawing, draws one row of it and returns the RGBA pixels of the canvas. */
-    std::vector<uint8> render (StringRef text, const std::function<void (ExpressionState&)>& setInputs = nullptr)
+    /** Compiles a drawing, draws its rows and returns the RGBA pixels of the canvas. */
+    std::vector<uint8> render (StringRef text, const std::function<void (ExpressionState&)>& setInputs = nullptr, int numRows = 1)
     {
         auto drawing = ExpressionDrawing::create (text, context);
         EXPECT_TRUE (drawing.wasOk()) << drawing.getErrorMessage().toStdString();
@@ -610,7 +902,7 @@ protected:
         if (setInputs != nullptr)
             setInputs (state);
 
-        drawing.getReference().draw (canvas->beginDraw(), state);
+        drawing.getReference().draw (canvas->beginDraw(), state, numRows);
 
         std::vector<uint8> pixels (static_cast<std::size_t> (size * size * 4));
         if (! canvas->commit() || ! canvas->readPixels (pixels.data(), pixels.size()))
@@ -683,6 +975,70 @@ TEST_F (ExpressionDrawingGpuTests, FillAndStrokeOpacityFadeTheirOwnPaint)
     EXPECT_NEAR (alphaAt (pixels, 32, 32), 128, 12);
     EXPECT_NEAR (alphaAt (pixels, 14, 32), 64, 12);
     EXPECT_LT (alphaAt (pixels, 4, 32), 10);
+}
+
+TEST_F (ExpressionDrawingGpuTests, ASeriesWithBasesFillsItsAreaAndStrokesOnlyItsLine)
+{
+    const auto bindRows = [this] (ExpressionState& state)
+    {
+        state.bindRowIndex (row);
+    };
+
+    // A line across the canvas at y = 16, closed down to y = 48
+    const String area ("vertex = point (row * 32, 16); vertexBase = point (row * 32, 48);");
+
+    const auto filled = render (area + " fill = rgb (255, 0, 0);", bindRows, 3);
+    ASSERT_FALSE (filled.empty());
+    EXPECT_GT (alphaAt (filled, 32, 32), 240);
+    EXPECT_LT (alphaAt (filled, 32, 8), 10);
+    EXPECT_LT (alphaAt (filled, 32, 56), 10);
+
+    // The stroke follows the vertices, and leaves the bases and the sides alone
+    const auto stroked = render (area + " stroke = rgb (255, 0, 0); strokeWidth = 4;", bindRows, 3);
+    ASSERT_FALSE (stroked.empty());
+    EXPECT_GT (alphaAt (stroked, 32, 16), 240);
+    EXPECT_LT (alphaAt (stroked, 32, 32), 10);
+    EXPECT_LT (alphaAt (stroked, 32, 48), 10);
+
+    const auto both = render (area + " fill = rgb (0, 0, 255); stroke = rgb (255, 0, 0); strokeWidth = 4;", bindRows, 3);
+    ASSERT_FALSE (both.empty());
+    EXPECT_GT (alphaAt (both, 32, 16), 240);
+    EXPECT_GT (alphaAt (both, 32, 32), 240);
+    EXPECT_LT (alphaAt (both, 32, 56), 10);
+}
+
+TEST_F (ExpressionDrawingGpuTests, ASeriesDenserThanItsPixelsPaintsWhatEachColumnShows)
+{
+    const auto bindRows = [this] (ExpressionState& state)
+    {
+        state.bindRowIndex (row);
+    };
+
+    // 16 vertices for each of the 64 columns of pixels, going from y = 16 down to y = 48 and back
+    const String zigzag ("vertex = point (row / 16.0, row % 2 == 0 ? 16 : 48);");
+
+    const auto stroked = render (zigzag + " stroke = rgb (255, 0, 0); strokeWidth = 2;", bindRows, 1024);
+    ASSERT_FALSE (stroked.empty());
+
+    for (const auto x : { 8, 32, 56 })
+    {
+        for (const auto y : { 20, 32, 44 })
+            EXPECT_GT (alphaAt (stroked, x, y), 200) << "at " << x << ", " << y;
+
+        EXPECT_LT (alphaAt (stroked, x, 6), 10) << "at x = " << x;
+        EXPECT_LT (alphaAt (stroked, x, 58), 10) << "at x = " << x;
+    }
+
+    // Filled down to y = 60: what lies under the line is covered, and nothing over the line or under its bases
+    const auto filled = render (zigzag + " vertexBase = point (row / 16.0, 60); fill = rgb (0, 0, 255);", bindRows, 1024);
+    ASSERT_FALSE (filled.empty());
+
+    for (const auto x : { 8, 32, 56 })
+    {
+        EXPECT_GT (alphaAt (filled, x, 54), 240) << "at x = " << x;
+        EXPECT_LT (alphaAt (filled, x, 8), 10) << "at x = " << x;
+        EXPECT_LT (alphaAt (filled, x, 63), 10) << "at x = " << x;
+    }
 }
 #endif
 

@@ -37,7 +37,8 @@ flowchart LR
 - `YuiParser` turns the text, and the files it imports, into one `DataTree`.
   On a reload, `YuiTreeDiff` patches the live tree with it, so the builder keeps
   the components of the elements still there.
-- `StyleSheet` collects the `style`, `palette` and `drawing` blocks of that tree.
+- `StyleSheet` collects the `style`, `palette`, `drawing` and `shader` blocks of
+  that tree.
 - `YuiBuilder` creates the components, applies their properties and routes every
   expression through a `BindingGraph`.
 - `Component::setStyleSheet` attaches the sheet to the root, which creates the
@@ -45,11 +46,20 @@ flowchart LR
 - `YuiDocument` runs these steps in order and owns the results.
 - `YuiLoader` feeds a document the text of files or embedded resources, with
   in-memory overrides for unsaved edits, and reloads it when the files change.
+  It serves the shaders, the models and the textures the document reads the
+  same way.
   `YuiView` owns a document and its loader, and hosts the root as a child
   filling its bounds.
 
-Only the parser, the builder and the document are specific to `.yui`. A
+Only the `Yui*` classes are specific to `.yui`, and they are the
+`yup_gui_markup` module. Everything else on this page is part of `yup_gui`: a
 hand-written C++ tree can take a stylesheet, drawings and a `BindingGraph` too.
+
+The two modules meet at the tree of a document: `yup_gui` reads its styles,
+its drawings, its shaders and the types of the properties it declares, while
+`yup_gui_markup` turns the text into that tree and the tree into components.
+The grammar of `yup_gui_markup`, which `YuiDocument::createSchema()`
+describes, says what each element may hold.
 
 ## Properties, the shared language
 
@@ -100,7 +110,8 @@ classDiagram
 - Type infos chain to their base, so a `Row` has every property of `FlexBox`,
   `Layout` and `Component`. Type selectors and the builder walk the same chain.
 - `ComponentTypeRegistry` maps the `.yui` type names to type infos and creates
-  instances from them.
+  instances from them. It points at the type infos, which live as long as the
+  process or are taken out with `unregisterType` before they go.
 - A component returns its class type info, unless `setTypeInfo` gave it one of
   its own. Composite components and the document root (for tokens) use this to
   add properties at runtime.
@@ -171,10 +182,10 @@ classDiagram
     direction LR
     class StyleSheet {
         fromTree()
-        parse()
         getRules()
         findPalette()
         findDrawing()
+        findShader()
         findKeyframes()
     }
     class Rule {
@@ -188,6 +199,7 @@ classDiagram
     class StyleContext {
         refresh()
         propertyChanged()
+        findShader()
     }
     class StyleAnimator {
         parseTransitions()
@@ -214,12 +226,16 @@ classDiagram
     StyleContext ..> StyleState : writes
     StyleContext ..> DrawingStyle : installs
     StyleContext ..> ComponentEffectRegistry : effect
+    StyleContext ..> ShaderEffect : effect
     ComponentStyle <|-- DrawingStyle
     Component o-- ComponentStyle : setStyle
 ```
 
 - A `StyleSheet` is immutable and shared. It holds rules (a `StyleSelector` and
-  its declarations), `@keyframes`, palettes and drawings.
+  its declarations), `@keyframes`, palettes, drawings and shaders.
+- A sheet is built from a tree with `StyleSheet::fromTree`. `yup_gui` reads no
+  text: `YuiParser` turns it into that tree, and an application without
+  `yup_gui_markup` writes the tree in code.
 - The component the sheet is attached to owns the `StyleContext`. The context
   marks components dirty when their classes, interaction state, children or a
   property a selector watches change.
@@ -233,8 +249,12 @@ classDiagram
   `StyleAnimator`. While something runs, every frame writes the values to show
   into the animated layer of the `StyleState`.
 - `shadow:` layers are kept in the `StyleState` and painted by the component
-  before its content. `effect:` creates a `ComponentEffect` through the
-  `ComponentEffectRegistry`, `cursor:` sets the mouse cursor.
+  before its content. `effect:` runs a `shader` of the sheet through a
+  `ShaderEffect`, or creates a `ComponentEffect` through the
+  `ComponentEffectRegistry`, and `cursor:` sets the mouse cursor.
+- The context loads the shaders of its sheet once, when they are first used,
+  and gives the same `GpuImageShader` to the effects, the drawings and the
+  filters naming it. It loads one again when its file changes.
 
 ### One frame
 
@@ -369,7 +389,7 @@ flowchart LR
         tokens["Root type info<br/>tokens as inherited properties"]
         composite["Type info per<br/>component block"]
         model["BindingModel<br/>provider as Component"]
-        handler["Signal handler<br/>action (...) or root.sig (...)"]
+        handler["Signal handler<br/>action (...), set (...), edit (...) or root.sig (...)"]
     end
 
     subgraph treeSide [Component tree]
@@ -384,6 +404,7 @@ flowchart LR
     composite -- setTypeInfo --> instance
     model <-->|two-way link| linked
     linked -- "ComponentSignal<br/>onValueChanged" --> handler
+    handler -- "set" --> model
 
     classDef self fill:#005aff,color:#fff,stroke:#003db3;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
@@ -400,9 +421,31 @@ flowchart LR
   links. Drags on linked components open and close the provider's gestures, and
   any other change is a gesture of its own.
 - A property named after a signal connects a handler. When the signal fires, the
-  handler runs document actions or emits signals declared by composites, reading
-  the signal's arguments through the names it gives them. `changed property:`
-  handlers run the same way when a property changes.
+  handler runs document actions, sets properties of components and models or
+  emits signals declared by composites, reading the signal's arguments through
+  the names it gives them. `changed property:` handlers run the same way when a
+  property changes, and `onDoubleClick` ones when a component is double
+  clicked: the builder keeps a `ComponentListener` for each, the one of a
+  double click taking it in place of the component.
+- An `edit (...)` call opens the one `InPlaceTextEditor` of the builder over a
+  component, inside the document root. The text it opens with and the value of
+  what is typed come from the expressions of the call, else from the provider
+  of the model the property is linked to, which `BindingGraph::findLinkedModel`
+  finds through the aliases between the two.
+- The elements of a [3D scene](scenes.md) are component types too, declared by
+  `yup_renderer` and registered by `registerYuiComponentTypes()` when the
+  application links it. The builder creates them as it creates widgets, and
+  each one stands for an entity of the `Scene` its `Scene3D` shows, so
+  bindings, stylesheets and reloads reach 3D objects with no machinery of their
+  own.
+- Components reach the document they were built by through
+  `ComponentDocument`, the interface of `yup_gui` that `YuiDocument`
+  implements: `ComponentDocument::findFor (component)` finds it, to read the
+  files next to it, to listen to its reloads and to report problems where they
+  are written. A load forgets the problems reported before it and changes
+  `getLoadGeneration()`, which a component compares to report again what is
+  still wrong. This is how the 3D elements and `ImageComponent` work with
+  documents without depending on `yup_gui_markup`.
 
 ## See also
 

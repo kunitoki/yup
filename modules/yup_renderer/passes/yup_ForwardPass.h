@@ -63,6 +63,18 @@ namespace yup
     only the layers variant fails, they shade without the layers.
     The full tier variants always shade the layers. The clearcoat follows the interpolated normal.
 
+    The items a MaterialShaderNode colors (SceneDrawList::DrawItem::materialShader) are drawn with
+    the pipelines of their MaterialShader instead: yup_MaterialShader.frag reads the ViewBlock, the
+    LightingBlock for its output mode, set 2 as GeometryBindings binds it for the draw, and the
+    uniform block of the material at set 2 binding MaterialShader::uniformBlockBinding, a dynamic
+    uniform buffer holding the values of the node, and nothing of the lighting. prepareMaterialShader()
+    compiles them from the variant of the tier, the full one with a velocity target: one pipeline
+    per blending, culling and winding, as the pass has its own, so on the full tier the opaque
+    ones are the only opaque pipelines of the pass. They belong to the pass, with the device it
+    draws with, and never to the shader, which holds nothing of a device: they are kept by shader
+    and attachments while the shader lives, a failure included, and let go by the first render()
+    after it was destroyed.
+
     @internal
 */
 class YUP_API ForwardPass
@@ -102,8 +114,27 @@ public:
     */
     Result prepare (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount, bool areaLights);
 
+    /** Compiles the pipelines drawing the items of @p shader into @p targets, once per shader
+        and attachments (formats, sample count and velocity target): a failure is logged once and
+        remembered instead of retried every frame.
+
+        SceneRenderer asks before it builds its draw list (SceneDrawList::BuildOptions::materialShaders),
+        so the items of a shader that cannot be drawn are shaded by their materials: a shader
+        without the variant of the tier, or whose pipelines the device does not compile.
+
+        @returns Whether render() draws the items of @p shader with it into these targets, or
+                 what prevents it: that the shader has no variant for the tier, or what the
+                 device said of its pipelines.
+    */
+    Result prepareMaterialShader (const GpuDevice::Ptr& device, const MaterialShader::Ptr& shader, const Targets& targets, uint32_t sampleCount);
+
     /** Draws @p opaque then @p blend items, after clearing the targets and drawing the visible
-        environment when @p clear is set, or over the loaded targets otherwise.
+        environment when @p clear is set, or over the loaded targets otherwise. The items out of
+        the view (SceneDrawList::DrawItem::inView) are not drawn.
+
+        An item of a material shader (SceneDrawList::DrawItem::materialShader) is drawn with the
+        pipelines prepareMaterialShader() compiled for its shader and these targets, and the
+        values of its node. Without them it is drawn with its material.
 
         On the raster tier each item is lit by the lights its SceneDrawList::DrawItem::lightIndices
         pick from LightingInputs::packedLights, their intensities scaled by its
@@ -117,7 +148,8 @@ public:
         @param frame        The frame to record into.
         @param view         The camera of the frame.
         @param lighting     What the surfaces are lit by.
-        @param opaque       The opaque and masked items, writing depth. Raster only: must be empty with a velocity target.
+        @param opaque       The opaque and masked items, writing depth. With a velocity target, the full tier, only
+                            the ones a material shader draws: the others are shaded through GBufferPass and LightingPass.
         @param blend        The blended items, testing depth without writing it.
         @param targets      The attachments.
         @param output       What the color target receives.
@@ -142,11 +174,14 @@ public:
 
 private:
     struct Variant;
+    struct MaterialPipelines;
 
     ResultValue<Variant*> prepareVariant (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount, bool areaLights, bool shadowFilters, bool localIndirect, bool layers);
+    const MaterialPipelines* findMaterialPipelines (const SceneDrawList::DrawItem& item, const Variant& variant) const;
     Result createDefaults (const GpuDevice::Ptr& device);
 
     std::vector<std::unique_ptr<Variant>> variants;
+    std::vector<std::unique_ptr<MaterialPipelines>> materialPipelines; // Those of the material shaders drawn, see prepareMaterialShader()
     std::optional<Result> defaults;
     GeometryBindings geometry;
     GpuTexture::Ptr blackCube; // The environment without one

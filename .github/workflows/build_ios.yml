@@ -23,6 +23,9 @@ on:
 env:
   ACTION_RUNNER: github-actions
   IOS_PLATFORM: OS64
+  CCACHE_SIZE_TESTS: '{"Debug": "250M", "Release": "100M"}'
+  CCACHE_SIZE_EXAMPLES: '{"graphics": "175M", "console": "25M"}'
+  CCACHE_SIZE_EXAMPLE: 100M
 
 jobs:
   configure:
@@ -35,13 +38,14 @@ jobs:
       CMAKE_OBJCXX_COMPILER_LAUNCHER: ccache
     steps:
     - uses: actions/checkout@v7
-    - uses: hendrikmuhs/ccache-action@v1.2
+    - uses: ./.github/actions/ccache
       with:
         key: ios-configure
+        max-size: 100M
     - name: Configure
       run: |
         cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
-          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build \
+          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -C ${{ github.workspace }}/.github/ci_settings.cmake \
           -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON -DYUP_TEST_MODULES="${{ inputs.test_modules }}"
     - name: Build SDL
       run: |
@@ -70,10 +74,10 @@ jobs:
       CMAKE_OBJCXX_COMPILER_LAUNCHER: ccache
     steps:
     - uses: actions/checkout@v7
-    - uses: hendrikmuhs/ccache-action@v1.2
+    - uses: ./.github/actions/ccache
       with:
         key: ios-tests-${{ matrix.config }}
-        max-size: 1G
+        max-size: ${{ fromJson(env.CCACHE_SIZE_TESTS)[matrix.config] }}
     - uses: actions/cache/restore@v5
       id: cache-restore
       with:
@@ -83,7 +87,7 @@ jobs:
       if: steps.cache-restore.outputs.cache-hit != 'true'
       run: |
         cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
-          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build \
+          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -C ${{ github.workspace }}/.github/ci_settings.cmake \
           -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON -DYUP_TEST_MODULES="${{ inputs.test_modules }}"
     # Built only, the runners need a device or simulator to run
     - run: cmake --build ${{ runner.workspace }}/build --config ${{ matrix.config }} --target yup_tests
@@ -103,9 +107,10 @@ jobs:
       CMAKE_OBJCXX_COMPILER_LAUNCHER: ccache
     steps:
     - uses: actions/checkout@v7
-    - uses: hendrikmuhs/ccache-action@v1.2
+    - uses: ./.github/actions/ccache
       with:
         key: ios-example-${{ matrix.example }}
+        max-size: ${{ fromJson(env.CCACHE_SIZE_EXAMPLES)[matrix.example] || env.CCACHE_SIZE_EXAMPLE }}
     - uses: actions/cache/restore@v5
       id: cache-restore
       with:
@@ -115,7 +120,7 @@ jobs:
       if: steps.cache-restore.outputs.cache-hit != 'true'
       run: |
         cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
-          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build \
+          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -C ${{ github.workspace }}/.github/ci_settings.cmake \
           -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON -DYUP_TEST_MODULES="${{ inputs.test_modules }}"
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --target ${{ fromJson(inputs.example_targets)[matrix.example] }}
     - run: cmake --build ${{ runner.workspace }}/build --config Release --target ${{ fromJson(inputs.example_targets)[matrix.example] }}

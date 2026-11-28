@@ -28,6 +28,9 @@ namespace
 //==============================================================================
 // Shader bundles built with the module, see shaderBundles in yup_renderer.h
 
+constexpr uint8_t ssrDownsampleShaderBundle[] = {
+#include "yup_renderer_shaders/yup_SsrDownsample.inc"
+};
 constexpr uint8_t ssrTraceShaderBundle[] = {
 #include "yup_renderer_shaders/yup_SsrTrace.inc"
 };
@@ -41,6 +44,7 @@ constexpr uint8_t ssrDenoiseShaderBundle[] = {
 // The hit uv needs more than a half float: near uv 1 its step is a pixel and a half at 3456 wide
 constexpr auto traceFormat = GpuTextureFormat::rgba32float;
 constexpr auto reflectionsFormat = GpuTextureFormat::rgba16float;
+constexpr auto hitDistanceFormat = GpuTextureFormat::r16float;
 
 // The hits behind a surface by less than this fraction of its view depth count, the farther ones pass behind it
 constexpr float hitThickness = 0.05f;
@@ -81,10 +85,17 @@ Result ReflectionPass::prepare()
         if (! device->isFormatRenderable (traceFormat))
             return Result::fail ("rgba32float is not renderable");
 
+        if (! device->isFormatRenderable (hitDistanceFormat))
+            return Result::fail ("r16float is not renderable");
+
+        if (auto result = downsample.prepare (device, ssrDownsampleShaderBundle, sizeof (ssrDownsampleShaderBundle), reflectionsFormat); result.failed())
+            return Result::fail ("Unable to compile the radiance pyramid: " + result.getErrorMessage());
+
         if (auto result = trace.prepare (device, ssrTraceShaderBundle, sizeof (ssrTraceShaderBundle), traceFormat); result.failed())
             return Result::fail ("Unable to compile the trace: " + result.getErrorMessage());
 
-        if (auto result = resolve.prepare (device, ssrResolveShaderBundle, sizeof (ssrResolveShaderBundle), reflectionsFormat); result.failed())
+        const GpuTextureFormat resolveFormats[] = { reflectionsFormat, hitDistanceFormat };
+        if (auto result = resolve.prepare (device, ssrResolveShaderBundle, sizeof (ssrResolveShaderBundle), resolveFormats); result.failed())
             return Result::fail ("Unable to compile the resolve: " + result.getErrorMessage());
 
         if (auto result = denoise.prepare (device, ssrDenoiseShaderBundle, sizeof (ssrDenoiseShaderBundle), reflectionsFormat); result.failed())
@@ -137,13 +148,23 @@ GpuTexture::Ptr ReflectionPass::render (GpuFrame& frame, const ViewData& view, c
         traceDesc.label = "ReflectionPass trace";
         const auto traced = resources.acquire (traceDesc);
 
+        // The previous scene color halved, then halved again for every level
+        GpuTextureDesc pyramidDesc (jmax (1u, static_cast<uint32> (previousSceneColor->getWidth()) / 2), jmax (1u, static_cast<uint32> (previousSceneColor->getHeight()) / 2), reflectionsFormat, true);
+        pyramidDesc.mipLevels = jmin (static_cast<uint32> (maxRadianceLevels), static_cast<uint32> (std::bit_width (jmax (pyramidDesc.width, pyramidDesc.height))));
+        pyramidDesc.label = "ReflectionPass radiance";
+        const auto pyramid = resources.acquire (pyramidDesc);
+
         GpuTextureDesc outputDesc (hiZ->getWidth(), hiZ->getHeight(), reflectionsFormat, true);
         outputDesc.label = "ReflectionPass history";
         const auto history = resources.getHistory ("ssr", outputDesc);
-        outputDesc.label = "ReflectionPass output";
-        auto reflections = resources.acquire (outputDesc);
+        outputDesc.label = "ReflectionPass resolve";
+        const auto resolved = resources.acquire (outputDesc);
 
-        if (traced == nullptr || reflections == nullptr || history.read == nullptr || history.write == nullptr)
+        GpuTextureDesc hitDistanceDesc (hiZ->getWidth(), hiZ->getHeight(), hitDistanceFormat, true);
+        hitDistanceDesc.label = "ReflectionPass hit distance";
+        const auto hitDistance = resources.acquire (hitDistanceDesc);
+
+        if (traced == nullptr || pyramid == nullptr || resolved == nullptr || hitDistance == nullptr || history.read == nullptr || history.write == nullptr)
         {
             failure = "unable to create the targets";
             return nullptr;
@@ -169,21 +190,42 @@ GpuTexture::Ptr ReflectionPass::render (GpuFrame& frame, const ViewData& view, c
         };
 
         // Every draw writes every texel, so the targets need no clear
-        const auto drawn = trace.draw (frame, traced, {}, bindInputs)
-                        && resolve.draw (frame, history.write, {}, [&] (GpuRenderPass& pass)
-                           {
-                               bindInputs (pass);
-                               pass.setSampler (0, 1, samplers->linearClamp);
-                               pass.setTexture (1, 3, traced);
-                               pass.setTexture (1, 4, velocity);
-                               pass.setTexture (1, 5, previousSceneColor);
-                               pass.setTexture (1, 6, history.read);
-                           })
-                        && denoise.draw (frame, reflections, {}, [&] (GpuRenderPass& pass)
-                           {
-                               bindInputs (pass);
-                               pass.setTexture (1, 3, history.write);
-                           });
+        auto drawn = true;
+        for (uint32 level = 0; level < pyramidDesc.mipLevels && drawn; ++level)
+        {
+            drawn = downsample.draw (frame, pyramid, GpuTextureViewDesc (level, 0), [&] (GpuRenderPass& pass)
+            {
+                pass.setSampler (0, 1, samplers->linearClamp);
+
+                if (level == 0)
+                    pass.setTexture (1, 1, previousSceneColor);
+                else
+                    pass.setTexture (1, 1, pyramid, GpuTextureViewDesc (level - 1, 0));
+            });
+        }
+
+        drawn = drawn
+             && trace.draw (frame, traced, {}, bindInputs)
+             && resolve.draw (frame, resolved, {}, [&] (GpuRenderPass& pass)
+                {
+                    pass.setColorAttachment (1, hitDistance, { true, GpuColor::transparentBlack() });
+
+                    bindInputs (pass);
+                    pass.setSampler (0, 1, samplers->linearClamp);
+                    pass.setTexture (1, 3, traced);
+                    pass.setTexture (1, 4, velocity);
+                    pass.setTexture (1, 5, previousSceneColor);
+                    pass.setTexture (1, 6, pyramid);
+                })
+             && denoise.draw (frame, history.write, {}, [&] (GpuRenderPass& pass)
+                {
+                    bindInputs (pass);
+                    pass.setSampler (0, 1, samplers->linearClamp);
+                    pass.setTexture (1, 3, resolved);
+                    pass.setTexture (1, 4, velocity);
+                    pass.setTexture (1, 5, hitDistance);
+                    pass.setTexture (1, 6, history.read);
+                });
 
         if (! drawn)
         {
@@ -191,7 +233,7 @@ GpuTexture::Ptr ReflectionPass::render (GpuFrame& frame, const ViewData& view, c
             return nullptr;
         }
 
-        return reflections;
+        return history.write;
     }();
 
     if (output != nullptr)
@@ -214,6 +256,7 @@ GpuTexture::Ptr ReflectionPass::render (GpuFrame& frame, const ViewData& view, c
 
 void ReflectionPass::trimUnusedTargets()
 {
+    downsample.trimUnusedTargets();
     trace.trimUnusedTargets();
     resolve.trimUnusedTargets();
     denoise.trimUnusedTargets();
@@ -221,6 +264,7 @@ void ReflectionPass::trimUnusedTargets()
 
 void ReflectionPass::releaseTargets() noexcept
 {
+    downsample.releaseTargets();
     trace.releaseTargets();
     resolve.releaseTargets();
     denoise.releaseTargets();

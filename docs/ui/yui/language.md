@@ -1,8 +1,9 @@
 # The `.yui` language
 
 A `.yui` file describes an interface as text: how components paint
-(`drawing`), how they look in each state (`palette` and `style`), and what the
-interface is made of (`tokens`, `component` and the root instance). This page
+(`drawing` and `shader`), how they look in each state (`palette` and `style`),
+and what the interface is made of (`tokens`, `component` and the root
+instance). This page
 is the reference of the syntax; the guides linked from each section describe
 what the blocks do.
 
@@ -40,15 +41,19 @@ A file is a sequence of blocks, in any order:
 |---|---|---|
 | `import "path";` | The blocks of another file | [below](#imports) |
 | `drawing Name { ... }` | Shapes painting a component | [Data-driven drawing](drawing.md) |
+| `shader Name { ... }` | A GLSL shader and its inputs | [Shaders](shaders.md) |
 | `palette Name { ... }` | A palette derived from source colors | [Stylesheets](styles.md#palettes) |
 | `style { ... }` | Rules and `@keyframes` | [Stylesheets](styles.md) |
 | `tokens { ... }` | Typed values shared by the document | [Tokens](documents.md#tokens) |
 | `component Name : Base { ... }` | A new component type | [Composite components](documents.md#composite-components) |
-| `Type { ... }` | The root component instance, at most one per document | [Complete UIs](documents.md) |
+| `Type { ... }` | The root component instance, at most one per document, imports included | [Complete UIs](documents.md) |
 
 Line comments (`// ...`) and block comments (`/* ... */`) can go anywhere
 whitespace can. Names are case sensitive: component types start with an
 uppercase letter (`Slider`, `LabeledKnob`), everything else is `camelCase`.
+A name is declared once: a second `drawing`, `shader` or `component` of the
+same name is reported as a problem, and so is a `property` declared again with
+another type.
 
 ## Elements and properties
 
@@ -72,11 +77,15 @@ Column {
 A property can be set once per element. Inside a `drawing` the children are
 shapes and scopes (`circle`, `layer`, ...); in the instance tree and in
 `component` blocks they are components, named by their registered type
-(`Slider`, `Row`, ...) or by a `component` declared in the document.
+(`Slider`, `Row`, ...) or by a `component` declared in the document. The
+objects of a [3D scene](scenes.md) are such components too (`Scene3D`,
+`Model3D`, `Light3D`, ...).
 
 Two properties are special in the instance tree: `id` names an element so
 expressions and C++ (`findById`) can reach it, and `class` gives it style
-classes, separated by spaces or commas (`class: "knob large";`).
+classes, separated by spaces or commas (`class: "knob large";`). Both are
+names, written bare or in a string, not expressions: any other value is
+reported as a problem and gives the element no id or no class.
 
 Most components simply parent their children, but a few take them in their own
 way: `Viewport` makes its child the scrolled content, and `TabComponent` turns
@@ -91,7 +100,9 @@ TabComponent {
 }
 ```
 
-Lists have no children either, they are filled from their `items` property;
+Lists have no children either, they are filled from their `items` property
+(the items of a `TreeView` are paths, `"Sources/main.cpp"` being an item
+inside another);
 `Image` displays a raster or SVG file (`source`, `fitting`, `justification`,
 `imageOpacity`), and `Window` can serve as the root element to carry window
 metadata (`title`, `resizable`, `fullScreen`):
@@ -99,6 +110,7 @@ metadata (`title`, `resizable`, `fullScreen`):
 ```yui
 ComboBox { items: ["sine", "square"]; selectedId: 1; }
 ListBox  { items: ["left", "right"]; selectedRow: 0; }
+TreeView { items: ["Sources/main.cpp", "Sources/Editor.cpp", "README.md"]; }
 Image    { source: "logo.svg"; fitting: scaleToFit; }
 ```
 
@@ -136,7 +148,9 @@ A property that is an `integer` takes any number, cut to a whole one as
 
 The values of `style` and `palette` blocks are kept as written up to their `;`,
 because some aren't expressions (`transition: bezelSize 150ms easeOut;`,
-`drawing: Knob;`). They are compiled when the stylesheet applies them.
+`drawing: Knob;`). They are compiled when the stylesheet applies them. The
+`fragment` and the `material` of a `shader` block are kept as written too:
+they are paths, in quotes.
 
 ## Declarations
 
@@ -178,12 +192,17 @@ Title { titleFont: font ("fonts/Inter.ttf").withAxisValue ("wght", 700).withHeig
 
 Font files load in component property values (instances, `component`
 defaults, `tokens`, bindings), not in the property defaults at the top of a
-`drawing`. A document loaded from embedded resources has no folder, so its
-relative paths resolve against the working directory.
+`drawing`. A document loaded from embedded resources has no folder, so the
+relative paths of its fonts resolve against the working directory.
+The files a document reads through itself are found among the embedded
+resources instead: the shaders of `shader` blocks, the files of `Image` and of
+the `image` and `svg` elements of a drawing, and the models and textures
+of a [3D scene](scenes.md#assets-and-hot-reload).
 
 | Where | Declares |
 |---|---|
 | At the top of a `drawing` | An input the component, its parents or a stylesheet set ([Properties](drawing.md#properties)) |
+| In a `shader` | An input of the shader, the member of its uniform block that has this name ([Properties and uniforms](shaders.md#properties-and-uniforms)) |
 | In `tokens` | A value of the document root, read by bare name everywhere |
 | In a `component` | A property of the new type, read inside as `root.name` |
 | In a style rule | A default for the components the rule matches |
@@ -207,7 +226,9 @@ Inside a drawing, `drawing Name { ... }`, `pattern Name { ... }` and
 `marker Name { ... }` define a drawing, a tile and a marker for the elements
 after them, and `use Name { ... }` paints a drawing by name, see
 [Reusing drawings](drawing.md#reusing-drawings) and
-[Patterns and markers](drawing.md#patterns-and-markers).
+[Patterns and markers](drawing.md#patterns-and-markers). A `use` also paints a
+`shader` of the document, or runs it in a filter, see
+[Painting a shader](drawing.md#painting-a-shader).
 
 ## Bindings and handlers
 
@@ -217,18 +238,22 @@ property (`value <=> params.cutoff;`) or to one element of a list
 bindings](documents.md#two-way-bindings).
 
 A property named after a signal is a handler: a call, either an action
-registered by the application or a signal of the enclosing component, or a
-block of calls. `(a, b) =>` names the signal's arguments, and
-`changed property: handler;` runs a handler when a property changes:
+registered by the application, a property to set or to edit as text, or a
+signal of the enclosing component, or a block of calls. `(a, b) =>` names the
+signal's arguments, and `changed property: handler;` runs a handler when a
+property changes. Every component has the signal `onDoubleClick`:
 
 ```yui
 TextButton { text: "Reset"; onClick: action ("reset"); }
+TextButton { text: "Mute"; onClick: set (params.mute, ! params.mute); }
+Label      { text: "Cutoff"; onDoubleClick: edit (params.cutoff); }
 Slider     { onValueChanged: (v) => root.onChanged (v); }
 TextButton { onClick: { action ("save"); root.onDone (); } }
 Slider     { changed value: (v) => action ("log", v); }
 ```
 
-See [Handlers and actions](documents.md#handlers-and-actions).
+See [Handlers and actions](documents.md#handlers-and-actions) and
+[Editing a value as text](documents.md#editing-a-value-as-text).
 
 ## Imports
 
@@ -239,6 +264,15 @@ be imported from several places and cycles are harmless. `YuiLoader` resolves
 the normalized path from the folder of the main file, or by name among embedded
 resources (see [Hot reloading](hot-reload.md)), while
 `YuiDocument::loadFromString` passes it to its import callback.
+
+- A path starting with `/` is relative to the folder of the main file, whatever
+  file imports it: `import "/parts/style.yui";`.
+- The document has one root component with all it imports. A file with a root
+  can be imported by one that has none, and a second root is an error, reported
+  where it is written.
+- A file importing the main file back imports nothing when the main file is
+  loaded by a `YuiLoader`. A text given to `YuiDocument::loadFromString` has no
+  path, so it is imported again, which is an error when it has a root.
 
 ## Errors
 
@@ -280,6 +314,8 @@ files. Comments and the original layout are not preserved.
   transitions.
 - [Data-driven drawing](drawing.md) - shapes, scopes and drawing
   properties.
+- [Shaders](shaders.md) - the `shader` block and where a shader runs.
+- [3D scenes](scenes.md) - the elements of a `Scene3D`.
 - [Layout components](../component-layout.md#layout-components) - `Row`,
   `Column`, `Grid`, `Stack` and the item properties.
 - [Hot reloading `.yui` files](hot-reload.md) - loading files and

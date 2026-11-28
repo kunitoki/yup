@@ -88,11 +88,13 @@ When both `setCachedToTexture(true)` and `setComponentEffect(...)` are active on
 the same component:
 
 - The **effect takes priority** over the standard cache path.
-- The full subtree (self + children + `paintOverChildren`) is rendered offscreen,
-  the effect is applied, and the **already-effected result** is stored in the
-  cache.
-- On subsequent frames the cached texture is drawn directly, skipping both
-  `paint()` and `ComponentEffect::apply()`.
+- The full subtree (self + children + `paintOverChildren`) is rendered offscreen
+  and kept, and the effect runs over it at every paint, as it can change from one
+  frame to the next.
+- What is kept is painted again when the component or something inside it
+  repaints. A change of the effect, such as one of its parameters, is drawn over
+  what was kept without painting it again, see
+  [Repainting Under an Effect](component-effects.md#repainting-under-an-effect).
 
 If you want a cached background with an effect applied **only to the background**
 (not the children), set `setCachedToTexture(true)` on the background component

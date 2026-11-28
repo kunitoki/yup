@@ -21,10 +21,15 @@
 
 #include "../source/yup_YuiAgentTools.h"
 #include "../source/yup_YuiCommands.h"
+#include "../source/yup_YuiInspectCommand.h"
+#include "../source/yup_YuiToolCheck.h"
 #include "../source/yup_YuiToolGuides.h"
-#include "../source/yup_YuiToolSupport.h"
+#include "../source/yup_YuiToolModels.h"
+#include "../source/yup_YuiToolView.h"
 
-#include <yup_gui/yup_gui.h>
+#include <yup_audio_gui/yup_audio_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
+#include <yup_renderer/yup_renderer.h>
 
 #include <SDL3/SDL_hints.h>
 
@@ -32,9 +37,12 @@
 #include <emscripten/eventloop.h>
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
 using namespace yup;
@@ -52,36 +60,69 @@ File getFilesFolder()
     return File ("/yui");
 }
 
-// The values of the models as an agent reads them. A long list is the data of a meter rather than something
-// set by hand, and is told by its length
-var summarizeModels (const var& models)
+// Tells the renderer where the module holds the template a material is compiled around and the library it includes:
+// the folder they are embedded in, see CMakeLists.txt, in place of the one of the sources the module was built from
+void useEmbeddedMaterialShaders()
 {
-    constexpr int longestListShown = 16;
+#if YUP_ENABLE_SHADER_TRANSPILER
+    MaterialShader::setSourceDirectory (File (YUP_YUI_TOOL_MATERIAL_SHADERS));
+#endif
+}
 
-    auto* summary = new DynamicObject();
-    const auto* declared = models.getDynamicObject();
+// Calls a function with a component, then with each of those it holds
+template <class Function>
+void forEachComponent (Component& component, Function&& call)
+{
+    call (component);
 
-    if (declared == nullptr)
-        return var (summary);
+    for (int index = 0; index < component.getNumChildComponents(); ++index)
+        forEachComponent (*component.getChildComponent (index), call);
+}
 
-    for (const auto& model : declared->getProperties())
+// The files a document reads beside its texts, as it names them: those of its shaders, each after what a build compiles
+// it into, which is read in its place, then the models and the images of the scenes its interface shows
+StringArray findNamedFiles (YuiDocument& document)
+{
+    StringArray names;
+
+    for (const auto& element : document.getTree())
     {
-        auto* values = new DynamicObject();
+        if (element.getType().toString() != "shader")
+            continue;
 
-        if (const auto* properties = model.value.getDynamicObject())
+        if (const auto fragment = element.getProperty ("fragment").toString(); fragment.isNotEmpty())
         {
-            for (const auto& property : properties->getProperties())
-            {
-                const auto* list = property.value.getArray();
+            if (! fragment.endsWithIgnoreCase (".ysl"))
+                names.add (fragment + ".ysl");
 
-                values->setProperty (property.name, list != nullptr && list->size() > longestListShown ? var (String (list->size()) + " values") : property.value);
-            }
+            names.add (fragment);
         }
 
-        summary->setProperty (model.name, var (values));
+        if (const auto material = element.getProperty ("material").toString(); material.isNotEmpty())
+        {
+            names.add (material + ".raster.ysl");
+            names.add (material + ".full.ysl");
+            names.add (material);
+        }
     }
 
-    return var (summary);
+    if (auto* root = document.getRoot())
+    {
+        forEachComponent (*root, [&names] (Component& component)
+        {
+            if (const auto* model = dynamic_cast<const SceneModelComponent*> (&component))
+                names.add (model->getSource());
+
+            if (dynamic_cast<const SceneMaterialComponent*> (&component) == nullptr)
+                return;
+
+            for (const auto* property : component.getTypeInfo().getAllProperties())
+                if (property->name.toString().endsWith ("Texture"))
+                    names.add (component.getProperty (property->name).toString());
+        });
+    }
+
+    return names;
 }
 
 //==============================================================================
@@ -152,6 +193,168 @@ String describePathRendering (rive::gpu::InterlockMode mode)
 }
 
 //==============================================================================
+/** What the audio displays of an interface show where no application gives them a state: a signal made here.
+
+    A document can't write the state of a `SpectrumAnalyzer`, a `Spectrogram` or a `KMeter`: an application gives
+    it, and a tool showing the document has none to give, so they would stay still. While this lives, every such
+    display of the tree it looks through that has no state is given one, fed with a chord swelling under a partial
+    sweeping the spectrum: what a drawing or a shader makes of their levels is seen moving. A keyboard needs
+    nothing, it shows the keys held on it.
+
+    The displays are looked for again at every tick, so those a document makes when it is loaded again are fed too,
+    and the ones that went are let go. A display still there when this goes is left without a state.
+*/
+class YuiToolSignals final : private yup::Timer
+{
+public:
+    YuiToolSignals();
+    ~YuiToolSignals() override;
+
+    /** Sets the component whose tree is looked through for displays, or nullptr for none. */
+    void setRoot (yup::Component* newRoot);
+
+private:
+    void timerCallback() override;
+    void feed (yup::Component& component);
+    void makeSignal();
+
+    static constexpr double sampleRate = 48000.0;
+    static constexpr int ticksPerSecond = 30;
+
+    /** A display fed by a state of its own: two reading one state would take each other's samples. */
+    struct Fed
+    {
+        yup::WeakReference<yup::Component> display;
+        std::unique_ptr<yup::SpectrumAnalyzerState> state;
+    };
+
+    yup::WeakReference<yup::Component> root;
+    std::vector<Fed> spectrums;
+    std::vector<yup::WeakReference<yup::Component>> meters;
+    yup::KMeterState meterState { sampleRate, 2 };
+    double lowPhase = 0.0, midPhase = 0.0, highPhase = 0.0, sweepPhase = 0.0, swellPhase = 0.0;
+};
+
+YuiToolSignals::YuiToolSignals()
+{
+    startTimerHz (ticksPerSecond);
+}
+
+YuiToolSignals::~YuiToolSignals()
+{
+    stopTimer();
+
+    // The states go with this: no display is left reading one
+    for (auto& fed : spectrums)
+    {
+        if (auto* analyzer = dynamic_cast<SpectrumAnalyzerComponent*> (fed.display.get()))
+            analyzer->setState (nullptr);
+        else if (auto* spectrogram = dynamic_cast<SpectrogramComponent*> (fed.display.get()))
+            spectrogram->setState (nullptr);
+    }
+
+    for (auto& display : meters)
+        if (auto* meter = dynamic_cast<KMeterComponent*> (display.get()))
+            meter->setState (nullptr);
+}
+
+void YuiToolSignals::setRoot (Component* newRoot)
+{
+    root = newRoot;
+}
+
+void YuiToolSignals::timerCallback()
+{
+    // The displays that went with their interface are let go, and those a new one brought are given a state
+    std::erase_if (spectrums, [] (const Fed& fed)
+    {
+        return fed.display.get() == nullptr;
+    });
+
+    std::erase_if (meters, [] (const WeakReference<Component>& display)
+    {
+        return display.get() == nullptr;
+    });
+
+    if (auto* component = root.get())
+        feed (*component);
+
+    if (! spectrums.empty() || ! meters.empty())
+        makeSignal();
+}
+
+void YuiToolSignals::feed (Component& component)
+{
+    if (auto* analyzer = dynamic_cast<SpectrumAnalyzerComponent*> (&component))
+    {
+        if (analyzer->getState() == nullptr)
+        {
+            auto& fed = spectrums.emplace_back (Fed { &component, std::make_unique<SpectrumAnalyzerState> (2048, 2048) });
+            analyzer->setState (fed.state.get());
+            analyzer->setSampleRate (sampleRate);
+        }
+    }
+    else if (auto* spectrogram = dynamic_cast<SpectrogramComponent*> (&component))
+    {
+        if (spectrogram->getState() == nullptr)
+        {
+            auto& fed = spectrums.emplace_back (Fed { &component, std::make_unique<SpectrumAnalyzerState> (2048, 2048) });
+            spectrogram->setState (fed.state.get());
+            spectrogram->setSampleRate (sampleRate);
+        }
+    }
+    else if (auto* meter = dynamic_cast<KMeterComponent*> (&component))
+    {
+        if (meter->getState() == nullptr)
+        {
+            meters.emplace_back (&component);
+            meter->setState (&meterState);
+        }
+    }
+
+    for (int index = 0; index < component.getNumChildComponents(); ++index)
+        if (auto* child = component.getChildComponent (index))
+            feed (*child);
+}
+
+void YuiToolSignals::makeSignal()
+{
+    static constexpr int numSamples = static_cast<int> (sampleRate) / ticksPerSecond;
+
+    std::array<float, numSamples> left {};
+    std::array<float, numSamples> right {};
+
+    const auto advance = [] (double& phase, double frequency)
+    {
+        phase += MathConstants<double>::twoPi * frequency / sampleRate;
+
+        if (phase > MathConstants<double>::twoPi)
+            phase -= MathConstants<double>::twoPi;
+
+        return std::sin (phase);
+    };
+
+    for (int index = 0; index < numSamples; ++index)
+    {
+        const auto swell = 0.5 + 0.5 * advance (swellPhase, 0.35);
+        const auto sweep = 2400.0 + 2000.0 * advance (sweepPhase, 0.11);
+
+        const auto sample = swell * (0.45 * advance (lowPhase, 220.0) + 0.3 * advance (midPhase, 880.0))
+                          + 0.2 * advance (highPhase, sweep);
+
+        left[static_cast<std::size_t> (index)] = static_cast<float> (sample);
+        right[static_cast<std::size_t> (index)] = static_cast<float> (sample * 0.5);
+    }
+
+    for (auto& fed : spectrums)
+        fed.state->pushSamples (left.data(), numSamples);
+
+    const float* channels[2] = { left.data(), right.data() };
+    meterState.pushSamples (channels, 2, numSamples);
+    meterState.processPendingAudio();
+}
+
+//==============================================================================
 /** The window the page shows in its canvas: an interface over the background of its palette. */
 class PreviewWindow final : public DocumentWindow
 {
@@ -159,7 +362,9 @@ public:
     // The page gives the window its size and the canvas the size it is seen at, which a window the browser
     // may resize would take back from it
     PreviewWindow()
-        : DocumentWindow (ComponentNative::Options().withResizableWindow (false))
+        : DocumentWindow (ComponentNative::Options()
+                          .withResizableWindow (false)
+                          .withVSync (true))
     {
         addChildComponent (guides);
     }
@@ -191,9 +396,15 @@ public:
             sessionKey = key;
 
             session = std::make_unique<Session>();
+            session->signals.setRoot (&session->view);
 
-            if (modelsFile.existsAsFile() && session->models.load (modelsFile.getFullPathName()))
-                session->models.attachTo (session->view.getDocument());
+            if (modelsFile.existsAsFile())
+            {
+                if (const auto loaded = session->models.load (modelsFile.getFullPathName()); loaded.failed())
+                    std::cerr << loaded.getErrorMessage() << "\n";
+                else
+                    session->models.attachTo (session->view.getDocument());
+            }
 
             session->models.onValueChanged = [] (const String& model, const String& property, const var& value)
             {
@@ -302,7 +513,8 @@ public:
 
         The page is told that part through Module.yuiPreviewFramed before the window takes its size,
         which is when the density of the display is read again: the page changes it there to zoom,
-        and answers how many times larger the interface is then seen.
+        and answers how many times larger the interface is then seen. Once the window drew,
+        Module.yuiPreviewDrawn is told why a scene of the interface could not be drawn, or nothing.
     */
     void setView (Size<int> size)
     {
@@ -342,6 +554,14 @@ public:
 
         // The browser cleared the canvas if it got other pixels, and would show it empty until the next frame
         yupRenderPrimaryWindow();
+
+        // A scene that could not be drawn shows why in its place: the page lists it with the problems of the document
+        // clang-format off
+        EM_ASM ({
+            if (Module.yuiPreviewDrawn)
+                Module.yuiPreviewDrawn (UTF8ToString ($0));
+        }, findSceneProblem().toRawUTF8());
+        // clang-format on
     }
 
     /** Shows or hides the guides over the interface. */
@@ -505,13 +725,33 @@ public:
         captured->setProperty ("height", image.getHeight());
         captured->setProperty ("scale", scale);
         captured->setProperty ("theme", shownLight.value_or (false) ? "light" : "dark");
-        captured->setProperty ("models", summarizeModels (session->models.toJson()));
+        captured->setProperty ("models", summarizeYuiAgentModels (session->models.toJson()));
 
         result.text = JSON::toString (var (captured));
         return result;
     }
 
 private:
+    // Why the frame drawn last could not draw a scene of the interface, nothing when it drew them all
+    String findSceneProblem()
+    {
+        auto* root = session != nullptr ? session->view.getDocument().getRoot() : nullptr;
+        auto* native = getNativeComponent();
+        auto* context = native != nullptr ? native->getGraphicsContext() : nullptr;
+        String problem;
+
+        if (root == nullptr || context == nullptr)
+            return problem;
+
+        forEachComponent (*root, [&problem, context] (Component& component)
+        {
+            if (auto* scene = dynamic_cast<SceneComponent*> (&component); scene != nullptr && problem.isEmpty())
+                problem = context->isGpuAvailable() ? scene->getRenderer().getLastError() : String ("GPU rendering is not available");
+        });
+
+        return problem;
+    }
+
     // Measures the components the window holds now: those a load makes are measured once it made them
     void measurePainting()
     {
@@ -521,10 +761,11 @@ private:
         PaintProfiler::getInstance().enableSubtree (*this, options);
     }
 
-    // The models outlive the document they are set on
+    // The models outlive the document they are set on, and what the audio displays of the interface show outlives them
     struct Session
     {
         YuiToolModels models;
+        YuiToolSignals signals;
         YuiView view;
     };
 
@@ -542,6 +783,17 @@ private:
 
 PreviewWindow* previewWindow = nullptr;
 MemoryBlock pendingFile;
+
+// The files the documents loaded since the host last asked name without having been given them, see yuiToolMissingFiles
+StringArray missingFiles;
+
+// Keeps the text an entry point returns, which its host reads before it calls the module again
+const char* keep (const String& text)
+{
+    static std::string kept;
+    kept = text.toStdString();
+    return kept.c_str();
+}
 
 //==============================================================================
 // Sets the module up to work on the files of its host with no page to open a window in: once, as an
@@ -569,6 +821,8 @@ bool prepareToRunWithoutPage()
     }();
 
     ignoreUnused (isLoopStopped);
+
+    useEmbeddedMaterialShaders();
 
     getFilesFolder().createDirectory();
     getFilesFolder().setAsCurrentWorkingDirectory();
@@ -617,10 +871,12 @@ public:
 
     String getApplicationName() override { return "yup_yui_tool"; }
 
-    String getApplicationVersion() override { return "1.0"; }
+    String getApplicationVersion() override { return YUP_YUI_TOOL_VERSION; }
 
     void initialise (const String&) override
     {
+        useEmbeddedMaterialShaders();
+
         MessageManager::callAsync ([this]
         {
             // The page has controls of its own, so the keys only go to the interface while its canvas has the focus
@@ -654,6 +910,27 @@ private:
 } // namespace
 
 //==============================================================================
+// Called by the tool with each document it loads from a file, see yup_YuiToolCheck.h. The files are those the host
+// gave: the ones the document names that are not among them are kept for the host to ask, by their path from the
+// folder of the files as the document names them from its own
+void noteYuiToolMissingFiles (YuiDocument& document)
+{
+    const auto folder = document.getBaseDirectory();
+
+    if (folder == File())
+        return;
+
+    for (const auto& name : findNamedFiles (document))
+    {
+        // An absolute path is no file of the host, which gives them by where they are from the document
+        if (name.isEmpty() || File::isAbsolutePath (name) || folder.getChildFile (name).existsAsFile())
+            continue;
+
+        missingFiles.addIfNotAlreadyThere (folder.getRelativePathFrom (getFilesFolder()) + "/" + name);
+    }
+}
+
+//==============================================================================
 // Called by the host of the module, which gives it the files to work on.
 extern "C"
 {
@@ -685,12 +962,21 @@ extern "C"
         getFilesFolder().getChildFile (String::fromUTF8 (path)).deleteFile();
     }
 
+    // Returns the files the documents loaded since this was last called name without having been given them, and
+    // forgets them: a JSON array of paths from the folder of the files, each written as the folder of its document
+    // followed by the path the document names it by. They are what a document reads beside its texts: its shaders,
+    // each with what a build compiles it into, and the models and the images of its scenes. The host gives those it
+    // has, then runs again what it ran
+    const char* EMSCRIPTEN_KEEPALIVE yuiToolMissingFiles()
+    {
+        return keep (JSON::toString (var (std::exchange (missingFiles, {})), true));
+    }
+
     // Runs a command of the tool in the folder of the files. The arguments are a JSON array of strings. A host
     // that only runs commands loads the module with noInitialRun, which leaves the application unstarted
     int EMSCRIPTEN_KEEPALIVE yuiToolRun (const char* arguments)
     {
-        var parsed;
-        JSON::parse (String::fromUTF8 (arguments), parsed);
+        const auto parsed = JSON::parse (String::fromUTF8 (arguments));
 
         StringArray words ("yup_yui_tool");
 
@@ -740,7 +1026,8 @@ extern "C"
     }
 
     // Lays the interface shown out at a size in logical pixels, and gives the window the size of what is shown
-    // of it, which Module.yuiPreviewFramed (x, y, width, height) is called with first
+    // of it, which Module.yuiPreviewFramed (x, y, width, height) is called with first. Once it drew,
+    // Module.yuiPreviewDrawn (problem) is called with why a scene of the interface could not be drawn, empty when it was
     void EMSCRIPTEN_KEEPALIVE yuiPreviewSetView (int width, int height)
     {
         if (previewWindow != nullptr && width > 0 && height > 0)
@@ -775,9 +1062,7 @@ extern "C"
     // one takes, the pixels and the GPU it is drawn with, and the components taking the longest to paint
     const char* EMSCRIPTEN_KEEPALIVE yuiPreviewStats()
     {
-        static std::string text;
-        text = previewWindow != nullptr ? previewWindow->describeStats().toStdString() : std::string();
-        return text.c_str();
+        return keep (previewWindow != nullptr ? previewWindow->describeStats() : String());
     }
 
     // Changes a value of a model of the interface shown, given as JSON. Values the interface changes itself are
@@ -794,17 +1079,13 @@ extern "C"
     // Returns the current values of the models as JSON, in the shape of the models file
     const char* EMSCRIPTEN_KEEPALIVE yuiPreviewModels()
     {
-        static std::string text;
-        text = previewWindow != nullptr ? JSON::toString (previewWindow->getModels(), true).toStdString() : std::string ("{}");
-        return text.c_str();
+        return keep (previewWindow != nullptr ? JSON::toString (previewWindow->getModels(), true) : String ("{}"));
     }
 
     // Returns the tools of an agent as JSON: `tools`, each with its name, description and inputSchema, `drawing`,
     // the names of those only a page can run as they draw, and `instructions`, how they are meant to be used
     const char* EMSCRIPTEN_KEEPALIVE yuiAgentTools()
     {
-        static std::string text;
-
         const auto tools = getYuiAgentTools (true);
         Array<var> drawing;
 
@@ -812,33 +1093,23 @@ extern "C"
             if (doesYuiAgentToolDraw (tool["name"].toString()))
                 drawing.add (tool["name"]);
 
-        auto* listed = new DynamicObject();
-        listed->setProperty ("tools", tools);
-        listed->setProperty ("drawing", var (drawing));
-        listed->setProperty ("instructions", getYuiAgentInstructions());
-
-        text = JSON::toString (var (listed), true).toStdString();
-        return text.c_str();
+        return keep (JSON::toString (var::object ({ { "tools", tools }, { "drawing", var (drawing) }, { "instructions", getYuiAgentInstructions() } }), true));
     }
 
     // Runs a tool of an agent on the files given, with its arguments as a JSON object. The answer is JSON too:
     // `text`, `isError`, and `image`, a PNG in base64 which is empty when the tool gives none
     const char* EMSCRIPTEN_KEEPALIVE yuiAgentCall (const char* name, const char* arguments)
     {
-        static std::string text;
-
         // A page set itself up as the application it runs
         const auto isReady = YUPApplicationBase::getInstance() != nullptr || prepareToRunWithoutPage();
         const auto answer = isReady ? callYuiAgentTool (String::fromUTF8 (name), JSON::fromString (String::fromUTF8 (arguments)), makeAgentHost())
                                     : YuiAgentResult::fail ("the windowing system can't be initialised");
 
-        auto* record = new DynamicObject();
-        record->setProperty ("text", answer.text);
-        record->setProperty ("isError", answer.isError);
-        record->setProperty ("image", answer.image.isEmpty() ? String() : Base64::toBase64 (answer.image.getData(), answer.image.getSize()));
+        const auto told = var::object ({ { "text", answer.text },
+                                         { "isError", answer.isError },
+                                         { "image", answer.image.isEmpty() ? String() : Base64::toBase64 (answer.image.getData(), answer.image.getSize()) } });
 
-        text = JSON::toString (var (record), true).toStdString();
-        return text.c_str();
+        return keep (JSON::toString (told, true));
     }
 }
 

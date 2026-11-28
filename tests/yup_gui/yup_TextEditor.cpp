@@ -81,6 +81,11 @@ TEST_F (TextEditorTests, ConstructorInitializesCorrectly)
     EXPECT_FALSE (editor->isReadOnly());
 }
 
+TEST_F (TextEditorTests, LetsWhatIsBehindItsRoundedBoxShow)
+{
+    EXPECT_FALSE (editor->isOpaque());
+}
+
 TEST_F (TextEditorTests, SetTextUpdatesContent)
 {
     editor->setText (kSingleText);
@@ -126,6 +131,59 @@ TEST_F (TextEditorTests, SelectionHandling)
     // Test clearing selection
     editor->setCaretPosition (3);
     EXPECT_FALSE (editor->hasSelection());
+}
+
+TEST_F (TextEditorTests, DeclaresItsTextItsSelectionAndItsCaretAsPartsPaintedWhereItLaidThemOut)
+{
+    editor->setBounds (0.0f, 0.0f, 200.0f, 30.0f);
+    editor->setText (kSingleText);
+
+    const auto& info = editor->getTypeInfo();
+
+    for (const auto* name : { "selection", "text", "caret" })
+    {
+        const auto* part = info.findPart (Identifier (name));
+
+        ASSERT_NE (part, nullptr) << name;
+        EXPECT_FALSE (part->isPlaceable) << name;
+    }
+
+    // The parts are where the editor puts them, which it tells as properties too
+    EXPECT_EQ (info.findPart (Identifier ("text"))->getArea (*editor), editor->getTextBounds());
+    EXPECT_EQ (info.findPart (Identifier ("selection"))->getArea (*editor), editor->getTextBounds());
+    EXPECT_EQ (info.findPart (Identifier ("caret"))->getArea (*editor), editor->getCaretBounds());
+
+    EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (editor->getProperty (Identifier ("textBounds"))), editor->getTextBounds());
+    EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (editor->getProperty (Identifier ("caretBounds"))), editor->getCaretBounds());
+
+    EXPECT_FALSE (static_cast<bool> (editor->getProperty (Identifier ("hasSelection"))));
+    editor->selectAll();
+    EXPECT_TRUE (static_cast<bool> (editor->getProperty (Identifier ("hasSelection"))));
+
+    // The caret only shows in an editor that has the keyboard focus
+    EXPECT_FALSE (static_cast<bool> (editor->getProperty (Identifier ("caretVisible"))));
+
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    auto renderer = context->makeRenderer (200, 30);
+    Graphics g (*context, *renderer);
+
+    // The theme paints them, where the editor laid them out wherever they are asked to go
+    std::map<String, Rectangle<float>> painted;
+
+    for (const auto* name : { "selection", "text", "caret" })
+    {
+        theme->setComponentPart<TextEditor> (Identifier (name), [&painted, name] (Graphics&, const ApplicationTheme&, const TextEditor&, const Rectangle<float>& area)
+        {
+            painted[name] = area;
+        });
+
+        EXPECT_TRUE (editor->paintPart (g, Identifier (name), { 1.0f, 2.0f, 3.0f, 4.0f })) << name;
+    }
+
+    EXPECT_EQ (painted["selection"], editor->getTextBounds());
+    EXPECT_EQ (painted["text"], editor->getTextBounds());
+    EXPECT_EQ (painted["caret"], editor->getCaretBounds());
+    EXPECT_FALSE (editor->paintPart (g, Identifier ("icon")));
 }
 
 TEST_F (TextEditorTests, TextInsertion)
@@ -510,6 +568,51 @@ TEST_F (TextEditorTests, KeyDownClaimsTypingButLeavesOtherKeysToTheComponentsAro
     EXPECT_FALSE (editor->keyDown (KeyPress (KeyPress::textZKey, KeyModifiers::commandMask), {}));
 }
 
+TEST_F (TextEditorTests, ReturnAndEscapeAreKeptOnlyWhileTheyAreAskedFor)
+{
+    editor->setText ("Hello");
+
+    int returns = 0;
+    int escapes = 0;
+    editor->onReturnKey = [&returns] { ++returns; };
+    editor->onEscapeKey = [&escapes] { ++escapes; };
+
+    EXPECT_TRUE (editor->keyDown (KeyPress (KeyPress::enterKey), {}));
+    EXPECT_TRUE (editor->keyDown (KeyPress (KeyPress::escapeKey), {}));
+    EXPECT_FALSE (editor->keyDown (KeyPress (KeyPress::tabKey), {}));
+    EXPECT_EQ (returns, 1);
+    EXPECT_EQ (escapes, 1);
+    EXPECT_EQ (editor->getText(), "Hello");
+
+    // Return breaks the line of a multi line editor, which Escape still leaves
+    editor->setMultiLine (true);
+    editor->moveCaretToEnd();
+    EXPECT_TRUE (editor->keyDown (KeyPress (KeyPress::enterKey), {}));
+    EXPECT_TRUE (editor->keyDown (KeyPress (KeyPress::escapeKey), {}));
+    EXPECT_EQ (returns, 1);
+    EXPECT_EQ (escapes, 2);
+    EXPECT_EQ (editor->getText(), "Hello\n");
+
+    // With no one asking, both go to the components around
+    editor->setMultiLine (false);
+    editor->onReturnKey = nullptr;
+    editor->onEscapeKey = nullptr;
+    EXPECT_FALSE (editor->keyDown (KeyPress (KeyPress::enterKey), {}));
+    EXPECT_FALSE (editor->keyDown (KeyPress (KeyPress::escapeKey), {}));
+}
+
+TEST_F (TextEditorTests, TellsWhenItLosesTheKeyboardFocus)
+{
+    int losses = 0;
+    editor->onFocusLost = [&losses] { ++losses; };
+
+    editor->focusGained();
+    EXPECT_EQ (losses, 0);
+
+    editor->focusLost();
+    EXPECT_EQ (losses, 1);
+}
+
 TEST_F (TextEditorTests, TabKeyInsertsInMultiLineMode)
 {
     editor->setMultiLine (true);
@@ -742,6 +845,45 @@ TEST_F (TextEditorTests, SingleLineTextStaysCenteredInEditorShorterThanALine)
 
     EXPECT_NEAR (5.0f, editor->getCaretBounds().getCenterY(), 1.0f);
 }
+
+#if YUP_MODAL_LOOPS_PERMITTED
+TEST_F (TextEditorTests, ABlinkOfTheCaretRepaintsTheCaretAndNotTheEditor)
+{
+    Component window ("window");
+    auto* native = new StubComponentNative (window, ComponentNative::defaultFlags);
+    yup::ComponentTestHelper<Component>::attachNative (window, native);
+    window.setBounds (0.0f, 0.0f, 300.0f, 100.0f);
+    window.setVisible (true);
+
+    editor->setBounds (0.0f, 0.0f, 200.0f, 30.0f);
+    editor->setText ("Hello World", dontSendNotification);
+    editor->setCaretPosition (5);
+    window.addAndMakeVisible (*editor);
+
+    // The caret blinks in an editor that has the keyboard focus
+    editor->focusGained();
+    const auto shown = editor->isCaretVisible();
+    native->repaintAreas.clearQuick();
+
+    for (int i = 0; i < 200 && editor->isCaretVisible() == shown; ++i)
+        MessageManager::getInstance()->runDispatchLoopUntil (10);
+
+    ASSERT_NE (editor->isCaretVisible(), shown);
+
+    const auto caret = editor->getCaretBounds();
+    ASSERT_FALSE (caret.isEmpty());
+    ASSERT_EQ (native->getRepaintAreas().getNumRectangles(), 1);
+
+    const auto repainted = native->getRepaintAreas().getRectangles()[0];
+    EXPECT_NEAR (repainted.getX(), caret.getX(), 0.01f);
+    EXPECT_NEAR (repainted.getY(), caret.getY(), 0.01f);
+    EXPECT_NEAR (repainted.getWidth(), caret.getWidth(), 0.01f);
+    EXPECT_NEAR (repainted.getHeight(), caret.getHeight(), 0.01f);
+
+    editor->focusLost();
+    window.removeChildComponent (*editor);
+}
+#endif
 
 /* TODO: moveCaretToWordEnd/moveCaretToWordStart is private
 TEST_F (TextEditorTests, DoubleClickSelectsWord)

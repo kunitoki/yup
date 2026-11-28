@@ -42,7 +42,7 @@ namespace yup
     // so expressions like `params.cutoff` read and observe it like any component.
     @endcode
 
-    @see BindingProvider, DataTreeBindingProvider, BindingGraph, DrawingScope, YuiBuilder
+    @see BindingProvider, DataTreeBindingProvider, BindingGraph, DrawingScope
 
     @tags{UI}
 */
@@ -68,8 +68,26 @@ public:
     /** Returns the underlying provider, or nullptr if it was destroyed. */
     BindingProvider* getProvider() const noexcept { return provider; }
 
-    /** Rebuilds the reflected property table from the provider's current properties. */
+    /** Brings the reflected property table up to date with the provider's current properties.
+
+        The type info is made again only when the provider exposes other properties, or the same ones
+        with other types. While they stay the same it is kept, and so is what was read from it.
+    */
     void refreshProperties();
+
+    /** Makes sure the model has a property, asking the provider for one it does not list.
+
+        A provider may expose more values than BindingProvider::getProperties() lists, such as the
+        ones it only finds by name or makes when they are first asked for. The provider is asked
+        with BindingProvider::findProperty(), and what it finds is kept with the listed ones from
+        then on. Links, handlers and expressions call this for a property the model does not have,
+        so `params.cutoff` binds when `cutoff` is not among the listed properties.
+
+        @param name  The property to look for.
+
+        @returns true when the model has the property.
+    */
+    bool ensureProperty (const Identifier& name);
 
     /** Bridges `pressed` state changes on @p component to gesture begin/end calls for @p property. */
     void trackGestures (Component& component, const Identifier& property);
@@ -85,7 +103,7 @@ private:
         bool isInGesture = false;
     };
 
-    static std::vector<ComponentProperty> makeProperties (BindingProvider& provider);
+    static std::vector<ComponentProperty> makeProperties (const std::vector<BindingProvider::Property>& exposed);
 
     bool isTracking (const Component& component) const;
     void write (const Identifier& name, const var& value);
@@ -98,6 +116,7 @@ private:
 
     BindingProvider* provider = nullptr;
     std::unique_ptr<ComponentTypeInfo> info;
+    std::vector<BindingProvider::Property> foundByName;
     std::vector<Tracked> tracked;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BindingModel)

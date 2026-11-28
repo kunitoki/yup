@@ -22,22 +22,49 @@
 namespace yup
 {
 
+namespace
+{
+
+/* Adds a value to those an index keeps for a property, once however many times in a row it is added. */
+template <class Index, class Key, class Value>
+void addToPropertyIndex (Index& index, const Key& key, const Value& value)
+{
+    auto& values = index[key];
+
+    if (values.empty() || values.back() != value)
+        values.push_back (value);
+}
+
+/* Removes a value from those an index keeps for a property, and the property with the last of them. */
+template <class Index, class Key, class Value>
+void removeFromPropertyIndex (Index& index, const Key& key, const Value& value)
+{
+    const auto found = index.find (key);
+
+    if (found == index.end())
+        return;
+
+    auto& values = found->second;
+
+    // Searched from the end: what goes is most often what came last, as when everything is cleared
+    if (const auto position = std::find (values.rbegin(), values.rend(), value); position != values.rend())
+        values.erase (std::next (position).base());
+
+    if (values.empty())
+        index.erase (found);
+}
+
+} // namespace
+
 struct BindingGraph::Binding
 {
     Binding (Component& targetToUse, const Identifier& propertyToUse, std::unique_ptr<PropertyExpression> expressionToUse)
         : target (&targetToUse)
+        , targetAddress (&targetToUse)
         , property (propertyToUse)
         , expression (std::move (expressionToUse))
         , dependencies (expression->getDependencies())
     {
-    }
-
-    bool dependsOn (const Component& component, const Identifier& name) const noexcept
-    {
-        return std::any_of (dependencies.begin(), dependencies.end(), [&] (const auto& dependency)
-        {
-            return dependency.component == &component && dependency.property == name;
-        });
     }
 
     void evaluate()
@@ -64,6 +91,7 @@ struct BindingGraph::Binding
     }
 
     WeakReference<Component> target;
+    const Component* const targetAddress; // What the binding is indexed by, never read through: the target may be gone
     Identifier property;
     std::unique_ptr<PropertyExpression> expression;
     std::vector<DrawingScope::Dependency> dependencies;
@@ -130,6 +158,7 @@ Result BindingGraph::bind (Component& target,
     auto* bindingToEvaluate = binding.get();
 
     addObservedOf (*binding);
+    addToIndex (*binding);
     bindings.push_back (std::move (binding));
 
     markDirty (*bindingToEvaluate);
@@ -139,16 +168,13 @@ Result BindingGraph::bind (Component& target,
 
 bool BindingGraph::unbind (Component& target, const Identifier& property)
 {
-    for (int index = 0; index < static_cast<int> (bindings.size()); ++index)
-    {
-        if (bindings[index]->target.get() == &target && bindings[index]->property == property)
-        {
-            removeBinding (index);
-            return true;
-        }
-    }
+    const auto found = bindingsByTarget.find (PropertyKey { &target, property });
 
-    return false;
+    if (found == bindingsByTarget.end())
+        return false;
+
+    removeBinding (*found->second);
+    return true;
 }
 
 void BindingGraph::clear()
@@ -160,6 +186,7 @@ void BindingGraph::clear()
         removeLink (index);
 
     jassert (observer.isEmpty());
+    jassert (bindingsByTarget.empty() && bindingsByInput.empty() && linksByProperty.empty());
 
     dirty.clear();
 }
@@ -178,6 +205,8 @@ void BindingGraph::link (Component& target, const Identifier& property, Componen
     observer.observe (target);
     observer.observe (source);
     links.push_back (newLink);
+    addToPropertyIndex (linksByProperty, PropertyKey { &target, property }, newLink);
+    addToPropertyIndex (linksByProperty, PropertyKey { &source, sourceProperty }, newLink);
 
     const auto value = readLinkSide (*newLink, false);
 
@@ -204,14 +233,44 @@ bool BindingGraph::unlink (Component& component, const Identifier& property)
     return removed;
 }
 
+std::optional<BindingGraph::ModelProperty> BindingGraph::findLinkedModel (const Component& component, const Identifier& property) const
+{
+    // Breadth first, so that the model the fewest links away is the one found
+    std::vector<PropertyKey> reached { { &component, property } };
+
+    for (size_t index = 0; index < reached.size(); ++index)
+    {
+        const auto current = reached[index];
+
+        if (auto* model = dynamic_cast<BindingModel*> (const_cast<Component*> (current.component)))
+            return ModelProperty { model, current.property };
+
+        const auto found = linksByProperty.find (current);
+
+        if (found == linksByProperty.end())
+            continue;
+
+        for (const auto& candidate : found->second)
+        {
+            if (candidate->secondIndex >= 0)
+                continue;
+
+            const auto isFirst = candidate->first == current.component && candidate->firstProperty == current.property;
+            const PropertyKey other { isFirst ? candidate->second : candidate->first, isFirst ? candidate->secondProperty : candidate->firstProperty };
+
+            if (std::find (reached.begin(), reached.end(), other) == reached.end())
+                reached.push_back (other);
+        }
+    }
+
+    return std::nullopt;
+}
+
 //==============================================================================
 
 bool BindingGraph::hasBinding (const Component& target, const Identifier& property) const noexcept
 {
-    return std::any_of (bindings.begin(), bindings.end(), [&] (const auto& binding)
-    {
-        return binding->target.get() == &target && binding->property == property;
-    });
+    return bindingsByTarget.find (PropertyKey { &target, property }) != bindingsByTarget.end();
 }
 
 std::vector<BindingGraph::BindingInfo> BindingGraph::getAllBindings() const
@@ -252,21 +311,16 @@ void BindingGraph::clearDiagnostics()
 
 void BindingGraph::handlePropertyChanged (Component& component, const Identifier& property)
 {
-    for (int index = 0; index < static_cast<int> (bindings.size()); ++index)
+    const PropertyKey changed { &component, property };
+
+    if (const auto found = bindingsByTarget.find (changed);
+        found != bindingsByTarget.end() && found->second != writingBinding && found->second->wasOverwritten (component))
     {
-        auto* binding = bindings[index].get();
-
-        if (binding != writingBinding && binding->target.get() == &component && binding->property == property)
-        {
-            if (binding->wasOverwritten (component))
-                removeBinding (index);
-
-            break;
-        }
+        removeBinding (*found->second);
     }
 
-    invalidate (component, property);
-    syncLinks (component, property);
+    invalidate (changed);
+    syncLinks (changed);
 }
 
 void BindingGraph::handleComponentDeleted (Component& component)
@@ -317,11 +371,39 @@ void BindingGraph::removeObservedOf (const Binding& binding)
     observer.unobserve (binding.dependencies);
 }
 
+void BindingGraph::addToIndex (Binding& binding)
+{
+    bindingsByTarget[PropertyKey { binding.targetAddress, binding.property }] = &binding;
+
+    for (const auto& dependency : binding.dependencies)
+        addToPropertyIndex (bindingsByInput, PropertyKey { dependency.component, dependency.property }, &binding);
+
+    // What reads a role of the palette follows the palette its target is drawn with
+    if (binding.expression->readsPalette())
+        addToPropertyIndex (bindingsByInput, PropertyKey { binding.targetAddress, paletteProperty }, &binding);
+}
+
+void BindingGraph::removeFromIndex (const Binding& binding)
+{
+    if (const auto found = bindingsByTarget.find (PropertyKey { binding.targetAddress, binding.property });
+        found != bindingsByTarget.end() && found->second == &binding)
+    {
+        bindingsByTarget.erase (found);
+    }
+
+    for (const auto& dependency : binding.dependencies)
+        removeFromPropertyIndex (bindingsByInput, PropertyKey { dependency.component, dependency.property }, &binding);
+
+    if (binding.expression->readsPalette())
+        removeFromPropertyIndex (bindingsByInput, PropertyKey { binding.targetAddress, paletteProperty }, &binding);
+}
+
 void BindingGraph::removeBinding (int index)
 {
     auto* binding = bindings[static_cast<size_t> (index)].get();
 
     removeObservedOf (*binding);
+    removeFromIndex (*binding);
 
     for (auto& pending : dirty)
         if (pending == binding)
@@ -333,11 +415,24 @@ void BindingGraph::removeBinding (int index)
     bindings.erase (bindings.begin() + index);
 }
 
+void BindingGraph::removeBinding (const Binding& binding)
+{
+    const auto position = std::find_if (bindings.begin(), bindings.end(), [&binding] (const auto& candidate)
+    {
+        return candidate.get() == &binding;
+    });
+
+    if (position != bindings.end())
+        removeBinding (static_cast<int> (position - bindings.begin()));
+}
+
 void BindingGraph::removeLink (int index)
 {
     const auto removed = links[static_cast<size_t> (index)];
 
     links.erase (links.begin() + index);
+    removeFromPropertyIndex (linksByProperty, PropertyKey { removed->first, removed->firstProperty }, removed);
+    removeFromPropertyIndex (linksByProperty, PropertyKey { removed->second, removed->secondProperty }, removed);
 
     observer.unobserve (*removed->first);
     observer.unobserve (*removed->second);
@@ -350,17 +445,23 @@ var BindingGraph::readLinked (const Component& component, const Identifier& prop
     return given.isVoid() ? component.findProperty (property) : given;
 }
 
-void BindingGraph::syncLinks (Component& component, const Identifier& property)
+void BindingGraph::syncLinks (const PropertyKey& changed)
 {
-    for (size_t index = 0; index < links.size(); ++index)
+    // Looked up again at each step: writing a value can add and remove links, those of this property too
+    for (size_t index = 0;; ++index)
     {
-        // Held, so that a link removed while its value is written stays valid until it is done
-        const auto current = links[index];
+        const auto found = linksByProperty.find (changed);
 
-        if (current->isSyncing || ! current->touches (component, property))
+        if (found == linksByProperty.end() || index >= found->second.size())
+            return;
+
+        // Held, so that a link removed while its value is written stays valid until it is done
+        const auto current = found->second[index];
+
+        if (current->isSyncing)
             continue;
 
-        const auto isFirst = current->first == &component && current->firstProperty == property;
+        const auto isFirst = current->first == changed.component && current->firstProperty == changed.property;
         const auto value = readLinkSide (*current, isFirst);
 
         if (value.isVoid() || readLinkSide (*current, ! isFirst) == value)
@@ -407,20 +508,14 @@ void BindingGraph::writeLinkSide (const Link& link, bool isFirst, const var& val
     component.setProperty (property, var (changed));
 }
 
-void BindingGraph::invalidate (const Component& component, const Identifier& property)
+void BindingGraph::invalidate (const PropertyKey& changed)
 {
-    static const Identifier paletteProperty ("palette");
-    const bool isPaletteChange = property == paletteProperty;
-
     // Queue everything before flushing: a flush can remove bindings (cycles) while iterating
-    for (const auto& binding : bindings)
+    if (const auto found = bindingsByInput.find (changed); found != bindingsByInput.end())
     {
-        if ((binding->dependsOn (component, property)
-             || (isPaletteChange && binding->target.get() == &component && binding->expression->readsPalette()))
-            && std::find (dirty.begin(), dirty.end(), binding.get()) == dirty.end())
-        {
-            dirty.push_back (binding.get());
-        }
+        for (auto* binding : found->second)
+            if (std::find (dirty.begin(), dirty.end(), binding) == dirty.end())
+                dirty.push_back (binding);
     }
 
     if (! isFlushing && ! dirty.empty())
@@ -464,14 +559,7 @@ void BindingGraph::flush()
             auto* target = binding->target.get();
             const auto property = binding->property;
 
-            for (int bindingIndex = 0; bindingIndex < static_cast<int> (bindings.size()); ++bindingIndex)
-            {
-                if (bindings[static_cast<size_t> (bindingIndex)].get() == binding)
-                {
-                    removeBinding (bindingIndex);
-                    break;
-                }
-            }
+            removeBinding (*binding);
 
             if (onDiagnostic != nullptr)
                 onDiagnostic (target, property, message);

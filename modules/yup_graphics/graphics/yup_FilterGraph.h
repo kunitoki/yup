@@ -77,7 +77,8 @@ public:
         merge,        /**< Stacks the `inputs`, the last one on top. */
         lighting,     /**< Lights the alpha of `in`, taken as a height map. */
         displacement, /**< Moves the pixels of `in` by the colors of `in2`. */
-        dropShadow    /**< Puts `in` over its shadow: its alpha blurred, moved and colored. */
+        dropShadow,   /**< Puts `in` over its shadow: its alpha blurred, moved and colored. */
+        shader        /**< Draws `shader` with its `uniforms`, reading `in`, and `in2` when it declares two textures. */
     };
 
     /** How a `composite` primitive combines `in` with `in2`. */
@@ -118,7 +119,7 @@ public:
         /** The picture read, the result of the primitive before when empty. */
         String in;
 
-        /** The second picture read by `composite`, `blend` and `displacement`. */
+        /** The second picture read by `composite`, `blend` and `displacement`, and by a `shader` declaring two textures. */
         String in2;
 
         /** The name later primitives read this result with. */
@@ -183,6 +184,18 @@ public:
         /** The channels of `in2` a `displacement` moves the pixels along x and along y with. */
         Channel xChannel = Channel::alpha, yChannel = Channel::alpha;
 
+        /** What a `shader` primitive draws. Its first texture reads `in` and its second one `in2`,
+            both as large as the picture and premultiplied, as what it writes is: one declaring
+            no texture makes a picture of its own, as a `flood` does. With `linearColors` the
+            colors it reads and writes are linear. Without a shader, with one declaring more
+            than two textures, or with one the device can't draw, the primitive fails and the
+            filter leaves the picture as it is: State::getShaderError() tells why.
+        */
+        GpuImageShader::Ptr shader;
+
+        /** The uniforms `shader` is drawn with, from GpuImageShader::createUniforms(). */
+        ShaderUniforms uniforms;
+
         bool operator== (const Primitive&) const = default;
     };
 
@@ -204,11 +217,31 @@ public:
         /** Frees what the state holds. The next render makes it again. */
         void releaseResources();
 
+        /** Returns what prevented the last render from running a `shader` primitive, which left
+            the picture as it was: the primitive has no shader, its shader declares more than
+            two textures, or the device could not draw it, for the reason GpuImageShader::draw()
+            gave. It is empty when the last render ran every shader of its filter.
+
+            A shader the device refused is not drawn again with it, nor are the primitives
+            before it: the next renders of a filter running it leave their picture as it is
+            for the same reason, until the state is given another device or releases what it
+            holds.
+        */
+        const String& getShaderError() const noexcept { return shaderError; }
+
+        /** Returns the index of the primitive getShaderError() is about in the filter that
+            was rendered, or -1 when there is no error.
+        */
+        int getFailedPrimitive() const noexcept { return failedPrimitive; }
+
     private:
         friend class FilterGraph;
 
         std::shared_ptr<Shared> shared;
         GpuTarget::Ptr output;
+        GpuImageShader::Ptr refusedShader;
+        String shaderError;
+        int failedPrimitive = -1;
     };
 
     //==============================================================================
@@ -233,7 +266,8 @@ public:
         @param state    What the filter renders with, holding the result until its next render.
 
         @returns The filtered picture, as large as the source, or the source itself when
-                 the filter is empty or the GPU can't run it.
+                 the filter is empty or the GPU can't run it. What prevented a `shader`
+                 primitive from running is then told by State::getShaderError().
     */
     GpuTexture::Ptr render (GraphicsContext& context, const GpuTexture::Ptr& source, Size<float> scale, State& state) const;
 

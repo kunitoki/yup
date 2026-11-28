@@ -348,7 +348,7 @@ public:
         int width = 0;
         int height = 0;
         rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
-        rive::gpu::RenderContext* renderContext = nullptr;
+        bool isRenderable = false;
         OffscreenContextSlot* contextSlot = nullptr;
 
         int getWidth() const noexcept override { return width; }
@@ -362,7 +362,7 @@ public:
 
         rive::gpu::RenderContext* getRenderContext() noexcept override
         {
-            return renderContext;
+            return contextSlot != nullptr ? contextSlot->renderContext.get() : nullptr;
         }
 
         rive::rcp<rive::gpu::RenderCanvas> getRenderCanvas() noexcept override
@@ -381,48 +381,12 @@ public:
 
     std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) override
     {
-        return withGLContext ([&]() -> std::unique_ptr<OffscreenTarget>
-        {
-            if (width <= 0 || height <= 0 || renderContext == nullptr)
-                return nullptr;
-
-            auto renderCanvas = renderContext->makeRenderCanvas (static_cast<uint32_t> (width), static_cast<uint32_t> (height));
-            if (renderCanvas == nullptr)
-                return nullptr;
-
-            auto target = std::make_unique<OffscreenTargetGL>();
-            target->width = width;
-            target->height = height;
-            target->renderContext = nullptr;
-            target->contextSlot = nullptr;
-            target->renderCanvas = std::move (renderCanvas);
-            return target;
-        });
+        return makeOffscreenTarget (width, height, false);
     }
 
     std::unique_ptr<RenderableTarget> createRenderableTarget (int width, int height) override
     {
-        return withGLContext ([&]() -> std::unique_ptr<RenderableTarget>
-        {
-            if (width <= 0 || height <= 0)
-                return nullptr;
-
-            auto* contextSlot = acquireOffscreenContext();
-            if (contextSlot == nullptr)
-                return nullptr;
-
-            auto target = std::make_unique<OffscreenTargetGL>();
-            target->width = width;
-            target->height = height;
-            target->renderContext = contextSlot->renderContext.get();
-            target->contextSlot = contextSlot;
-
-            target->renderCanvas = target->renderContext->makeRenderCanvas (static_cast<uint32_t> (width), static_cast<uint32_t> (height));
-            if (target->renderCanvas == nullptr)
-                return nullptr;
-
-            return target;
-        });
+        return makeOffscreenTarget (width, height, true);
     }
 
     void beginOffscreen (OffscreenTarget& baseTarget, const GpuFrameDescriptor& frameDesc) override
@@ -431,10 +395,13 @@ public:
         {
             auto& target = static_cast<OffscreenTargetGL&> (baseTarget);
 
-            auto renderContext = target.getRenderContext();
-            if (renderContext == nullptr || target.contextSlot == nullptr || target.contextSlot->frameActive)
+            if (target.isRenderable && target.contextSlot == nullptr)
+                target.contextSlot = acquireOffscreenContext();
+
+            if (target.contextSlot == nullptr || target.contextSlot->frameActive)
                 return;
 
+            auto* renderContext = target.contextSlot->renderContext.get();
             renderContext->static_impl_cast<rive::gpu::RenderContextGLImpl>()->invalidateGLState();
             renderContext->beginFrame (toRiveFrameDescriptor (frameDesc));
             target.contextSlot->frameActive = true;
@@ -446,15 +413,17 @@ public:
         withGLContext ([&]
         {
             auto& target = static_cast<OffscreenTargetGL&> (baseTarget);
+            auto* slot = std::exchange (target.contextSlot, nullptr);
 
-            auto renderContext = target.getRenderContext();
-            if (renderContext == nullptr || target.contextSlot == nullptr || ! target.contextSlot->frameActive)
+            if (slot == nullptr || ! slot->frameActive)
                 return;
 
+            auto* renderContext = slot->renderContext.get();
             renderContext->static_impl_cast<rive::gpu::RenderContextGLImpl>()->invalidateGLState();
             renderContext->flush ({ target.getRenderTarget() });
             renderContext->static_impl_cast<rive::gpu::RenderContextGLImpl>()->unbindGLInternalResources();
-            target.contextSlot->frameActive = false;
+            slot->frameActive = false;
+            slot->leased = false;
         });
     }
 
@@ -641,6 +610,34 @@ private:
             default:
                 return 0;
         }
+    }
+
+    std::unique_ptr<OffscreenTargetGL> makeOffscreenTarget (int width, int height, bool isRenderable)
+    {
+        return withGLContext ([&]() -> std::unique_ptr<OffscreenTargetGL>
+        {
+            if (width <= 0 || height <= 0 || renderContext == nullptr)
+                return nullptr;
+
+            auto renderCanvas = renderContext->makeRenderCanvas (static_cast<uint32_t> (width), static_cast<uint32_t> (height));
+            if (renderCanvas == nullptr)
+                return nullptr;
+
+            auto target = std::make_unique<OffscreenTargetGL>();
+            target->width = width;
+            target->height = height;
+            target->isRenderable = isRenderable;
+            target->renderCanvas = std::move (renderCanvas);
+            return target;
+        });
+    }
+
+    void releaseUnusedOffscreenContexts (GpuUnusedResources resources) override
+    {
+        releaseIdleOffscreenContexts (offscreenContextPool, resources, [] (const auto& slot)
+        {
+            return ! slot->leased;
+        });
     }
 
     OffscreenContextSlot* acquireOffscreenContext()

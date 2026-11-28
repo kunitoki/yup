@@ -102,6 +102,8 @@ void FlexBoxComponent::performLayout (Rectangle<float> area)
     FlexBox flexBox;
 
     flexBox.flexDirection = getDirection();
+
+    const bool isRow = flexBox.flexDirection == FlexBox::Direction::row || flexBox.flexDirection == FlexBox::Direction::rowReverse;
     flexBox.flexWrap = flexWraps.toEnum (findProperty (Properties::wrapId).toString(), FlexBox::Wrap::noWrap);
     flexBox.justifyContent = flexJustifications.toEnum (findProperty (Properties::justifyId).toString(), FlexBox::JustifyContent::flexStart);
     flexBox.alignItems = flexAlignments.toEnum (findProperty (Properties::alignId).toString(), FlexBox::AlignItems::stretch);
@@ -118,10 +120,35 @@ void FlexBoxComponent::performLayout (Rectangle<float> area)
         item.alignSelf = flexSelfAlignments.toEnum (getItemString (*child, Properties::alignSelfId), FlexItem::AlignSelf::autoAlign);
         readItemSizing (item, *child);
 
+        // An item that grows and declares no size along the main axis grows from nothing. Its bounds are what the layout
+        // before gave it: starting from them, an item added among others that have their share would get none
+        if (item.flexGrow > 0.0f && item.flexBasis < 0.0f && (isRow ? item.width : item.height) < 0.0f)
+            item.flexBasis = 0.0f;
+
         flexBox.items.add (item);
     }
 
     flexBox.performLayout (area);
+}
+
+std::optional<Size<float>> FlexBoxComponent::measureContent() const
+{
+    const auto direction = getDirection();
+    const bool isRow = direction == FlexBox::Direction::row || direction == FlexBox::Direction::rowReverse;
+    const auto children = getLayoutChildren();
+
+    // One line, as if the children did not wrap: their sum along the direction, the largest of them across it
+    float along = getGap() * static_cast<float> (jmax (0, static_cast<int> (children.size()) - 1));
+    float across = 0.0f;
+
+    for (const auto* child : children)
+    {
+        const auto size = getMeasuredItemSize (*child);
+        along += isRow ? size.getWidth() : size.getHeight();
+        across = jmax (across, isRow ? size.getHeight() : size.getWidth());
+    }
+
+    return isRow ? Size<float> (along, across) : Size<float> (across, along);
 }
 
 //==============================================================================

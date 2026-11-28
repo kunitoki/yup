@@ -1084,6 +1084,49 @@ TEST_F (GraphicsGpuPixelTests, StackedMasksMultiply)
     EXPECT_LT (alphaAt (pixels, 16, 48), 50);
 }
 
+TEST_F (GraphicsGpuPixelTests, CanvasesDrawnOneAfterTheOtherShareARenderContext)
+{
+    auto first = GpuCanvas::create (*gpuContext, size, size);
+    auto second = GpuCanvas::create (*gpuContext, size, size);
+    ASSERT_NE (first, nullptr);
+    ASSERT_NE (second, nullptr);
+
+    const auto* firstFactory = first->beginDraw().getFactory();
+    ASSERT_TRUE (first->commit());
+
+    const auto* secondFactory = second->beginDraw().getFactory();
+    ASSERT_TRUE (second->commit());
+
+    EXPECT_EQ (firstFactory, secondFactory);
+}
+
+TEST_F (GraphicsGpuPixelTests, ACanvasDrawnInsideTheFrameOfAnotherHasARenderContextOfItsOwn)
+{
+    auto outer = GpuCanvas::create (*gpuContext, size, size);
+    auto inner = GpuCanvas::create (*gpuContext, size, size);
+    ASSERT_NE (outer, nullptr);
+    ASSERT_NE (inner, nullptr);
+
+    const auto half = static_cast<float> (size) * 0.5f;
+
+    auto& outerGraphics = outer->beginDraw();
+    outerGraphics.setFillColor (Colors::red);
+    outerGraphics.fillRect (0.0f, 0.0f, half, static_cast<float> (size));
+
+    auto& innerGraphics = inner->beginDraw();
+    EXPECT_NE (innerGraphics.getFactory(), outerGraphics.getFactory());
+    innerGraphics.setFillColor (Colors::blue);
+    innerGraphics.fillAll();
+
+    outerGraphics.drawTexture (inner->asTexture(), { half, 0.0f, half, static_cast<float> (size) });
+
+    std::vector<uint8> pixels (static_cast<std::size_t> (size * size * 4));
+    ASSERT_TRUE (outer->commit());
+    ASSERT_TRUE (outer->readPixels (pixels.data(), pixels.size()));
+
+    expectRedThenBlue (pixels, 32);
+}
+
 TEST_F (GraphicsGpuPixelTests, ImageMeshCoversItsArea)
 {
     const auto pixels = render ([] (Graphics& g)

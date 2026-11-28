@@ -25,55 +25,52 @@
 
 using namespace yup;
 
-namespace
-{
-
-constexpr int spectrumTestFftSize = 2048;
-constexpr double spectrumTestSampleRate = 44100.0;
-constexpr float spectrumTestMinFrequency = 20.0f;
-constexpr float spectrumTestMaxFrequency = 20000.0f;
-constexpr int spectrumTestNumDisplayPoints = 512;
-
-constexpr int spectrumTestNumBins()
-{
-    return spectrumTestFftSize / 2 + 1;
-}
-
-constexpr float spectrumTestBinsPerHertz()
-{
-    return static_cast<float> (spectrumTestFftSize) / static_cast<float> (spectrumTestSampleRate);
-}
-
-/** Levels expressed as a linear ramp on the amplitude decibel scale, from 0 dB at bin 0 to
-    rangeDecibels at the last bin. Such a spectrum is reproduced exactly by the fractional level
-    interpolation, which makes it a precise reference for it.
-*/
-std::vector<float> makeDecibelRampSpectrum (float rangeDecibels = -40.0f)
-{
-    std::vector<float> levels (static_cast<size_t> (spectrumTestNumBins()), 1.0f);
-    const float lastBin = static_cast<float> (spectrumTestNumBins() - 1);
-
-    for (int bin = 0; bin < spectrumTestNumBins(); ++bin)
-    {
-        const float decibels = rangeDecibels * static_cast<float> (bin) / lastBin;
-        levels[static_cast<size_t> (bin)] = std::pow (10.0f, decibels / 20.0f);
-    }
-
-    return levels;
-}
-
-/** A single loud bin surrounded by a quiet floor, used to probe the interpolation across a peak. */
-std::vector<float> makeImpulseSpectrum (int peakBin, float peakLevel = 1.0f, float floorLevel = 0.001f)
-{
-    std::vector<float> levels (static_cast<size_t> (spectrumTestNumBins()), floorLevel);
-    levels[static_cast<size_t> (peakBin)] = peakLevel;
-
-    return levels;
-}
-
 class SpectrumBinMappingTests : public ::testing::Test
 {
 protected:
+    static constexpr int spectrumTestFftSize = 2048;
+    static constexpr double spectrumTestSampleRate = 44100.0;
+    static constexpr float spectrumTestMinFrequency = 20.0f;
+    static constexpr float spectrumTestMaxFrequency = 20000.0f;
+    static constexpr int spectrumTestNumDisplayPoints = 512;
+
+    static constexpr int spectrumTestNumBins()
+    {
+        return spectrumTestFftSize / 2 + 1;
+    }
+
+    static constexpr float spectrumTestBinsPerHertz()
+    {
+        return static_cast<float> (spectrumTestFftSize) / static_cast<float> (spectrumTestSampleRate);
+    }
+
+    /** Levels expressed as a linear ramp on the amplitude decibel scale, from 0 dB at bin 0 to
+        rangeDecibels at the last bin. Such a spectrum is reproduced exactly by the fractional level
+        interpolation, which makes it a precise reference for it.
+    */
+    static std::vector<float> makeDecibelRampSpectrum (float rangeDecibels = -40.0f)
+    {
+        std::vector<float> levels (static_cast<size_t> (spectrumTestNumBins()), 1.0f);
+        const float lastBin = static_cast<float> (spectrumTestNumBins() - 1);
+
+        for (int bin = 0; bin < spectrumTestNumBins(); ++bin)
+        {
+            const float decibels = rangeDecibels * static_cast<float> (bin) / lastBin;
+            levels[static_cast<size_t> (bin)] = std::pow (10.0f, decibels / 20.0f);
+        }
+
+        return levels;
+    }
+
+    /** A single loud bin surrounded by a quiet floor, used to probe the interpolation across a peak. */
+    static std::vector<float> makeImpulseSpectrum (int peakBin, float peakLevel = 1.0f, float floorLevel = 0.001f)
+    {
+        std::vector<float> levels (static_cast<size_t> (spectrumTestNumBins()), floorLevel);
+        levels[static_cast<size_t> (peakBin)] = peakLevel;
+
+        return levels;
+    }
+
     void SetUp() override
     {
         mapping.setFftParameters (spectrumTestFftSize, spectrumTestSampleRate);
@@ -83,8 +80,6 @@ protected:
 
     SpectrumBinMapping mapping;
 };
-
-} // namespace
 
 //==============================================================================
 // Configuration
@@ -188,7 +183,8 @@ TEST_F (SpectrumBinMappingTests, BandsGrowWithFrequencyOnALogarithmicAxis)
 {
     float previousWidth = 0.0f;
 
-    for (int point = 0; point < mapping.getNumDisplayPoints(); ++point)
+    // The last band stops at the maximum frequency, half a step short of the others, so it is left out
+    for (int point = 0; point < mapping.getNumDisplayPoints() - 1; ++point)
     {
         const auto& range = mapping.getRange (point);
         const float width = range.endBin - range.startBin;

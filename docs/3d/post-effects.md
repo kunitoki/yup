@@ -142,6 +142,10 @@ view.repaint();
 - How far each pixel moved comes from the previous frame the renderer drew, so
   render every frame of an animation: a renderer that skipped frames sees the
   whole jump as one motion.
+- The motion of a pixel is the one of its entity and of the camera. A mesh
+  that changes shape, by a skin, by morph targets or by
+  [`Mesh::setVertices()`](meshes-and-gltf.md#changing-a-mesh), is not smeared
+  for it.
 - Each 16 x 16 pixel tile smears along one direction, the fastest within the
   48 x 48 pixels around it, and smears that reach the 32 pixel cap tie: where
   two fast motions in different directions meet, one of them smears along the

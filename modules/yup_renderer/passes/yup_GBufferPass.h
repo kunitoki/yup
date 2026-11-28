@@ -79,9 +79,10 @@ public:
     static Targets acquireTargets (FrameResources& resources, GpuTexture::Ptr velocity, GpuTexture::Ptr depth);
 
     /** Draws @p items, the opaque and masked ones, then fills the texels they left uncovered with
-        the motion of the environment.
+        the motion of the environment. The items out of the view (SceneDrawList::DrawItem::inView)
+        are not drawn.
 
-        @p materials is cleared, then numbers the materials of the items for RT2.
+        @p materials is cleared, then numbers the materials of the items drawn for RT2.
 
         @returns False if the pass is not prepared, a target is missing or the pass could not begin.
     */

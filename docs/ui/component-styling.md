@@ -88,7 +88,7 @@ Every themable widget exposes color IDs:
 |---|---|
 | `TextButton::Style` | `backgroundColorId`, `backgroundPressedColorId`, `textColorId`, `textPressedColorId`, `outlineColorId`, `outlineFocusedColorId` (curated geometry: `cornerRadiusId`, `outlineWidthId`, `focusedOutlineWidthId`) |
 | `ToggleButton::Style` | `backgroundColorId`, `backgroundToggledColorId`, `textColorId`, `textToggledColorId`, `borderColorId`, `borderToggledColorId` (curated geometry: `cornerRadiusId`, `outlineWidthId`, `focusedOutlineWidthId`) |
-| `SwitchButton::Style` | `switchColorId`, `switchOffBackgroundColorId`, `switchOnBackgroundColorId` (curated geometry: `cornerRadiusId`, `thumbInsetId`) |
+| `SwitchButton::Style` | `switchColorId`, `switchOffBackgroundColorId`, `switchOnBackgroundColorId` (curated geometry: `cornerRadiusId`, `thumbInsetId`, `thumbSizeId`) |
 | `Slider::Style` | `backgroundColorId`, `trackColorId`, `thumbColorId`, `thumbOverColorId`, `thumbDownColorId`, `textColorId` (curated geometry: `trackWidthId`, `thumbSizeId`, `rotaryInsetId`) |
 | `Label::Style` | `textFillColorId`, `textStrokeColorId`, `backgroundColorId`, `outlineColorId` (curated geometry: `textHeightProportionId`) |
 | `TextEditor::Style` | `backgroundColorId`, `textColorId`, `caretColorId`, `selectionColorId`, `outlineColorId`, `focusedOutlineColorId` (curated geometry: `cornerRadiusId`, `outlineWidthId`, `focusedOutlineWidthId`) |
@@ -251,6 +251,81 @@ if (style.wasOk())
 See [Data-driven drawing](yui/drawing.md) for the elements, the `let`, `layer`,
 `group` and `repeat` scopes, and error reporting.
 
+### Series and parts
+
+Two declarations of a type info let a drawing paint a component of your own
+whole: a *series* for the data it shows, a *part* for what a drawing has no
+shape for.
+
+```cpp
+const ComponentTypeInfo& LevelGraph::getClassTypeInfo()
+{
+    static const auto info = ComponentTypeBuilder<LevelGraph> (Identifier ("LevelGraph"), Component::getClassTypeInfo())
+        .series ("levels", &LevelGraph::getLevels, &LevelGraph::getLevelsRevision, "The level of each band, 0 to 1.")
+        .part ("logo", "The logo, painted in the area it is given.")
+        .fixedPart ("cursor", &LevelGraph::getCursorBounds, "The cursor, filled with the fill color where the graph puts it.")
+        .build();
+
+    return info;
+}
+```
+
+- **`series`** declares a read-only array property read in place. The getter
+  returns a `Span<const T>` over elements the component holds in one block,
+  with `T` one of `float`, `int`, `bool`, `String`, `Color`, `Point<float>`,
+  `Rectangle<float>`, `AffineTransform` or `Font`. A drawing reading the name
+  binds that memory instead of a copy, see
+  [Data series](yui/drawing.md#data-series). Change the elements on the message
+  thread between two paints, then `repaint()`.
+- The optional **revision** getter returns a `uint32` the component changes
+  whenever it changes the elements (never 0, which means untracked). A
+  [shader sampling the series](yui/shaders.md#series) uploads its texture only
+  when the revision moves, instead of comparing the elements.
+- **`part`** declares what a drawing places with a `part` element, in the
+  area the drawing gives it with `bounds`. Pass an area getter as well to tell
+  where the component puts it when the drawing gives none.
+- **`fixedPart`** declares a part the component lays out itself, such as the
+  text of an editor: a drawing decides when it is painted and with which
+  paint, not where.
+
+The type only declares a part: the theme paints it, as it paints the
+component, so the drawing code of a component stays in one place.
+
+```cpp
+auto theme = ApplicationTheme::getGlobalTheme();
+
+theme->setComponentPart<LevelGraph> ("logo", [] (Graphics& g, const ApplicationTheme&, const LevelGraph& graph, const Rectangle<float>& area)
+{
+    g.drawImage (graph.getLogo(), area);
+});
+
+theme->setComponentPart<LevelGraph> ("cursor", [] (Graphics& g, const ApplicationTheme&, const LevelGraph&, const Rectangle<float>& area)
+{
+    g.fillRect (area);
+});
+```
+
+A part painter paints with the paint set on the `Graphics` it gets, so one
+function serves the style of the type, which calls it where it wants the part,
+and the drawing. A theme that sets no painter for a part paints nothing of it.
+A `ComponentStyle` set on one component places a part with
+`Component::paintPart`, naming it as the widget does in its `Style`:
+
+```cpp
+g.setFillColor (label.findColor (Label::Style::textFillColorId).value_or (Colors::white));
+label.paintPart (g, Label::Style::textPartId);
+```
+
+The rows of a list and of a tree and the tabs of a bar tell their text the same
+way, as `ListBoxItem::Style::textPartId`, `TreeViewRow::Style::textPartId` and
+`TabButton::Style::textPartId`. The theme lays that text out for the area the
+part is given, which is where `getTextBounds()` tells unless a drawing gives it
+`bounds`. The `icon` part of a tab is its image or its glyph, the glyph filled
+with the fill color.
+
+[Widgets in drawings](yui/widgets.md) lists the series and the parts of the
+built-in widgets.
+
 ---
 
 ## `ComponentStyle` — per-type paint styles
@@ -281,6 +356,50 @@ The callback receives the `Graphics` context, the current `ApplicationTheme`,
 and a typed reference to the component. It is called whenever the component
 needs to repaint.
 
+### Keeping a laid out text between paints
+
+Laying a text out costs far more than filling it, and the text of a widget
+seldom changes between two paints. The widgets whose text the theme lays out
+hold a `TextLayoutCache` for whoever paints them: `ListBoxItem`, `TreeViewRow`,
+`TabButton` and `Slider` (the value of a stepper) return it from
+`getTextLayoutCache()`, and each item of a `PopupMenu` has one for its text and
+one for its shortcut. The widget never looks into it. A painter keeps there the
+text it laid out and what it laid it out from, and lays it out again only when
+one of them is no longer the same:
+
+```cpp
+auto rowStyle = ComponentStyle::createStyle<ListBoxItem> (
+    [] (Graphics& g, const ApplicationTheme& theme, const ListBoxItem& item)
+    {
+        const auto text = item.getText();
+        const auto font = theme.getDefaultFont().withHeight (12.0f);
+        const auto area = item.getTextBounds();
+
+        auto& kept = item.getTextLayoutCache();
+
+        if (kept.text != text || kept.font != font || kept.styledText.getMaxSize() != area.getSize())
+        {
+            auto modifier = kept.styledText.startUpdate();
+            modifier.clear();
+            modifier.setMaxSize (area.getSize());
+            modifier.setVerticalAlign (StyledText::middle);
+            modifier.appendText (text, font);
+
+            kept.text = text;
+            kept.font = font;
+        }
+
+        g.setFillColor (Colors::white);
+        g.fillFittedText (kept.styledText, area);
+    });
+```
+
+The comparison is all it takes: nothing has to tell the painter that the text,
+the bounds or the font of the theme changed. Two fonts are the same when they
+are one font at one height, so a font made at each paint, as
+`Font::withAxisValue` makes one, is another font every time: keep such a font
+as well.
+
 ### Attaching a style to a component
 
 ```cpp
@@ -288,6 +407,13 @@ needs to repaint.
 comp.setStyle (customButtonStyle);
 ComponentStyle::Ptr s = comp.getStyle();
 ```
+
+A style set on a component paints what it likes of it: rounded shapes,
+translucent colors, or nothing at all in places. So the component is not
+painted as an opaque one while it has the style, whatever `isOpaque()` returns:
+its parent is painted behind it, and the style needs no background of its own.
+The same holds for a [drawing](#painting-a-component-from-a-drawing), which is
+a style set on the component.
 
 ### Registering a type-wide style on the theme
 
@@ -297,7 +423,28 @@ theme->setComponentStyle<TextButton> (customButtonStyle);
 ```
 
 This makes all `TextButton` instances use the custom style, unless a specific
-instance has called `comp.setStyle()` with its own override.
+instance has called `comp.setStyle()` with its own override. It replaces the
+style the theme had for `TextButton`, and `nullptr` removes it.
+
+A class with no style of its own is painted with the one of the closest class
+it derives from, so a `class Fader : public Slider` needs nothing to be painted
+as a `Slider`. That goes for your own components too: one that does not
+override `paint()` is painted with the style set for its class.
+
+```cpp
+class Badge : public Component {};
+
+theme->setComponentStyle<Badge> (ComponentStyle::createStyle<Badge> (
+    [] (Graphics& g, const ApplicationTheme&, const Badge& badge)
+    {
+        g.setFillColor (Colors::orange);
+        g.fillRoundedRect (badge.getLocalBounds(), 4.0f);
+    }));
+```
+
+A type-wide style leaves the opaque state of the components as it is: for a
+type that is opaque, it has to paint every pixel of the bounds with an opaque
+color.
 
 ### Removing a style
 

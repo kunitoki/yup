@@ -98,6 +98,8 @@ ExpressionState::ExpressionState (const CompiledExpression& compiledProgram, int
                            (int) instruction.inputs.size(),
                            instruction.output,
                            instruction.isPure });
+
+        hasImpureCalls = hasImpureCalls || ! instruction.isPure;
     }
 }
 
@@ -451,6 +453,12 @@ bool ExpressionState::hasChanged() const noexcept
             return true;
 
     return false;
+}
+
+bool ExpressionState::isUpToDate() const noexcept
+{
+    // The uniforms stay changed for a program reading arrays, which is evaluated again every time
+    return ! scheduleChanged && ! uniformsChanged && ! hasImpureCalls && inputColumns.empty();
 }
 
 //==============================================================================

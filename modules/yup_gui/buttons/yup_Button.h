@@ -64,6 +64,52 @@ public:
     int getRadioGroupId() const noexcept { return radioGroupId; }
 
     //==============================================================================
+    /** Sets the value the button stands for among the buttons sharing a selection.
+
+        A button with a `checked` state that has a value is on while its selection equals that
+        value (see setSelection), and a click selects the value instead of toggling the button.
+        Buttons whose selections are linked to one value are then exclusive, whatever their
+        parents, and none needs a state of its own to bind:
+
+        @code
+        ToggleButton { text: "LFO";  value: 1; selection <=> mod.source; }
+        ToggleButton { text: "STEP"; value: 2; selection <=> mod.source; }
+        @endcode
+
+        A click on the button that is on leaves it on, or selects its off value when it has one
+        (see setOffValue).
+
+        @param newValue  The value, or a void var for a button its clicks toggle.
+    */
+    void setValue (const var& newValue);
+
+    /** Returns the value the button stands for, void when it has none. */
+    const var& getValue() const noexcept { return value; }
+
+    /** Sets the selection a button with a value is compared with: the button is on while the
+        two are equal.
+
+        It is what a click on the button changes, so it is the property to link to the value
+        the buttons share.
+
+        @param newSelection  The selected value.
+    */
+    void setSelection (const var& newSelection);
+
+    /** Returns the selection, void when none was set. */
+    const var& getSelection() const noexcept { return selection; }
+
+    /** Sets what a click on a button with a value selects when the button is on, so that a
+        click can leave the selection empty. Without it the button that is on stays on.
+
+        @param newOffValue  The value selected instead, or a void var for none.
+    */
+    void setOffValue (const var& newOffValue);
+
+    /** Returns what a click on the button selects when it is on, void for nothing. */
+    const var& getOffValue() const noexcept { return offValue; }
+
+    //==============================================================================
     /** Paints the button.
     
         This method must be implemented by subclasses to define how the button should be drawn.
@@ -108,11 +154,23 @@ protected:
     /** Turns off the other buttons of the radio group. A button with a `checked` state calls it when it is turned on. */
     void turnOffOtherButtonsInGroup();
 
+    /** Selects what a click on a button with a value selects: its value when it is off, its off
+        value when it is on and has one. A button with a `checked` state calls it when clicked.
+
+        @returns False for a button with no value, which the click then toggles.
+    */
+    bool selectValueOnClick();
+
     static const Identifier textPropertyId;
     static const Identifier checkedPropertyId;
     static const Identifier radioGroupPropertyId;
 
 private:
+    void setSelectionState (var& state, const Identifier& name, const var& newValue);
+
+    var value;
+    var selection;
+    var offValue;
     int radioGroupId = 0;
     bool isButtonCurrentlyOver = false;
     bool isButtonCurrentlyDown = false;

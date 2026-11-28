@@ -43,6 +43,21 @@ namespace yup
     yup::Entity second = lamp->instantiate (*scene, first);
     @endcode
 
+    A node that refers to other entities of its instance, like an animation and the entities it
+    moves, can't be made by its part alone, which only sees its own entity. A link makes it: a
+    step added with addLink(), run by instantiate() once the whole tree is built, that gets the
+    entity made by every part, indexed by Part::getIndex().
+
+    @code
+    auto& bulb = lamp->getRoot().addChild ("bulb");
+
+    lamp->addLink ([index = static_cast<size_t> (bulb.getIndex())] (yup::Span<const yup::Entity> entities)
+    {
+        auto root = entities.front();
+        root.attach<Dimmer> (entities[index]); // a node of the lamp keeping the entity of its bulb
+    });
+    @endcode
+
     Build a prefab completely before instantiating or sharing it: instances don't follow later
     changes. GltfModel builds one prefab per glTF scene.
 
@@ -66,6 +81,14 @@ public:
 
         /** Returns the name of the entities this part makes. */
         const String& getName() const noexcept { return name; }
+
+        /** Returns the index of the part in its prefab: 0 for the root, then one more for each
+            part in the order they were added, wherever they are in the tree.
+
+            The index never changes, and it is where the entity made by the part is found among
+            the entities a link gets, see Prefab::addLink().
+        */
+        int getIndex() const noexcept { return index; }
 
         //==============================================================================
         /** Adds a node of type T, constructed from copies of @p args on every instantiation.
@@ -130,6 +153,9 @@ public:
         friend class Prefab;
 
         String name;
+        Part* rootPart = this;
+        int index = 0;
+        int numParts = 1; // Of the whole tree, counted by its root part
         std::vector<std::function<void (Entity&)>> factories;
         std::vector<std::unique_ptr<Part>> children;
 
@@ -147,10 +173,26 @@ public:
     const Part& getRoot() const noexcept { return root; }
 
     //==============================================================================
+    /** Adds a link: a step that instantiate() runs once the whole tree of an instance is built.
+
+        Use it for what a part can't do alone, since a part only sees its own entity: attaching
+        or completing the nodes that refer to other entities of the same instance. Links run in
+        the order they were added, after every part has made its entity and attached its nodes.
+
+        @param link A callable taking the entities of the instance, indexed by Part::getIndex(),
+                    so the first one is the entity made by the root part. An entity destroyed
+                    while the tree was being built, by an attach callback for example, is
+                    invalid there, and so are the ones of the parts it held.
+    */
+    void addLink (std::function<void (Span<const Entity>)> link);
+
+    //==============================================================================
     /** Builds a new entity tree from the prefab.
 
         Parts become entities in order, parents before children, so attach callbacks and
         signals see the parents already built. Deep hierarchies can't overflow the stack.
+        An entity that such a callback destroys gets no more nodes, and nothing is made of the
+        parts it held. The links then run, see addLink().
 
         @param scene  The scene to create the entities in.
         @param parent The entity to add the tree to, or an invalid entity for the root of the scene.
@@ -161,6 +203,7 @@ public:
 
 private:
     Part root;
+    std::vector<std::function<void (Span<const Entity>)>> links;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Prefab)
 };

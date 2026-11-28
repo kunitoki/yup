@@ -20,6 +20,7 @@
 */
 
 #include <yup_gui/yup_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 
 #include <gtest/gtest.h>
 
@@ -178,9 +179,126 @@ TEST_F (StyleSheetTests, CollectsWatchedProperties)
     EXPECT_FALSE (sheet->watchesProperty (Identifier ("opacity")));
 }
 
+TEST_F (StyleSheetTests, TellsThePropertiesWhoseChangeReachesTheDescendants)
+{
+    const auto rule = [] (const String& selector, const String& name)
+    {
+        return DataTree ("rule", { { "selector", selector } }, { declaration (name, "1") });
+    };
+
+    auto sheet = build (DataTree ("style",
+                                  { rule ("Slider:hover", "opacity"),
+                                    rule (".row:pressed .icon", "opacity"),
+                                    rule ("ToggleButton:checked", "Slider.trackWidth"),
+                                    rule ("Label[title=\"a\"]", "opacity"),
+                                    rule ("#gain:focus", "opacity") }));
+
+    ASSERT_NE (sheet, nullptr);
+
+    // Read on the component a rule matches, by rules whose declarations stay on it
+    for (const auto* name : { "hovered", "focused" })
+    {
+        EXPECT_TRUE (sheet->watchesProperty (Identifier (name))) << name;
+        EXPECT_FALSE (sheet->watchesPropertyForDescendants (Identifier (name))) << name;
+    }
+
+    // Read before a combinator, by a rule the descendants inherit a declaration of, and as an attribute
+    for (const auto* name : { "pressed", "checked", "title" })
+    {
+        EXPECT_TRUE (sheet->watchesProperty (Identifier (name))) << name;
+        EXPECT_TRUE (sheet->watchesPropertyForDescendants (Identifier (name))) << name;
+    }
+
+    EXPECT_FALSE (sheet->watchesPropertyForDescendants (Identifier ("opacity")));
+}
+
+TEST_F (StyleSheetTests, FindsTheRulesAComponentCanMatchInSourceOrder)
+{
+    const auto rule = [] (const String& selector)
+    {
+        return DataTree ("rule", { { "selector", selector } }, { declaration ("opacity", "1") });
+    };
+
+    auto sheet = build (DataTree ("style",
+                                  { rule ("*"),                  // 0
+                                    rule ("Slider"),             // 1
+                                    rule ("Component"),          // 2
+                                    rule ("Label"),              // 3
+                                    rule (".knob"),              // 4
+                                    rule (".other"),             // 5
+                                    rule ("#gain"),              // 6
+                                    rule ("#pan"),               // 7
+                                    rule (".panel Slider.knob"), // 8
+                                    rule ("Slider#gain.wide"),   // 9
+                                    rule (":hover"),             // 10
+                                    rule ("[title=\"a\"]"),      // 11
+                                    rule (":root"),              // 12
+                                    rule (".panel > *"),         // 13
+                                    rule ("#gain, .other") }));  // 14 and 15
+
+    ASSERT_NE (sheet, nullptr);
+    ASSERT_EQ (sheet->getRules().size(), 16u);
+
+    const auto ordersOf = [] (const std::vector<const StyleSheet::Rule*>& rules)
+    {
+        std::vector<int> orders;
+
+        for (const auto* found : rules)
+            orders.push_back (found->order);
+
+        return orders;
+    };
+
+    Slider slider (Slider::LinearHorizontal, "gain");
+    slider.addStyleClass (Identifier ("knob"));
+
+    // The rules requiring nothing, then a type of the slider, one of its classes or its id: not another type, class or id
+    std::vector<const StyleSheet::Rule*> candidates;
+    sheet->findCandidateRules (slider, candidates);
+    EXPECT_EQ (ordersOf (candidates), (std::vector<int> { 0, 1, 2, 4, 6, 8, 9, 10, 11, 12, 13, 14 }));
+
+    // What the vector held is replaced, and a class set twice finds its rules once
+    Array<Identifier> twice;
+    twice.add (Identifier ("knob"));
+    twice.add (Identifier ("knob"));
+    slider.setStyleClasses (twice);
+
+    sheet->findCandidateRules (slider, candidates);
+    EXPECT_EQ (ordersOf (candidates), (std::vector<int> { 0, 1, 2, 4, 6, 8, 9, 10, 11, 12, 13, 14 }));
+
+    Component plain ("pan");
+    plain.addStyleClass (Identifier ("other"));
+    sheet->findCandidateRules (plain, candidates);
+    EXPECT_EQ (ordersOf (candidates), (std::vector<int> { 0, 2, 5, 7, 10, 11, 12, 13, 15 }));
+
+    // Every rule matching a component is among the ones found for it, in the same order
+    Label label;
+    label.setTitle ("a");
+    slider.setHovered (true);
+
+    for (auto* component : { static_cast<Component*> (&slider), &plain, static_cast<Component*> (&label) })
+    {
+        std::vector<int> scanned;
+
+        for (const auto& scannedRule : sheet->getRules())
+            if (scannedRule.selector.matches (*component, component))
+                scanned.push_back (scannedRule.order);
+
+        std::vector<int> indexed;
+        sheet->findCandidateRules (*component, candidates);
+
+        for (const auto* found : candidates)
+            if (found->selector.matches (*component, component))
+                indexed.push_back (found->order);
+
+        EXPECT_FALSE (scanned.empty());
+        EXPECT_EQ (indexed, scanned) << component->getComponentID();
+    }
+}
+
 TEST_F (StyleSheetTests, ParsesWholeDocuments)
 {
-    auto sheet = StyleSheet::parse (R"yui(
+    auto sheet = YuiParser::parseStyleSheet (R"yui(
         palette Ember { colors: "#100b00-#85cb33-#efffc8-#a5cbc3-#3b341f"; accent: #ff9a1f; }
         drawing Knob { circle { center: bounds.center; radius: 4; fill: thumbColor; } }
         style {
@@ -196,6 +314,85 @@ TEST_F (StyleSheetTests, ParsesWholeDocuments)
     EXPECT_FALSE (parsed->findDrawing ("Missing").isValid());
     ASSERT_EQ (parsed->getRules().size(), 2u);
     EXPECT_EQ (parsed->getRules()[0].declarations[1].qualifier, Identifier ("Slider"));
+}
+
+TEST_F (StyleSheetTests, FindsTheShadersOfADocumentAndTypesTheirProperties)
+{
+    auto sheet = YuiParser::parseStyleSheet (R"yui(
+        shader Crt {
+            fragment: "fx/crt.frag";
+            property intensity: number = 0.5;
+            property tint: color = palette.accent;
+            property steps: integer;
+            property offsets: number[];
+        }
+        shader Hologram { material: "fx/hologram.glsl"; property rim: color = #00ffff; }
+        drawing Knob { circle { center: bounds.center; radius: 4; } })yui");
+
+    ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
+
+    const auto& parsed = sheet.getReference();
+    const auto crt = parsed->findShader ("Crt");
+    ASSERT_TRUE (crt.isValid());
+    EXPECT_EQ (crt.getType(), Identifier ("shader"));
+    EXPECT_EQ (crt.getProperty ("fragment").toString(), "fx/crt.frag");
+    EXPECT_EQ (crt.getNumChildren(), 4);
+    EXPECT_EQ (crt.getRoot().getType(), Identifier ("yui"));
+
+    EXPECT_EQ (parsed->findShader ("Hologram").getProperty ("material").toString(), "fx/hologram.glsl");
+    EXPECT_FALSE (parsed->findShader ("Missing").isValid());
+
+    // A shader is no drawing, and a drawing no shader
+    EXPECT_FALSE (parsed->findShader ("Knob").isValid());
+    EXPECT_FALSE (parsed->findDrawing ("Crt").isValid());
+
+    const auto typeOf = [&parsed] (const char* name)
+    {
+        const auto* declared = parsed->findDeclaredProperty (Identifier (name));
+        return declared != nullptr ? declared->type : ComponentProperty::Type::any;
+    };
+
+    EXPECT_EQ (typeOf ("intensity"), ComponentProperty::Type::number);
+    EXPECT_EQ (typeOf ("tint"), ComponentProperty::Type::color);
+    EXPECT_EQ (typeOf ("steps"), ComponentProperty::Type::integer);
+    EXPECT_EQ (typeOf ("rim"), ComponentProperty::Type::color);
+
+    const auto* offsets = parsed->findDeclaredProperty (Identifier ("offsets"));
+    ASSERT_NE (offsets, nullptr);
+    EXPECT_EQ (offsets->type, ComponentProperty::Type::array);
+    EXPECT_EQ (offsets->elementType, ComponentProperty::Type::number);
+
+    EXPECT_EQ (parsed->findDeclaredProperty (Identifier ("fragment")), nullptr);
+}
+
+TEST_F (StyleSheetTests, ReportsTheShadersThatAreInvalid)
+{
+    const auto locate = [] (const String& text)
+    {
+        const auto parsed = YuiParser::parse (text);
+        EXPECT_TRUE (parsed.wasOk()) << text;
+
+        DataTreeDiagnostic failure;
+        EXPECT_TRUE (StyleSheet::fromTree (parsed.document, &failure).failed()) << text;
+        return parsed.sourceMap.locate (failure).toString();
+    };
+
+    EXPECT_EQ (locate ("shader Crt {\n  fragment: \"a.frag\";\n  vertex: \"a.vert\";\n}"), "3:3: The shader 'Crt' has an unknown property 'vertex', expected 'fragment' or 'material'");
+    EXPECT_EQ (locate ("\nshader Crt { property gain: number; }"), "2:1: The shader 'Crt' needs a 'fragment' or a 'material'");
+    EXPECT_EQ (locate ("shader Crt {\n  fragment: \"a.frag\";\n  material: \"a.glsl\";\n}"), "3:3: The shader 'Crt' can't have both a 'fragment' and a 'material'");
+    EXPECT_EQ (locate ("shader Crt {\n  fragment: \"\";\n}"), "2:3: The shader 'Crt' needs the path of its 'fragment'");
+    EXPECT_EQ (locate ("shader Crt {\n  material: \" \";\n}"), "2:3: The shader 'Crt' needs the path of its 'material'");
+    EXPECT_EQ (locate ("shader Crt { fragment: \"a.frag\"; }\nshader Crt { material: \"a.glsl\"; }"), "2:1: The shader 'Crt' is already declared");
+
+    // A shader and a drawing can't share a name, in whatever order they are declared
+    EXPECT_EQ (locate ("drawing Crt { }\nshader Crt { fragment: \"a.frag\"; }"), "2:1: The shader 'Crt' has the same name as a drawing");
+    EXPECT_EQ (locate ("shader Crt { fragment: \"a.frag\"; }\ndrawing Crt { }"), "1:1: The shader 'Crt' has the same name as a drawing");
+
+    // The parser always gives a shader its name, a tree made by hand may not
+    DataTreeDiagnostic failure;
+    EXPECT_TRUE (StyleSheet::fromTree (DataTree ("yui", { DataTree ("shader", { { "fragment", "a.frag" } }) }), &failure).failed());
+    EXPECT_EQ (failure.message, "A shader block needs a name");
+    EXPECT_EQ (failure.element.getType(), Identifier ("shader"));
 }
 
 TEST_F (StyleSheetTests, FailsForInvalidInput)
@@ -216,7 +413,7 @@ TEST_F (StyleSheetTests, ReportsTheElementOfTheFirstProblem)
         const auto parsed = YuiParser::parse (text);
         EXPECT_TRUE (parsed.wasOk());
 
-        YuiDiagnostic failure;
+        DataTreeDiagnostic failure;
         EXPECT_TRUE (StyleSheet::fromTree (parsed.document, &failure).failed());
         return parsed.sourceMap.locate (failure).toString();
     };
@@ -227,7 +424,7 @@ TEST_F (StyleSheetTests, ReportsTheElementOfTheFirstProblem)
     EXPECT_EQ (locate ("palette P { colors: \"#100b00-#85cb33\"; }\npalette P { colors: \"#efffc8-#85cb33\"; }"), "2:1: The palette 'P' already has a dark version");
     EXPECT_EQ (locate ("style {\n  Slider::before { opacity: 1; }\n}"), "2:3: Pseudo-elements are not supported in selector 'Slider::before'");
 
-    YuiDiagnostic failure;
+    DataTreeDiagnostic failure;
     EXPECT_TRUE (StyleSheet::fromTree (DataTree ("style", { DataTree ("keyframes") }), &failure).failed());
     EXPECT_EQ (failure.element.getType(), Identifier ("keyframes"));
 
@@ -238,7 +435,7 @@ TEST_F (StyleSheetTests, ReportsTheElementOfTheFirstProblem)
 
 TEST_F (StyleSheetTests, KeepsTheElementsOfDeclarationsInTheirDocument)
 {
-    auto sheet = StyleSheet::parse ("style {\n  Slider { opacity: 0.5; }\n}");
+    auto sheet = YuiParser::parseStyleSheet ("style {\n  Slider { opacity: 0.5; }\n}");
     ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
 
     const auto& element = sheet.getReference()->getRules().front().declarations.front().element;
@@ -248,7 +445,7 @@ TEST_F (StyleSheetTests, KeepsTheElementsOfDeclarationsInTheirDocument)
 
 TEST_F (StyleSheetTests, ExpandsCommaSeparatedSelectorBlocksWithPerBranchSpecificity)
 {
-    auto sheet = StyleSheet::parse (R"yui(
+    auto sheet = YuiParser::parseStyleSheet (R"yui(
         style {
             TextButton,
             ComboBox:open {

@@ -143,7 +143,14 @@ public:
     static std::vector<Operation> operationsFromVar (const var& value);
 
     //==============================================================================
-    /** Replaces the chain of filter operations. */
+    /** Replaces the chain of filter operations.
+
+        Call it on the message thread, or with the message manager locked: a chain that is not
+        the one the effect has is shown by the components the effect is set on, which are drawn
+        through it again without being painted again. The effect asks for no room: a chain that
+        spreads further needs the paint margin of those components to grow (see
+        getRequiredMargin and Component::setPaintMargin), as a stylesheet `filter:` does by itself.
+    */
     void setOperations (std::vector<Operation> newOperations);
 
     /** Returns a copy of the current filter operations. */
@@ -158,6 +165,9 @@ public:
     //==============================================================================
     /** @internal */
     void apply (Graphics& g, GpuTexture::Ptr inputTexture, Rectangle<float> bounds) override;
+
+    /** @internal */
+    void releaseResources() override;
 
 private:
     std::vector<Operation> operations;

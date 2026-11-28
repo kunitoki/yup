@@ -310,6 +310,13 @@ and applying a stylesheet already do this.
 `padding` and `gap` come from `LayoutComponent`. `padding` takes a number, or a
 string of 1, 2 or 4 values in CSS order (`"8"`, `"8 16"`, `"4 8 4 8"`).
 
+`fitContent` (`setFitContent`) makes a container as large as its children need,
+plus its padding: it sets its own `preferredWidth` and `preferredHeight`, which
+the layout it is in then gives it. A child is measured at its preferred size
+or, without one, at its current size, with its margins. `fitWidth` and
+`fitHeight` (`setFitAxes`) choose which of the two sizes is fitted. `FlexBox`,
+`Row`, `Column` and `Stack` fit; a `Grid` keeps its size.
+
 - `FlexBox`, `Row` and `Column`: `direction` (`row`, `rowReverse`, `column`,
   `columnReverse`), `wrap` (`noWrap`, `wrap`, `wrapReverse`), `justify`
   (`start`, `end`, `center`, `spaceBetween`, `spaceAround`, `spaceEvenly`) and

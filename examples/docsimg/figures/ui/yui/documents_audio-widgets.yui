@@ -1,0 +1,9 @@
+// size: 560 130
+Row {
+    gap: 8;
+
+    ModWheel   { preferredWidth: 36; }
+    PitchWheel { preferredWidth: 36; }
+
+    MidiKeyboard { rangeStart: 48; rangeEnd: 84; flexGrow: 1; }
+}

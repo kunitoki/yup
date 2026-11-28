@@ -25,11 +25,55 @@
 
 using namespace yup;
 
+namespace yup
+{
+extern std::unique_ptr<yup::GraphicsContext> yup_constructHeadlessGraphicsContext (yup::GpuDevice::Options, yup::GpuDevice::Ptr);
+} // namespace yup
+
 class AudioViewComponentTests : public ::testing::Test
 {
 protected:
     static constexpr int kTestSampleRate = 44100;
     static constexpr int kTestBufferSize = 10000;
+
+    /** Tells which channels it was asked to paint. */
+    class RecordingThumbnail : public AudioThumbnail
+    {
+    public:
+        using AudioThumbnail::AudioThumbnail;
+
+        void paintChannel (Graphics& g, const Rectangle<float>& lane, int channelIndex, Range<double> sampleRange, float pixelWidth) override
+        {
+            paintedChannels.add (channelIndex);
+            AudioThumbnail::paintChannel (g, lane, channelIndex, sampleRange, pixelWidth);
+        }
+
+        Array<int> paintedChannels;
+    };
+
+    /** Tells how many labels it laid out, and what its overlay was given to paint over. */
+    class RecordingView : public AudioViewComponent
+    {
+    public:
+        using AudioViewComponent::AudioViewComponent;
+
+        mutable int numLabelsLaidOut = 0;
+        int numOverlaysPainted = 0;
+        Rectangle<float> overlayBounds;
+
+    protected:
+        void paintOverlay (Graphics&, const Rectangle<float>& waveformBounds) override
+        {
+            ++numOverlaysPainted;
+            overlayBounds = waveformBounds;
+        }
+
+        String getChannelLabel (int channelIndex) const override
+        {
+            ++numLabelsLaidOut;
+            return AudioViewComponent::getChannelLabel (channelIndex);
+        }
+    };
 
     void SetUp() override
     {
@@ -183,6 +227,28 @@ TEST_F (AudioViewComponentTests, SetZoomFactorNegative)
     view->setZoomFactor (-1.0);
     // Should handle gracefully
     EXPECT_TRUE (true);
+}
+
+TEST_F (AudioViewComponentTests, AZoomFactorSetWithoutAudioAppliesToTheAudioGivenNext)
+{
+    view->setZoomFactor (4.0);
+    EXPECT_DOUBLE_EQ (4.0, view->getZoomFactor());
+    EXPECT_TRUE (view->getViewRangeSamples().isEmpty());
+
+    auto buffer = createTestBuffer (2, kTestBufferSize);
+    view->setSource (&buffer, kTestSampleRate);
+
+    EXPECT_DOUBLE_EQ (4.0, view->getZoomFactor());
+    EXPECT_DOUBLE_EQ (0.0, view->getViewRangeSamples().getStart());
+    EXPECT_DOUBLE_EQ (kTestBufferSize / 4.0, view->getViewRangeSamples().getLength());
+
+    // Cleared, the view shows the whole of the audio it is given next
+    view->clear();
+    EXPECT_DOUBLE_EQ (1.0, view->getZoomFactor());
+
+    view->setSource (&buffer, kTestSampleRate);
+    EXPECT_DOUBLE_EQ (1.0, view->getZoomFactor());
+    EXPECT_DOUBLE_EQ (static_cast<double> (kTestBufferSize), view->getViewRangeSamples().getLength());
 }
 
 //==============================================================================
@@ -466,6 +532,61 @@ TEST_F (AudioViewComponentTests, GetWaveformBoundsReturnsValidBounds)
 }
 
 //==============================================================================
+// Painting Tests
+//==============================================================================
+
+TEST_F (AudioViewComponentTests, ARepaintOfAPartOfTheViewLeavesOutTheLabelsAndTheLanesOutsideIt)
+{
+    auto buffer = createTestBuffer (2, kTestBufferSize);
+
+    RecordingThumbnail thumbnail (cache);
+    RecordingView recordingView (thumbnail);
+    recordingView.setBounds (0.0f, 0.0f, 800.0f, 400.0f);
+
+    thumbnail.setSource (&buffer, kTestSampleRate);
+    ASSERT_NE (nullptr, thumbnail.getPeakProfile());
+
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
+    auto renderer = context->makeRenderer (800, 400);
+    Graphics g (*context, *renderer);
+
+    recordingView.paint (g);
+    EXPECT_EQ (2, recordingView.numLabelsLaidOut);
+    EXPECT_EQ (2, thumbnail.paintedChannels.size());
+    EXPECT_EQ (1, recordingView.numOverlaysPainted);
+
+    const auto waveform = recordingView.getWaveformBounds();
+
+    // The strip a playhead moved out of crosses both lanes and none of the labels
+    {
+        const auto saved = g.saveState();
+        g.setClipPath (waveform.withX (waveform.getCenterX()).withWidth (2.0f));
+        recordingView.paint (g);
+    }
+
+    EXPECT_EQ (2, recordingView.numLabelsLaidOut);
+    EXPECT_EQ (4, thumbnail.paintedChannels.size());
+
+    // The overlay is painted whatever is repainted, over the whole waveform
+    EXPECT_EQ (2, recordingView.numOverlaysPainted);
+    EXPECT_EQ (waveform, recordingView.overlayBounds);
+
+    // A part of the first lane leaves the second one out
+    thumbnail.paintedChannels.clear();
+
+    {
+        const auto saved = g.saveState();
+        g.setClipPath (Rectangle<float> (waveform.getX() + 10.0f, waveform.getY() + 10.0f, 20.0f, 20.0f));
+        recordingView.paint (g);
+    }
+
+    ASSERT_EQ (1, thumbnail.paintedChannels.size());
+    EXPECT_EQ (0, thumbnail.paintedChannels[0]);
+    EXPECT_EQ (2, recordingView.numLabelsLaidOut);
+    EXPECT_EQ (3, recordingView.numOverlaysPainted);
+}
+
+//==============================================================================
 // Scrollbar Tests
 //==============================================================================
 
@@ -702,4 +823,31 @@ TEST_F (AudioViewComponentTests, ViewRangeAfterMultipleZoomChanges)
     view->setZoomFactor (3.0);
 
     EXPECT_DOUBLE_EQ (3.0, view->getZoomFactor());
+}
+
+//==============================================================================
+// Type Info Tests
+//==============================================================================
+
+TEST_F (AudioViewComponentTests, TheTypeInfoCreatesAViewAndSetsItsProperties)
+{
+    const auto& type = AudioViewComponent::getClassTypeInfo();
+    EXPECT_EQ (type.getTypeName().toString(), "AudioView");
+
+    const auto created = type.createInstance();
+    auto* instance = dynamic_cast<AudioViewComponent*> (created.get());
+    ASSERT_NE (nullptr, instance);
+    EXPECT_EQ (&instance->getTypeInfo(), &type);
+
+    instance->setProperty ("labelWidth", 20);
+    instance->setProperty ("channelLabelsVisible", false);
+    instance->setProperty ("selectable", true);
+
+    EXPECT_EQ (20, instance->getLabelWidth());
+    EXPECT_FALSE (instance->isChannelLabelsVisible());
+    EXPECT_TRUE (instance->isSelectable());
+
+    // Without audio there is nothing to zoom into yet: the factor is kept for the audio the view is given next
+    instance->setProperty ("zoomFactor", 4.0);
+    EXPECT_DOUBLE_EQ (4.0, instance->getZoomFactor());
 }

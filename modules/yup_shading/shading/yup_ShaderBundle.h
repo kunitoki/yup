@@ -143,6 +143,9 @@ public:
         A compressed bundle is a `RIFF 'YSLZ'` form wrapping the whole YSLB bundle,
         compressed with LZAV. Both levels decompress equally
         fast, and every load function accepts compressed and uncompressed bundles alike.
+
+        A bundle packing to less than a 256th of its size is saved as a plain YSLB bundle
+        whatever the level asked for: a load refuses what expands further, see loadFromStream().
     */
     enum class Compression
     {
@@ -161,7 +164,14 @@ public:
     Result saveToMemoryBlock (MemoryBlock& block, Compression compression = Compression::high) const;
 
     //==========================================================================
-    /** Deserialise a bundle from an YSLB RIFF stream, compressed or not. */
+    /** Deserialise a bundle from an YSLB RIFF stream, compressed or not.
+
+        The bytes are not trusted: a bundle declaring a RIFF size, a chunk size or a string
+        length that its bytes do not hold, a raw size its compressed bytes cannot expand to
+        (256 times their size at most), or more than 256 variants, fails to load, with
+        nothing allocated for it. So does one naming a stage or a language there is none
+        of. This holds for every load function.
+    */
     static ResultValue<ShaderBundle> loadFromStream (InputStream& stream);
 
     /** Deserialise a bundle from an YSLB RIFF file. */

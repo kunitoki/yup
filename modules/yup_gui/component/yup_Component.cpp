@@ -134,6 +134,21 @@ bool hasPixelSize (const GpuCanvas::Ptr& canvas, const Size<int>& pixelSize)
         && canvas->getHeight() == pixelSize.getHeight();
 }
 
+/** Returns a new offscreen canvas of @a pixelSize, or nullptr where there is none to have: without a GPU,
+    or for a size no texture of the device has.
+*/
+GpuCanvas::Ptr createOffscreenCanvas (GraphicsContext& context, const Size<int>& pixelSize)
+{
+    const auto device = context.getGpuDevice();
+    const auto maxSize = device != nullptr ? static_cast<int> (device->getMaximumTextureSize (GpuTextureType::texture2D)) : 0;
+
+    // A device that tells no limit is left to refuse the size itself
+    if (maxSize > 0 && (pixelSize.getWidth() > maxSize || pixelSize.getHeight() > maxSize))
+        return nullptr;
+
+    return GpuCanvas::create (context, pixelSize.getWidth(), pixelSize.getHeight());
+}
+
 /** The part of a component an offscreen canvas holds: its bounds and a margin around them. */
 struct OffscreenArea
 {
@@ -299,6 +314,10 @@ Component::~Component()
 
     children.clear();
 
+    // The effect may outlive the component, and tells no more of what it draws to one that is gone
+    if (componentEffect != nullptr)
+        componentEffect->components.removeFirstMatchingValue (this);
+
     masterReference.clear();
 }
 
@@ -363,7 +382,10 @@ void Component::sendEnablementChanged()
 {
     const WeakReference<Component> self (this);
 
+    // What the component keeps of its painting shows the state it had: the repaint of the one that state was set on
+    // does not reach it
     flags.cachedTextureStale = true;
+    markEffectCanvasDirty();
 
     notifyPropertyChanged (ComponentIds::enabled);
     if (self == nullptr)
@@ -1200,6 +1222,9 @@ void Component::removeFromDesktop()
 
     flags.onDesktop = false;
 
+    // What the subtree keeps of the window is released while its rendering context is there to release it with
+    releaseGpuResources (true);
+
     native.reset();
 
     internalDetachedFromNative();
@@ -1677,10 +1702,20 @@ const NamedValueSet& Component::getProperties() const
 
 void Component::paint (Graphics& g)
 {
-    if (auto style = getStyle())
+    auto painter = style;
+
+    if (painter == nullptr)
+    {
+        if (const auto generation = ApplicationTheme::getLastGeneration(); std::exchange (cachedThemeStyleGeneration, generation) != generation)
+            cachedThemeStyle = ApplicationTheme::findComponentStyle (*this);
+
+        painter = cachedThemeStyle;
+    }
+
+    if (painter != nullptr)
     {
         if (auto theme = ApplicationTheme::getGlobalTheme())
-            style->paint (g, *theme, *this);
+            painter->paint (g, *theme, *this);
 
         return;
     }
@@ -1846,8 +1881,20 @@ ComponentStyle::Ptr Component::getStyle() const
 
 void Component::styleChanged() {}
 
+// A state-backed property setProperty() gave to its setter, and whether its change was told since. The writes
+// under way are chained: a setter may call setProperty() again
+struct Component::PropertyWrite
+{
+    const Identifier& name;
+    PropertyWrite* const outer;
+    bool wasNotified = false;
+};
+
 void Component::notifyPropertyChanged (const Identifier& name)
 {
+    for (auto* pendingWrite = propertyWrite; pendingWrite != nullptr; pendingWrite = pendingWrite->outer)
+        pendingWrite->wasNotified = pendingWrite->wasNotified || pendingWrite->name == name;
+
     const BailOutChecker bailOutChecker (this);
 
     componentListeners.callChecked (bailOutChecker, &ComponentListener::componentPropertyChanged, *this, name);
@@ -2077,14 +2124,33 @@ const ComponentTypeInfo& Component::getTypeInfo() const
 
 void Component::setTypeInfo (const ComponentTypeInfo* newTypeInfo)
 {
-    jassert (newTypeInfo == nullptr || newTypeInfo->isSubtypeOf (getDefaultTypeInfo()));
+    const bool extendsTheClass = newTypeInfo == nullptr || newTypeInfo->isSubtypeOf (getDefaultTypeInfo());
+
+    jassert (extendsTheClass); // The accessors of a type info take the component for one of the class it describes
+    if (! extendsTheClass)
+        return;
 
     if (instanceTypeInfo == newTypeInfo)
         return;
 
     instanceTypeInfo = newTypeInfo;
+    cachedThemeStyleGeneration = 0; // The theme may have another style for the type
 
     markStyleDirty();
+}
+
+bool Component::paintPart (Graphics& g, const Identifier& partName) const
+{
+    const auto* part = getTypeInfo().findPart (partName);
+
+    return part != nullptr && ApplicationTheme::paintComponentPart (g, *this, partName, part->getArea (*this));
+}
+
+bool Component::paintPart (Graphics& g, const Identifier& partName, const Rectangle<float>& area) const
+{
+    const auto* part = getTypeInfo().findPart (partName);
+
+    return part != nullptr && ApplicationTheme::paintComponentPart (g, *this, partName, part->isPlaceable ? area : part->getArea (*this));
 }
 
 const ComponentTypeInfo& Component::getClassTypeInfo()
@@ -2245,17 +2311,45 @@ void Component::setProperty (const Identifier& name, const var& value)
 {
     const auto resolved = resolveProperty (name);
 
-    if (resolved.descriptor != nullptr && resolved.descriptor->isStateBacked())
+    if (resolved.descriptor == nullptr || ! resolved.descriptor->isStateBacked())
     {
-        if (resolved.descriptor->setter != nullptr)
-            resolved.descriptor->setter (*this, value);
-        else
-            jassertfalse; // Trying to write a read-only property.
-
+        applyStoredPropertyChange (resolved, &value);
         return;
     }
 
-    applyStoredPropertyChange (resolved, &value);
+    if (resolved.descriptor->setter == nullptr)
+    {
+        jassertfalse; // Trying to write a read-only property.
+        return;
+    }
+
+    // An array may be long: it is not read to be compared, and telling that it changed stays with its setter
+    if (resolved.descriptor->type == ComponentProperty::Type::array)
+    {
+        resolved.descriptor->setter (*this, value);
+        return;
+    }
+
+    const auto valueBefore = resolved.descriptor->getter (*this);
+
+    PropertyWrite currentWrite { resolved.name, propertyWrite };
+    propertyWrite = &currentWrite;
+
+    const BailOutChecker bailOutChecker (this);
+
+    const ScopeGuard endWrite { [&]
+    {
+        if (! bailOutChecker.shouldBailOut())
+            propertyWrite = currentWrite.outer;
+    } };
+
+    resolved.descriptor->setter (*this, value);
+
+    if (bailOutChecker.shouldBailOut() || currentWrite.wasNotified)
+        return;
+
+    if (resolved.descriptor->getter (*this) != valueBefore)
+        notifyPropertyChanged (resolved.name);
 }
 
 void Component::removeProperty (const Identifier& name)
@@ -2509,7 +2603,15 @@ const ThemePalette* Component::findPalette() const
 
 void Component::setComponentEffect (ComponentEffect::Ptr effect)
 {
+    // An effect tells the components it is set on when what it draws changed
+    if (componentEffect != nullptr)
+        componentEffect->components.removeFirstMatchingValue (this);
+
     componentEffect = std::move (effect);
+
+    if (componentEffect != nullptr)
+        componentEffect->components.add (this);
+
     releaseUnusedEffectCanvases();
     repaint();
 }
@@ -2519,9 +2621,14 @@ ComponentEffect::Ptr Component::getComponentEffect() const
     return componentEffect;
 }
 
+ComponentEffect* Component::getActiveComponentEffect() const
+{
+    return (componentEffect != nullptr && componentEffect->isActive()) ? componentEffect.get() : nullptr;
+}
+
 bool Component::hasActiveEffect() const noexcept
 {
-    return componentEffect != nullptr || (styleState != nullptr && styleState->getFilterEffect() != nullptr);
+    return getActiveComponentEffect() != nullptr || (styleState != nullptr && styleState->getFilterEffect() != nullptr);
 }
 
 void Component::releaseUnusedEffectCanvases() noexcept
@@ -2533,11 +2640,37 @@ void Component::releaseUnusedEffectCanvases() noexcept
         effectOffscreenCanvas = nullptr;
 }
 
+void Component::releaseGpuResources (bool withChildren)
+{
+    // The canvases, and what the effects and the drawing keep, belong to the device of the window: kept past it they
+    // would hold that device alive, and be released without its rendering context. The next paint makes them again
+    cachedTextureCanvas = nullptr;
+    effectOffscreenCanvas = nullptr;
+    filterIntermediateCanvas = nullptr;
+    presentedCanvas = nullptr;
+
+    if (componentEffect != nullptr)
+        componentEffect->releaseResources();
+
+    if (styleState != nullptr && styleState->getFilterEffect() != nullptr)
+        styleState->getFilterEffect()->releaseResources();
+
+    if (auto* drawing = dynamic_cast<DrawingStyle*> (style.get()))
+        drawing->releaseResources();
+
+    if (! withChildren)
+        return;
+
+    for (auto* child : children)
+        child->releaseGpuResources (true);
+}
+
 void Component::applyActiveEffects (Graphics& g, GpuTexture::Ptr texture, Rectangle<float> bounds, float scale)
 {
     auto* filterEffect = styleState != nullptr ? styleState->getFilterEffect().get() : nullptr;
+    auto* effect = getActiveComponentEffect();
 
-    if (componentEffect != nullptr && filterEffect != nullptr && texture != nullptr)
+    if (effect != nullptr && filterEffect != nullptr && texture != nullptr)
     {
         const int width = texture->getWidth();
         const int height = texture->getHeight();
@@ -2554,7 +2687,7 @@ void Component::applyActiveEffects (Graphics& g, GpuTexture::Ptr texture, Rectan
             // The canvas starts where the bounds do, so the effect gets the bounds it maps input over
             auto& intermediateG = filterIntermediateCanvas->beginDraw ({}, scale);
             intermediateG.setDrawingArea (getLocalBounds().withPosition (-bounds.getPosition()));
-            componentEffect->apply (intermediateG, texture, bounds);
+            effect->apply (intermediateG, texture, bounds);
             filterIntermediateCanvas->commit();
 
             if (auto postEffectTexture = filterIntermediateCanvas->asTexture())
@@ -2569,8 +2702,8 @@ void Component::applyActiveEffects (Graphics& g, GpuTexture::Ptr texture, Rectan
         filterIntermediateCanvas = nullptr;
     }
 
-    if (componentEffect != nullptr)
-        componentEffect->apply (g, std::move (texture), bounds);
+    if (effect != nullptr)
+        effect->apply (g, std::move (texture), bounds);
     else if (filterEffect != nullptr)
         filterEffect->apply (g, std::move (texture), bounds);
 }
@@ -2736,12 +2869,18 @@ void Component::userTriedToCloseWindow() {}
 
 //==============================================================================
 
+bool Component::isOpaqueForPainting() const noexcept
+{
+    // A style set on the component paints what it likes of it, so what is behind has to be painted
+    return ! flags.isTransparent && style == nullptr;
+}
+
 bool Component::hasOpaqueChildCoveringArea (const Rectangle<float>& area)
 {
     for (int childIndex = children.size(); --childIndex >= 0;)
     {
         auto child = children.getUnchecked (childIndex);
-        if (! child->isVisible() || ! child->isOpaque() || child->getOpacity() < 1.0f || child->hasActiveEffect() || child->flags.unclippedRendering || child->flags.manuallyComposited || child->isTransformed())
+        if (! child->isVisible() || ! child->isOpaqueForPainting() || child->getOpacity() < 1.0f || child->hasActiveEffect() || child->flags.unclippedRendering || child->flags.manuallyComposited || child->isTransformed())
             continue;
 
         auto childBounds = child->getBoundsRelativeToTopLevelComponent();
@@ -2759,7 +2898,7 @@ void Component::internalRepaint()
     internalRepaint (getPaintBounds());
 }
 
-void Component::internalRepaint (const Rectangle<float>& rect)
+void Component::internalRepaint (const Rectangle<float>& rect, bool contentChanged)
 {
     if (rect.isEmpty())
         return;
@@ -2770,13 +2909,17 @@ void Component::internalRepaint (const Rectangle<float>& rect)
     {
         component->subtreeDirty = true;
 
-        // A warp can move pixels anywhere inside the component, so the whole of it is
-        // presented again; what changed underneath is kept, so only that is repainted
-        if (component->hasActiveEffect())
-        {
+        const bool hasEffect = component->hasActiveEffect();
+
+        // What changed underneath an effect is kept, so only that is painted again in what the component keeps of its
+        // subtree: also while its effect has nothing to apply, which it may have again before the next paint lets go
+        // of what was kept. An effect that is only applied again leaves what its own component painted as it is
+        if ((hasEffect || component->effectOffscreenCanvas != nullptr) && (contentChanged || component != this))
             component->effectDirtyRegion.add (dirtyArea);
+
+        // A warp can move pixels anywhere inside the component, so the whole of it is presented again
+        if (hasEffect)
             dirtyArea = component->getPaintBounds();
-        }
 
         auto* parent = component->parentComponent;
 
@@ -2793,6 +2936,21 @@ void Component::internalRepaint (const Rectangle<float>& rect)
             return;
         }
     }
+}
+
+void Component::repaintEffect()
+{
+    // An effect that has nothing to apply draws nothing again: the component is painted as it is
+    if (! hasActiveEffect())
+    {
+        repaint();
+        return;
+    }
+
+    jassert (! isRepainting.load (std::memory_order_relaxed)); // An effect can't repaint from apply() !
+
+    if (isShowing())
+        internalRepaint (getPaintBounds(), false);
 }
 
 //==============================================================================
@@ -2828,7 +2986,7 @@ GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float op
         else
         {
             reuseCanvas = nullptr;
-            canvas = GpuCanvas::create (ctx, area.pixelSize.getWidth(), area.pixelSize.getHeight());
+            canvas = createOffscreenCanvas (ctx, area.pixelSize);
         }
 
         if (canvas == nullptr)
@@ -2836,14 +2994,16 @@ GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float op
 
         std::optional<RectangleList<float>> dirtyPixels;
 
-        // What was painted around the bounds is not painted over, so a new margin is painted in full
-        if (reused && dirtyRegion.has_value() && margin == offscreenPaintedMargin)
+        // What was painted around the bounds is not painted over, so a new margin is painted in full. So is what
+        // was painted at another scale, which can take the same pixels
+        if (reused && dirtyRegion.has_value() && margin == offscreenPaintedMargin && scale == offscreenPaintedScale)
             dirtyPixels = getPartialRepaintRegion (*dirtyRegion, area, getSize(), scale);
 
         if (holdPaintMargin)
         {
             offscreenCanvasMargin = area.pixelMargin;
             offscreenPaintedMargin = margin;
+            offscreenPaintedScale = scale;
         }
 
         if (dirtyPixels.has_value() && dirtyPixels->isEmpty())
@@ -2880,6 +3040,12 @@ GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float op
     return renderOffscreen();
 }
 
+void Component::markEffectCanvasDirty()
+{
+    if (hasActiveEffect() || effectOffscreenCanvas != nullptr)
+        effectDirtyRegion.add (getPaintBounds());
+}
+
 void Component::invalidateCanvasesIfThemeChanged()
 {
     const auto theme = ApplicationTheme::getGlobalTheme();
@@ -2891,9 +3057,7 @@ void Component::invalidateCanvasesIfThemeChanged()
     // What the component keeps of its painting was painted with the theme as it was
     flags.cachedTextureStale = true;
     subtreeDirty = true;
-
-    if (hasActiveEffect())
-        effectDirtyRegion.add (getPaintBounds());
+    markEffectCanvasDirty();
 }
 
 std::optional<RectangleList<float>> Component::takeEffectDirtyRegion (bool renderContinuous)
@@ -2901,7 +3065,18 @@ std::optional<RectangleList<float>> Component::takeEffectDirtyRegion (bool rende
     RectangleList<float> region;
     std::swap (region, effectDirtyRegion);
 
-    if (renderContinuous || ! isOpaque() || flags.unclippedRendering)
+    // A window rendering continuously paints everything at every frame, and no repaint is kept of a component
+    // that is not showing: nothing tells what changed in it
+    if (renderContinuous || ! isShowing())
+        return std::nullopt;
+
+    // With nothing to paint again what was kept is still good, whatever the component
+    if (region.isEmpty())
+        return region;
+
+    // What is painted over what was kept has to cover it: a component that is not opaque would blend
+    // into it, and one that is not clipped paints past what is dirty
+    if (! isOpaqueForPainting() || flags.unclippedRendering)
         return std::nullopt;
 
     const auto bounds = getLocalBounds();
@@ -3101,25 +3276,37 @@ void Component::internalPaint (Graphics& g,
                                               std::move (effectOffscreenCanvas),
                                               takeEffectDirtyRegion (renderContinuous),
                                               true);
-        if (canvas == nullptr)
-            return;
 
-        const auto area = getOffscreenArea (getSize(), getOffscreenMargin(), scale, canvas, offscreenCanvasMargin);
-        auto texture = canvas->asTexture();
-
+        // Where there is no canvas to have, without a GPU or for a component larger than a texture
+        // can be, the component is painted below as it is without an effect
+        if (canvas != nullptr)
         {
-            const auto saved = g.saveState();
-            g.setOpacity (opacity);
-            applyPaintState (g, getCanvasRegion (area.visible), activeClipRegion);
-            applyActiveEffects (g, texture, area.bounds, scale);
+            const auto area = getOffscreenArea (getSize(), getOffscreenMargin(), scale, canvas, offscreenCanvasMargin);
+
+            // A canvas gives another texture once it was drawn in again, and the same one until then: that is how
+            // an effect keeping what it made of the last one, as ShaderEffect does, tells whether it still holds
+            auto texture = canvas->asTexture();
+
+            {
+                const auto saved = g.saveState();
+                g.setOpacity (opacity);
+                applyPaintState (g, getCanvasRegion (area.visible), activeClipRegion);
+                applyActiveEffects (g, texture, area.bounds, scale);
+            }
+
+            effectOffscreenCanvas = canvas;
+
+            if (flags.cachedToTexture)
+                cachedTextureCanvas = canvas;
+
+            return;
         }
-
-        effectOffscreenCanvas = canvas;
-
-        if (flags.cachedToTexture)
-            cachedTextureCanvas = canvas;
-
-        return;
+    }
+    else if (effectOffscreenCanvas != nullptr)
+    {
+        // An effect that is not active any more keeps no canvas, and what the component cached is of its subtree
+        releaseUnusedEffectCanvases();
+        flags.cachedTextureStale = true;
     }
 
     if (flags.cachedToTexture)
@@ -3135,7 +3322,7 @@ void Component::internalPaint (Graphics& g,
         {
             // A stale canvas of the right size is drawn over again, sparing a new GPU target.
             auto canvas = sizeMatches ? std::move (cachedTextureCanvas)
-                                      : GpuCanvas::create (g.getGraphicsContext(), area.pixelSize.getWidth(), area.pixelSize.getHeight());
+                                      : createOffscreenCanvas (g.getGraphicsContext(), area.pixelSize);
 
             cachedTextureCanvas = nullptr;
             flags.cachedTextureStale = false;
@@ -3327,12 +3514,11 @@ void Component::internalMouseDrag (const MouseEvent& event)
 
 void Component::internalMouseUp (const MouseEvent& event)
 {
-    if (! isVisible())
-        return;
-
     getTopLevelComponent()->clearPressedInSubtree();
 
-    updateMouseCursor();
+    // A component hidden while it was pressed still gets the release, which ends what its press began
+    if (isVisible())
+        updateMouseCursor();
 
     auto bailOutChecker = BailOutChecker (this);
 
@@ -3353,7 +3539,19 @@ void Component::internalMouseDoubleClick (const MouseEvent& event)
 
     auto bailOutChecker = BailOutChecker (this);
 
-    mouseDoubleClick (event);
+    // A listener taking the double click has it in place of the component
+    bool isTaken = false;
+
+    componentListeners.callChecked (bailOutChecker, [&] (ComponentListener& listener)
+    {
+        isTaken = listener.componentDoubleClicked (*this, event) || isTaken;
+    });
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    if (! isTaken)
+        mouseDoubleClick (event);
 
     if (bailOutChecker.shouldBailOut())
         return;
@@ -3624,6 +3822,16 @@ void Component::updateFrameAttachments()
         attachment->updateNative();
 }
 
+void Component::internalThemeChanged()
+{
+    // The stylesheets of the window follow the theme in the frame that is starting
+    if (styleContext != nullptr)
+        styleContext->themeChanged();
+
+    for (auto* child : children)
+        child->internalThemeChanged();
+}
+
 void Component::internalAttachedToNative()
 {
     updateFrameAttachments();
@@ -3648,6 +3856,9 @@ void Component::internalDetachedFromNative()
 {
     updateFrameAttachments();
 
+    // The children are told below, each letting go of what it keeps of the window
+    releaseGpuResources (false);
+
     auto bailOutChecker = BailOutChecker (this);
 
     detachedFromNative();
@@ -3668,6 +3879,9 @@ void Component::internalDetachedFromNative()
 
 void Component::internalVisibilityChanged()
 {
+    // What changed while the component was not showing asked for no repaint, so what it keeps of its subtree is painted again
+    markEffectCanvasDirty();
+
     visibilityChanged();
 
     auto bailOutChecker = BailOutChecker (this);
@@ -3754,8 +3968,10 @@ std::optional<Point<float>> Component::getLocalPointFromParent (Point<float> par
         return std::nullopt;
 
     auto localPoint = parentComponent->getChildPointFromLocal (*this, parentPoint);
-    if (localPoint && componentEffect != nullptr)
-        localPoint = componentEffect->displayToContent (*localPoint, getEffectBounds (getScaleDpi()));
+    const auto* effect = getActiveComponentEffect();
+
+    if (localPoint && effect != nullptr)
+        localPoint = effect->displayToContent (*localPoint, getEffectBounds (getScaleDpi()));
 
     return localPoint;
 }
@@ -3766,8 +3982,8 @@ std::optional<Point<float>> Component::getParentPointFromLocal (Point<float> loc
         return std::nullopt;
 
     std::optional<Point<float>> displayPoint = localPoint;
-    if (componentEffect != nullptr)
-        displayPoint = componentEffect->contentToDisplay (localPoint, getEffectBounds (getScaleDpi()));
+    if (const auto* effect = getActiveComponentEffect())
+        displayPoint = effect->contentToDisplay (localPoint, getEffectBounds (getScaleDpi()));
 
     if (! displayPoint)
         return std::nullopt;

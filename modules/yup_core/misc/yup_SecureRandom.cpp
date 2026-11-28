@@ -25,7 +25,7 @@ namespace yup
 bool SecureRandom::fillBytes (void* destination, size_t numBytes) noexcept
 {
 #if YUP_WINDOWS
-    return BCRYPT_SUCCESS (BCryptGenRandom (nullptr, static_cast<PUCHAR> (destination), (ULONG) numBytes, BCRYPT_USE_SYSTEM_PREFERRED_RNG));
+    return numBytes == 0 || BCRYPT_SUCCESS (BCryptGenRandom (nullptr, static_cast<PUCHAR> (destination), (ULONG) numBytes, BCRYPT_USE_SYSTEM_PREFERRED_RNG));
 #elif YUP_APPLE || YUP_ANDROID || YUP_BSD
     // getentropy needs <sys/random.h> (missing on iOS) and Android API 28, arc4random_buf is kernel-seeded everywhere here
     arc4random_buf (destination, numBytes);

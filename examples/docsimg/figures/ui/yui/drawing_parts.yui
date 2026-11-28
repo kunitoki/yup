@@ -1,0 +1,29 @@
+// size: 560 72
+drawing Field {
+    rect { id: frame; bounds: bounds.reduced (1); cornerRadius: 6; fill: palette.surface;
+           stroke: focused ? palette.accent : palette.outline; strokeWidth: focused ? 2 : 1; }
+
+    part selection { fill: palette.accent.withAlpha (0.35); }
+    part text { id: label; fill: palette.text; }
+    part caret { fill: palette.accent; }
+}
+
+drawing Pill {
+    rect { id: frame; bounds: bounds.reduced (1); cornerRadius: bounds.height / 2;
+           fill: pressed ? palette.accent : palette.surfaceRaised; stroke: palette.outline; }
+
+    part text { id: label; fill: pressed ? palette.onAccent : palette.text; }
+}
+
+style {
+    TextEditor { drawing: Field; }
+    TextButton { drawing: Pill; }
+}
+
+Row {
+    gap: 12;
+    padding: 12;
+
+    TextEditor { id: field; text: "Painted by a drawing"; flexGrow: 1; }
+    TextButton { id: apply; text: "Apply"; preferredWidth: 96; }
+}

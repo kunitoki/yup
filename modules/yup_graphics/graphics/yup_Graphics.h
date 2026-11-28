@@ -1055,7 +1055,7 @@ private:
     RenderOptions& currentRenderOptions();
     const RenderOptions& currentRenderOptions() const;
 
-    void beginOffscreenFrame (const GpuFrameDescriptor& frameDesc);
+    void setOffscreenDrawingArea();
 
     void restoreState();
 

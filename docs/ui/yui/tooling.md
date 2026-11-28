@@ -15,7 +15,8 @@ just yui_tool --help
 ```
 
 builds it as `cmake/tools/yui_tool/build/yup_yui_tool` and runs it with the
-arguments given. The tool sets itself up as an application does, default theme
+arguments given. Every command takes `--help` too, which prints the usage of
+them all. The tool sets itself up as an application does, default theme
 included, but never opens a window, so it also runs on machines without a
 display such as build servers. `yup_yui_tool --version` prints its version.
 
@@ -46,6 +47,23 @@ A file without a root component, holding only what other files import (styles,
 palettes, drawings, components), is valid: it is checked as the declarations of
 an empty interface.
 
+`verify` also loads what the document reads, with no GPU:
+
+- every [`shader` block](shaders.md), used or not, compiling its GLSL. What
+  the compiler says is reported at the block, on one line;
+- the models, the textures and the material shaders of every
+  [`Scene3D`](scenes.md), with the meshes its `Mesh3D` elements describe.
+
+```text
+/project/ui/main.yui:3:5: error: shader Crt: ShaderBundleCompiler: SPIR-V compilation failed for stage fragment: ERROR: 0:3: 'missingValue' : undeclared identifier
+/project/ui/main.yui:8:14: error: The uniform block of the shader 'Crt' has no member 'gain'
+/project/ui/main.yui:21:19: error: Model3D.source: the file 'models/knob.glb' can't be read
+```
+
+The shaders of a file of declarations are checked with the file importing it,
+at their line in the imported file, since their paths are relative to the main
+file.
+
 | Exit code | Meaning |
 |---|---|
 | `0` | No error. Warnings don't fail `lint` unless `--strict` is given. |
@@ -74,6 +92,12 @@ A binding to a property the file doesn't list is then an error, which catches
 misspelled names. Actions need no declaration, since they are looked up when
 they run.
 
+Without `--models`, a file is checked with the `<name>.models.json` next to
+it when there is one: `yup_yui_tool lint ui/main.yui` reads
+`ui/main.models.json`, and each of several files its own. Every command and
+every tool of an agent follows this rule. A models file that can't be read is
+an error of the arguments (exit code `2`).
+
 ### Machine readable output
 
 `--json` prints the problems to the standard output instead, for editors and
@@ -99,9 +123,15 @@ changes.
 ### What the tool can't know
 
 - Component types registered by the application with `ComponentTypeRegistry`
-  are unknown to the tool, which only has the types of `yup_gui`.
+  are unknown to the tool, which only has the types of `yup_gui`,
+  `yup_renderer` and `yup_audio_gui`.
+- What the application gives a component in C++ isn't there: the
+  [audio components](../../audio/audio-gui.md#in-yui-documents) are checked
+  and shown with no state.
 - Values are checked against the default theme: properties an application adds
   to its own theme aren't there.
+- Textures and the images of models are decoded as PNG, JPEG and WebP, the
+  formats the tool links: an application linking others decodes more.
 
 ## Checking while configuring
 
@@ -116,11 +146,47 @@ yup_add_yui_resources (MyAppUi
     VERIFY_MODELS ui/models.json
     FILES
         ui/main.yui
-        ui/parts/style.yui)
+        ui/parts/style.yui
+    ASSETS
+        ui/models/knob.glb
+    SHADERS
+        ui/fx/crt.frag)
 ```
 
+The documents are loaded as the library will serve them: with the files the
+call lists and no other, and their shaders compiled from their GLSL. So a file
+a document imports or reads that is not listed fails the configuration, as a
+shader that does not compile does, instead of being missing when the
+application runs.
+
 The tool is built for the host into the build tree the first time, which takes
-as long as building `yup_gui`. See the [CMake API](../../build-system/cmake-api.md).
+as long as building `yup_gui`, `yup_gui_markup`, `yup_renderer`,
+`yup_audio_gui` and the shader compiler. See the
+[CMake API](../../build-system/cmake-api.md#yup_add_yui_resources).
+
+The same check is available on the command line:
+
+```sh
+yup_yui_tool verify --embedded-base ui --embedded embedded.txt ui/main.yui
+```
+
+`--embedded-base` is the folder the embedded paths are relative to, and
+`--embedded` a text file listing them, one a line, a shader as the GLSL its
+block names:
+
+```text
+main.yui
+parts/style.yui
+models/knob.glb
+fx/crt.frag
+```
+
+```text
+ui/main.yui: error: 'textures/wood.png' is read by 'main.yui' but is not embedded
+```
+
+Paths are compared exactly, their case included, as the embedded files are
+found when the application runs.
 
 ## The schema
 
@@ -156,10 +222,17 @@ palette roles and the names of the `colors.` constants. Editors build their comp
 
 - `properties` and `signals` are the ones the type declares itself. The others
   come from its `base`, which the root type doesn't have.
+- `description` tells what the type is, when the type says so, as the elements
+  of a 3D scene do.
 - `type` is `number`, `integer`, `boolean`, `string`, `color`, `point`,
   `rectangle`, `transform`, `enumeration`, `font`, `drawing`, `array` or `any`.
-  An `array` has an `elementType` when its elements are typed, and an
-  `enumeration` lists its `values`.
+  An `array` has an `elementType` when its elements are typed, an
+  `enumeration` lists its `values`, and a `drawing` is the name of a drawing
+  or of a shader.
+- The elements of a [3D scene](scenes.md), from `Scene3D` to `Material3D`, are
+  types like the others, and so are the
+  [audio components](../../audio/audio-gui.md#in-yui-documents), from
+  `MidiKeyboard` to `CartesianPlane`.
 - `default` is given when it can be written as a `.yui` literal, colors as
   `#rrggbbaa`.
 - `state` marks a boolean usable as a pseudo-class in a selector (`:dragging`),
@@ -178,7 +251,7 @@ yup_yui_tool render ui/main.yui --output main.png --size 640x760 --theme light -
 draws the interface of a document into a PNG, without opening a window. The
 size of the image, in logical pixels, is the first of:
 
-1. `--size <width>x<height>`;
+1. `--size <width>x<height>`, each side from 1 to 4096;
 2. the `width` and `height` the root component asks for;
 3. `--default-size <width>x<height>`, for a caller with a size to offer when
    the document has none;
@@ -237,13 +310,18 @@ the bounds of each, the area it paints when it has a
 [paint margin](styles.md), dotted, and its distances to the bounds of what
 holds it.
 
-The errors of the document are printed as for `verify`. The image is still
-written when the document loads despite them.
+A [`Scene3D`](scenes.md) is drawn until it shows its final picture, for 64
+frames at most, after which a warning tells that it is still changing. What is
+animated is shown where it starts: a clip that plays, a shader given the time
+and an animation are at their first frame.
+
+The problems of the document are printed as for `lint`, its warnings included.
+The image is still written when the document loads despite them.
 
 | Exit code | Meaning |
 |---|---|
 | `0` | The image was written. |
-| `1` | The document can't be loaded, or there is nothing to render. |
+| `1` | The document can't be loaded, there is nothing to render, or a `Scene3D` of the document can't be drawn. |
 | `2` | The arguments are wrong, or a file can't be read or written. |
 | `3` | There is no graphics device to render with. |
 
@@ -292,7 +370,8 @@ With `--element`, or a drawing or a type shown where the interface uses it,
 - `path` names a component by its place among the `children`: `0/2` is the
   third child of the first child of the root.
 - `warnings` tell what is laid out with no width or no height, or outside the
-  interface. Once for a component, not again for what it holds.
+  interface. Once for a component, not again for what it holds. The elements
+  of a 3D scene have no place in the layout, and no warning.
 
 Only the components the document describes are listed. Those a widget creates
 for itself are left out, and what they hold is listed in their place.
@@ -314,7 +393,7 @@ yup_yui_tool definition ui/main.yui --at 42:17
 yup_yui_tool hover ui/main.yui --at 42:17
 ```
 
-`--at <line>:<column>` is a place of the file, both from 1. The file is read
+`--at <line>:<column>` is a place of the file, both whole numbers from 1. The file is read
 without being loaded, so these also answer for one that has errors, as a
 document being typed has most of the time. The files it imports are read with
 it.
@@ -336,28 +415,33 @@ it.
 ```
 
 - A `range` is `[line, column, endLine, endColumn]`.
-- The `kind` of a symbol is `drawing`, `palette`, `component`, `tokens`,
-  `style`, `rule`, `element` for a component of the interface, or `property`.
+- The `kind` of a symbol is `drawing`, `shader`, `palette`, `component`,
+  `tokens`, `style`, `rule`, `element` for a component of the interface, or
+  `property`.
 - `colors` are the color literals, each with its red, green, blue and alpha
   from 0 to 1.
 - `targets` are what `render` can show of the file: its interface, then the
   drawings, palettes and components it and the files it imports declare.
-  `hosts` are the types a drawing can be shown alone as.
+  `hosts` are the types a drawing can be shown alone as, which the 3D types
+  are not.
 
 `complete` lists what can be written at the place as `items`, each with a
 `label`, a `kind` (`type`, `property`, `signal`, `keyword`, `element`, `value`,
-`color`, `constant`, `field`, `drawing` or `palette`) and, when known, a
-`detail` and a `documentation`: the component types and the properties and
-signals of the one the place is in, the elements and properties of a drawing,
-the values of an enumeration, the drawings and palettes declared, the colors
+`color`, `constant`, `field`, `drawing`, `shader` or `palette`) and, when
+known, a `detail` and a `documentation`: the component types and the
+properties and signals of the one the place is in, the elements and properties
+of a drawing, the values of an enumeration, the drawings, shaders and palettes
+declared, the properties of the shader a rule or a `use` names, the colors
 after `palette.`, the tokens after `tokens.` and the properties of a model.
 Without `--models`, the `<name>.models.json` next to the file is used.
 
 `definition` answers the `file`, `line` and `column` what is named at the place
-is declared at: a drawing, a component, a palette, a color of a palette, a
-token, or the file of an import. `hover` answers what the property or the
-signal a statement starts with is: its `code`, its `text` and the `values` of
-an enumeration. Both answer `{}` when there is nothing to tell.
+is declared at: a drawing, a shader (after `effect:`, `use` and `shader:`), a
+component, a palette, a color of a palette, a token, or the file of an import.
+`hover` answers what the property or the signal a statement starts with is:
+its `code`, its `text` and the `values` of an enumeration. On the name of a
+shader it answers its block, and on the type a component starts with what the
+type says it is. Both answer `{}` when there is nothing to tell.
 
 ## Tools for agents
 
@@ -527,6 +611,8 @@ tell what the tool does not accept:
 | `topic: "drawing"` | The elements of a drawing: the geometry and the properties of each, what it can hold, and the paint every shape takes. |
 | `topic: "styles"` | The declarations of a rule that are not properties, the pseudo-classes and the palette roles. |
 | `topic: "expressions"` | The functions, the members and methods of each type, and the values of the enumerations. |
+| `topic: "shaders"` | The `shader` block, where a shader is used, the types of its properties, a complete fragment and a complete material. |
+| `topic: "scenes"` | The elements of a 3D scene, with a complete example. |
 
 ### The models a file lacks
 
@@ -556,21 +642,30 @@ of the project, which Claude Code and GitHub Copilot read:
 ```
 
 `yup_yui_tool mcp` serves them by itself, on its standard input and output,
-with no editor. Paths are relative to the folder it is started in. `yui_render`
+with no editor. Paths are relative to the folder it is started in, which the
+files it reads and writes have to be inside of, with no link on the way.
+`yui_render`
 needs a graphics device, as `render` does, so it fails on Linux, where
 `yui_inspect` still answers.
 
 ```json
 {
     "mcpServers": {
-        "yui": { "type": "http", "url": "http://127.0.0.1:7391/mcp" }
+        "yui": {
+            "type": "http",
+            "url": "http://127.0.0.1:7391/mcp",
+            "headers": { "Authorization": "Bearer <token>" }
+        }
     }
 }
 ```
 
 The [VS Code extension](#vs-code) serves them from the editor, with no native
 tool to build: it checks the documents as they are in their editors, unsaved
-changes included, and draws in its preview panel on every platform.
+changes included, and draws in its preview panel on every platform. It only
+answers the requests sending its token, which its `YUI: Set Up Agent Tools`
+command writes there, once git is known not to commit that file (see
+[VS Code](#vs-code)).
 
 ## Importing an SVG
 
@@ -603,14 +698,30 @@ into instead of starting a process:
 - a page runs the application of the module, which shows an interface live in a
   canvas: it answers the mouse and the keyboard, and is told what to show.
 
+The module links the renderer, the glTF loader, the PNG, JPEG and WebP decoders
+and the shader compiler, so it loads the [shaders](shaders.md) and the
+[scenes](scenes.md) of a document as the native tool does: `lint` compiles
+the GLSL of the `shader` blocks, materials included, and reads the models and
+the textures. It links `yup_audio_gui` too, without the device settings that
+need `yup_audio_devices` and its threads. The module is 22.9 MB as it is built by default, and 16.1 MB
+without the shader compiler, which an option leaves out:
+
+```sh
+just yui_tool_wasm Release -DYUP_YUI_TOOL_WEB_SHADER_COMPILER=OFF
+```
+
+That module only loads the shaders a build compiled into `.ysl` bundles, and
+reports those it is given as GLSL alone.
+
 | Entry point | Purpose |
 |---|---|
 | `createYuiTool (options)` | Loads the module. With `noInitialRun` the application isn't started, and the module only runs commands. |
 | `yuiToolAllocate (size)`, `yuiToolWriteFile (path)` | Give a file: its bytes are copied to the memory returned, then it is named with a path relative to the folder of the files. |
 | `yuiToolRemoveFile (path)` | Forgets a file given before, which the host no longer has. |
 | `yuiToolRun (arguments)` | Runs a command in the folder of the files. The arguments are a JSON array of strings, the result is the exit code, and the output goes to `print` and `printErr`. |
+| `yuiToolMissingFiles ()` | Returns, as a JSON array, the files the documents loaded since the last call name and were not given: shader sources and the bundles compiled from them, models, textures. Each is the folder of its document followed by the path as the document writes it. The host gives those it has and runs again. |
 | `yuiPreviewShow (path, drawing, palette, type, use, models, light)` | Shows a file in the canvas, or a drawing, a palette or a component type of it, once the application called `yuiPreviewReady`. `use` is the path of the component a drawing or a type is framed on. The outcome is given to `yuiPreviewShown`: the problems, the size the interface asks for, and the `uses` it can be framed on. |
-| `yuiPreviewSetView (width, height)` | Lays the interface out at a size, gives the canvas the size of what is shown of it and draws it, so a canvas that changed size is never shown empty. `yuiPreviewFramed (x, y, width, height)` is called with that part first, and returns how many times larger it is seen. |
+| `yuiPreviewSetView (width, height)` | Lays the interface out at a size, gives the canvas the size of what is shown of it and draws it, so a canvas that changed size is never shown empty. `yuiPreviewFramed (x, y, width, height)` is called with that part first, and returns how many times larger it is seen. `yuiPreviewDrawn (problem)` is called once it drew, with why a scene could not be drawn, or an empty string. |
 | `yuiPreviewSetGuides (on)`, `yuiPreviewSetCaret (line, column)` | Shows the guides over the interface, and tells where the caret of the editor is. |
 | `yuiPreviewSetStats (on)`, `yuiPreviewStats ()` | Starts or stops measuring how long the components take to paint, and returns how the interface is drawn in three lines of text: the frames a second and the time painting one takes, the pixels and the GPU, and the components taking the longest. |
 | `yuiAgentTools ()` | Returns the [tools for agents](#tools-for-agents) as JSON: `tools`, each with its `name`, `description` and `inputSchema`, `drawing`, the names of those only a page can run, and `instructions`. |
@@ -622,16 +733,19 @@ cross-origin isolated, which the webview of an editor is.
 
 ## VS Code
 
-The `vscode-yui` extension in `modules/yup_gui/tools/vscode-yui` adds `.yui`
+The `vscode-yui` extension in `modules/yup_gui_markup/tools/vscode-yui` adds `.yui`
 support to VS Code:
 
-- syntax highlighting and snippets;
-- problems as you type, from `lint`, including those in imported files;
+- syntax highlighting, `shader` blocks included, and snippets, among them
+  `shader`, `scene` and `model`;
+- problems as you type, from `lint`, including those in imported files, in
+  shaders and in models;
 - completions, the outline, go to definition, hovers and color swatches, which
   are what the tool [answers an editor](#answering-an-editor);
 - `YUI: Open Preview`, a panel beside the editor running the interface, a
   drawing, a palette or a component of the file;
-- the `YUI: Import SVG as Drawing` command;
+- the `YUI: Import SVG as Drawing` command, which saves the drawing as a `.yui`
+  file;
 - the [tools for agents](#tools-for-agents), once `YUI: Set Up Agent Tools` was
   run in a workspace.
 
@@ -642,8 +756,8 @@ just vscode_yui
 builds the tool for the web, which needs the Emscripten SDK activated, packages
 it with the extension and installs it. The extension holds no native binary, so
 the same package works on every platform. The settings are `yui.lint.enabled`, `yui.lint.models`, the path of
-the [models](#models) file of the workspace, `yui.preview.size`,
-`yui.preview.theme`, `yui.mcp.enabled` and `yui.mcp.port`.
+the [models](#models) file of the workspace, `yui.files.readOutsideWorkspace`,
+`yui.preview.size`, `yui.preview.theme`, `yui.mcp.enabled` and `yui.mcp.port`.
 
 Documents are checked and shown as they are in their editors, so what is typed
 counts before it is saved. The preview is live: the interface answers the mouse
@@ -651,6 +765,31 @@ and the keyboard, plays its transitions, and keeps the state of its components
 while the document changes under it, as [hot reload](hot-reload.md) does in
 an application, and while its theme is switched. The problems of the document
 are listed under it.
+
+What an application gives its components from C++ has no one to give it in the
+preview, so the preview makes it up: a `SpectrumAnalyzer`, a `Spectrogram` and
+a `KMeter` are fed a generated signal, so that a drawing or a shader made of
+their levels is seen moving. A `MidiKeyboard` shows the keys held on it, and a
+`TreeView` the `items` the document writes.
+
+What a document reads beside its texts is given to the tool with it: the
+sources of its shaders or the bundles compiled from them, its models with
+their buffers and images, and its textures. They count for the problems, the
+preview and the tools for agents, as they are in their editors while unsaved,
+and again when they change in the workspace. A file over 16 MB, and what a
+document reads beyond 64 MB together, is left out with a warning and counts
+as missing. So does a file that is neither in the workspace nor in the folder
+of the document, where it really is: a link leading elsewhere is not followed.
+The `yui.files.readOutsideWorkspace` setting lifts that, for a font or an image
+kept above the workspace. It is off by default and unsafe, as a document then
+reads any file it names: it is ignored in a workspace that is not trusted, and
+the tools for agents stay held to the workspace.
+
+The preview draws a [`Scene3D`](scenes.md) with the
+[raster tier](../../3d/platform-tiers.md) of the renderer, on WebGL 2: without
+the temporal anti-aliasing, the ambient occlusion, the soft shadows and the
+screen-space reflections the full tier adds on a desktop. A scene it can't
+draw is listed with the problems of the document.
 
 The toolbar of the preview chooses what it shows and how:
 
@@ -687,14 +826,50 @@ writes.
 
 `YUI: Set Up Agent Tools` turns `yui.mcp.enabled` on for the workspace and
 adds the server to its `.mcp.json`, keeping what the file holds. The server
-only listens on this machine, at `http://127.0.0.1:<yui.mcp.port>/mcp`, only
-reads the files of the workspace and writes none: a document importing a file
+only listens on this machine, at `http://127.0.0.1:<yui.mcp.port>/mcp`, and
+only answers the requests sending its token as `Authorization: Bearer <token>`:
+the port can be reached by every user and program of the machine. The token
+is made once, kept in the secret storage of VS Code and written to `.mcp.json`
+as the `headers` of the server, so that file is made readable by its owner
+only.
+
+The token is a secret and `.mcp.json` is a file projects commit, to share
+their servers. So the extension asks git about the file before it writes the
+token to it:
+
+- a file git neither tracks nor ignores is first ignored for your clone only,
+  by a line naming it in `.git/info/exclude`, which is never committed. The
+  `.gitignore` of the project is left alone;
+- a file git already ignores is written;
+- a file git tracks, or that a rule of the project keeps from being ignored
+  (`!.mcp.json`), is left as it is, as is one git could not be told to ignore.
+  The extension tells so, and offers to copy
+  the entry of the server, token included, for you to add to your own agent
+  configuration, which is outside the repository;
+- outside a git repository the file is written, and keeping it out of version
+  control is left to you.
+
+Both agents have a command adding a server to your own configuration:
+
+```sh
+copilot mcp add --transport http --header "Authorization: Bearer <token>" yui http://127.0.0.1:7391/mcp
+claude mcp add --transport http yui http://127.0.0.1:7391/mcp --header "Authorization: Bearer <token>"
+```
+
+A `.mcp.json` listing the server without its token is brought up to date in
+the same way when the server starts, and the agents started before that need
+to read it again. One that is tracked is told about until the entry of the
+server is taken out of it.
+
+The server only reads the files of the workspace: a document importing a file
 outside of it is checked without that file. The models of the
-`yui.lint.models` setting are read wherever they are. Each window serving a
-workspace needs a port of its own, which the command finds when the one set is
-taken. A tool that draws opens the preview panel beside the editor when it is
-closed, and leaves what it shows alone. Without a `theme`, it draws in the one
-the preview shows.
+`yui.lint.models` setting are read wherever they are. It writes one kind of
+file, the `.png` a call names as [`output`](#saving-the-image), inside the
+workspace, and is only served from a workspace that is trusted. Each window
+serving a workspace needs a port of its own, which the command finds when the
+one set is taken. A tool that draws opens the preview panel beside the editor
+when it is closed, and leaves what it shows alone. Without a `theme`, it draws
+in the one the preview shows.
 
 There is no formatter yet: writing a document back from its tree would lose
 its comments.
@@ -718,8 +893,12 @@ with Node, which loads the module and runs the commands the way an editor does.
 just vscode_yui_test
 ```
 
-runs the tests of the extension that need no editor: those of the server its
-tools for agents are reached through.
+checks the types of the extension, then runs its tests that need no editor:
+those of the server its tools for agents are reached through and of its token,
+of the file holding that token being kept out of the commits, of the files
+given to the tool, of the problems several documents tell of a file, of the
+columns of the tool as an editor counts them, of the grammar and of the
+snippets.
 
 ## See also
 
@@ -727,3 +906,5 @@ tools for agents are reached through.
 - [Complete UIs in `.yui`](documents.md) - models, actions and diagnostics.
 - [Hot reloading `.yui` files](hot-reload.md) - embedding files with
   `yup_add_yui_resources`.
+- [Shaders](shaders.md) and [3D scenes](scenes.md) - what `verify` loads and
+  `render` draws of them.

@@ -81,6 +81,27 @@ public:
     /** Returns the root item, or nullptr. */
     TreeViewItem* getRootItem() const noexcept;
 
+    /** Fills the tree with items of plain text, from their paths.
+
+        Each text is the path of an item, its levels separated by `/`: `"Sources/main.cpp"` is the item
+        `main.cpp` inside the item `Sources`, which is made when no path before named it. The items replace the
+        root item set before, under a root that has no row, and those holding others start open. This is what the
+        `items` property of `.yui` sets, so that a tree of texts is shown without writing its items.
+
+        A path names one item: given twice, it is still one item, and two items of the same text cannot share a
+        parent. As `/` separates the levels, the text of an item cannot hold one. A tree needing either is made
+        of TreeViewItem objects, with setRootItem().
+
+        @param newItems  The paths of the items, in the order they are shown
+    */
+    void setItems (const StringArray& newItems);
+
+    /** Returns the paths given to @ref setItems.
+
+        @return The paths, or an empty array when the root item was set another way
+    */
+    StringArray getItems() const;
+
     /** Shows or hides the root item's row.
 
         When hidden, the root is kept open and its sub-items become the top level rows. Visible by default.
@@ -285,6 +306,10 @@ public:
     /** @internal */
     void resized() override;
     /** @internal */
+    void visibilityChanged() override;
+    /** @internal */
+    void parentHierarchyChanged() override;
+    /** @internal */
     void paintOverChildren (Graphics& g) override;
     /** @internal */
     void refreshDisplay (double lastFrameTimeSeconds);
@@ -387,11 +412,16 @@ private:
     std::optional<DropTarget> findDropTarget (const DragAndDropSourceDetails& details) const;
     void updateDragState (const DragAndDropSourceDetails& details);
     void clearDragState();
+    void updateFrameAttachment();
 
     //==============================================================================
     std::unique_ptr<TreeListModel> model;
     std::unique_ptr<TreeListBox> list;
     std::unique_ptr<TreeViewItem> rootItem;
+
+    /** The paths the items were made from, and the root made for them: null when the root was set another way. */
+    StringArray itemPaths;
+    TreeViewItem* itemsRoot = nullptr;
 
     /** The visible items, in row order; each caches its index in TreeViewItem::rowIndex. */
     std::vector<TreeViewItem*> rows;
@@ -428,7 +458,7 @@ private:
     TreeViewItem* notifyingHoverItem = nullptr;
     double hoverExpandSeconds = 0.0;
     float autoScrollSpeed = 0.0f;
-    FrameAttachment frameAttachment { *this, bindFront (&TreeView::refreshDisplay, this) };
+    FrameAttachment frameAttachment { *this, bindFront (&TreeView::refreshDisplay, this), false };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TreeView)
 };

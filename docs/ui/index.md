@@ -7,7 +7,7 @@ paint through the [graphics](../graphics/index.md) stack.
   <img class="rounded" src="../_static/images/yup_widgets.jpg" alt="The widgets of the default theme, in the graphics example" width="640">
 </p>
 
-**Modules covered:** `yup_gui`, `yup_events`, `yup_audio_gui`.
+**Modules covered:** `yup_gui`, `yup_gui_markup`, `yup_artboard`, `yup_events`, `yup_audio_gui`.
 
 ```{warning}
 **Work in progress.** This area is still being written. Concept guides for
@@ -81,9 +81,9 @@ services of the operating system.
 
 ## YUI, the declarative UI language
 
-[YUI](yui/index.md) describes a whole interface - layout, stylesheet, drawings
-and bindings - in `.yui` text that is loaded at startup and hot reloaded while
-you edit it.
+[YUI](yui/index.md) describes a whole interface - layout, stylesheet, drawings,
+shaders, 3D scenes and bindings - in `.yui` text that is loaded at startup and
+hot reloaded while you edit it.
 
 - [The `.yui` language](yui/language.md) - blocks, elements, values,
   declarations and imports.
@@ -95,10 +95,14 @@ you edit it.
   shadows, glows, filters and cursors.
 - [Data-driven drawing](yui/drawing.md) - shapes whose values are expressions
   over the component's properties.
+- [Shaders](yui/shaders.md) - GLSL shaders as component effects, in drawings,
+  in filters and as 3D materials.
+- [3D scenes](yui/scenes.md) - cameras, lights, meshes, glTF models and
+  materials written as elements, styled, animated and interactive.
 - [Reactive bindings](yui/reactivity.md) - properties recomputed whenever what
   they read changes.
 - [Complete UIs in `.yui`](yui/documents.md) - `YuiDocument`, tokens, composite
-  components, handlers, actions and models.
+  components, handlers, actions, models and components set up from C++.
 - [Hot reloading `.yui` files](yui/hot-reload.md) - `YuiLoader` and embedded
   resources.
 - [Tools for `.yui` files](yui/tooling.md) - the checker, the schema, the SVG
@@ -116,9 +120,10 @@ the screen, and how to make it cheaper.
 - [Component snapshots](component-snapshots.md) - `snapshotToImage` and
   `snapshotToTexture` for pixel capture.
 - [Component effects (shaders)](component-effects.md) - GPU shader effects
-  applied to a `Component` subtree.
+  applied to a `Component` subtree, with `ShaderEffect` or a subclass.
 - [Components in 3D](component-3d.md) - live, interactive components on 3D
-  geometry with `setManuallyComposited` and `MeshSurfaceMapper`.
+  geometry, inside a `Scene3D` node or with `setManuallyComposited` and
+  `MeshSurfaceMapper`.
 
 ## Related areas
 

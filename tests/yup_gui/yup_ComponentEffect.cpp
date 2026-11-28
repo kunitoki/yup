@@ -20,6 +20,7 @@
 */
 
 #include <yup_gui/yup_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 #include <yup_graphics/yup_graphics.h>
 
 #include <gtest/gtest.h>
@@ -45,7 +46,15 @@ public:
         ++applyCount;
     }
 
+    /** A parameter of the effect, which tells the components it is set on when it changes. */
+    void setAmount (float newAmount)
+    {
+        if (std::exchange (amount, newAmount) != newAmount)
+            invalidate();
+    }
+
     int applyCount = 0;
+    float amount = 0.0f;
 };
 
 } // namespace
@@ -421,6 +430,267 @@ TEST_F (ComponentEffectTest, ChildrenStillPaintWhenParentIsCached)
     EXPECT_CALL (child, paint (_)).Times (1);
 
     ComponentHelper::triggerPaint (parentMock, g, parentMock.getLocalBounds(), false);
+}
+
+// =============================================================================
+// An effect tells the components it is set on when what it draws changed
+// =============================================================================
+
+class ComponentEffectRepaintTests : public ::testing::Test
+{
+protected:
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+    using EffectPtr = ReferenceCountedObjectPtr<CountingEffect>;
+
+    void SetUp() override
+    {
+        native = new StubComponentNative (window, ComponentNative::defaultFlags);
+        ComponentHelper::attachNative (window, native);
+
+        window.setBounds (0.0f, 0.0f, 200.0f, 100.0f);
+        window.setVisible (true);
+
+        panel.setBounds (20.0f, 10.0f, 80.0f, 40.0f);
+        window.addAndMakeVisible (panel);
+
+        subject.setBounds (10.0f, 5.0f, 30.0f, 20.0f);
+        panel.addAndMakeVisible (subject);
+
+        other.setBounds (120.0f, 10.0f, 40.0f, 40.0f);
+        window.addAndMakeVisible (other);
+    }
+
+    /** Forgets what was asked for so far: the areas of the window, and what each component has to paint again. */
+    void settle()
+    {
+        native->repaintAreas.clearQuick();
+        ComponentHelper::takeEffectDirtyRegion (panel, false);
+        ComponentHelper::takeEffectDirtyRegion (subject, false);
+        ComponentHelper::takeEffectDirtyRegion (other, false);
+    }
+
+    /** Returns how many areas the window was asked to draw again since settle(). */
+    int getNumAreasAsked() const
+    {
+        return native->getRepaintAreas().getNumRectangles();
+    }
+
+    /** Returns how many areas of its own subtree a component has to paint again, or -1 for all of it. */
+    static int takeNumDamagedAreas (Component& component)
+    {
+        const auto damage = ComponentHelper::takeEffectDirtyRegion (component, false);
+        return damage.has_value() ? damage->getNumRectangles() : -1;
+    }
+
+    Component window;
+    Component panel;
+    Component subject;
+    Component other;
+    StubComponentNative* native = nullptr;
+};
+
+TEST_F (ComponentEffectRepaintTests, AnEffectThatChangedHasItsComponentDrawnAgainWithoutPaintingItAgain)
+{
+    const EffectPtr effect (new CountingEffect());
+    subject.setComponentEffect (effect);
+    settle();
+
+    effect->setAmount (0.5f);
+
+    // The window draws the component again, where it is
+    ASSERT_EQ (1, getNumAreasAsked());
+    EXPECT_EQ (native->getRepaintAreas().getRectangle (0), (Rectangle<float> { 30.0f, 15.0f, 30.0f, 20.0f }));
+
+    // What the component painted is kept as it is, for the effect to be applied to again
+    EXPECT_EQ (0, takeNumDamagedAreas (subject));
+}
+
+TEST_F (ComponentEffectRepaintTests, AnEffectThatChangedIsPaintedAgainInWhatAnAncestorKeeps)
+{
+    const EffectPtr effect (new CountingEffect());
+    panel.setComponentEffect (new CountingEffect());
+    subject.setComponentEffect (effect);
+    settle();
+
+    effect->setAmount (0.5f);
+
+    // What the panel keeps of its subtree holds the subject as its effect drew it
+    const auto kept = ComponentHelper::takeEffectDirtyRegion (panel, false);
+    ASSERT_TRUE (kept.has_value());
+    ASSERT_EQ (1, kept->getNumRectangles());
+    EXPECT_EQ (kept->getRectangle (0), subject.getBounds());
+
+    EXPECT_EQ (0, takeNumDamagedAreas (subject));
+
+    // The effect of the panel can move pixels anywhere in it, so the window draws the whole of it again
+    ASSERT_EQ (1, getNumAreasAsked());
+    EXPECT_EQ (native->getRepaintAreas().getRectangle (0), panel.getBounds());
+}
+
+TEST_F (ComponentEffectRepaintTests, AnEffectSetOnTwoComponentsHasBothDrawnAgain)
+{
+    const EffectPtr effect (new CountingEffect());
+    subject.setComponentEffect (effect);
+    other.setComponentEffect (effect);
+    settle();
+
+    effect->setAmount (0.5f);
+
+    EXPECT_EQ (2, getNumAreasAsked());
+    EXPECT_EQ (0, takeNumDamagedAreas (subject));
+    EXPECT_EQ (0, takeNumDamagedAreas (other));
+}
+
+TEST_F (ComponentEffectRepaintTests, AnEffectThatChangedAsksNothingForAComponentThatIsNotShowing)
+{
+    const EffectPtr effect (new CountingEffect());
+    subject.setComponentEffect (effect);
+    panel.setVisible (false);
+    settle();
+
+    effect->setAmount (0.5f);
+
+    EXPECT_EQ (0, getNumAreasAsked());
+}
+
+TEST_F (ComponentEffectRepaintTests, SettingAnotherEffectTakesTheComponentOffTheFirstOne)
+{
+    const EffectPtr first (new CountingEffect());
+    const EffectPtr second (new CountingEffect());
+    subject.setComponentEffect (first);
+    subject.setComponentEffect (second);
+    settle();
+
+    first->setAmount (0.5f);
+    EXPECT_EQ (0, getNumAreasAsked());
+
+    second->setAmount (0.5f);
+    EXPECT_EQ (1, getNumAreasAsked());
+
+    // Nor is a component that has no effect any more told of anything
+    subject.setComponentEffect (nullptr);
+    settle();
+
+    second->setAmount (1.0f);
+    EXPECT_EQ (0, getNumAreasAsked());
+}
+
+TEST_F (ComponentEffectRepaintTests, AComponentDestroyedBeforeItsEffectIsToldNothingMore)
+{
+    const EffectPtr effect (new CountingEffect());
+
+    {
+        Component shortLived;
+        shortLived.setBounds (170.0f, 60.0f, 20.0f, 20.0f);
+        window.addAndMakeVisible (shortLived);
+        shortLived.setComponentEffect (effect);
+        EXPECT_EQ (2, effect->getReferenceCount());
+    }
+
+    EXPECT_EQ (1, effect->getReferenceCount());
+    settle();
+
+    effect->setAmount (0.5f);
+    EXPECT_EQ (0, getNumAreasAsked());
+}
+
+TEST_F (ComponentEffectRepaintTests, AnEffectReleasedBeforeItsComponentStaysWithTheComponent)
+{
+    struct WatchedEffect : CountingEffect
+    {
+        explicit WatchedEffect (bool& flagToSet)
+            : wasDestroyed (flagToSet)
+        {
+        }
+
+        ~WatchedEffect() override { wasDestroyed = true; }
+
+        bool& wasDestroyed;
+    };
+
+    bool wasDestroyed = false;
+
+    {
+        Component longLived;
+        longLived.setBounds (170.0f, 60.0f, 20.0f, 20.0f);
+        window.addAndMakeVisible (longLived);
+
+        CountingEffect* effect = nullptr;
+
+        {
+            const EffectPtr released (new WatchedEffect (wasDestroyed));
+            longLived.setComponentEffect (released);
+            effect = released.get();
+        }
+
+        // The component keeps the effect, which still tells it what changes
+        ASSERT_FALSE (wasDestroyed);
+        settle();
+
+        effect->setAmount (0.5f);
+        EXPECT_EQ (1, getNumAreasAsked());
+    }
+
+    // It goes with the last component it was set on
+    EXPECT_TRUE (wasDestroyed);
+}
+
+TEST_F (ComponentEffectRepaintTests, TheEffectsOfTheLibraryAskForTheirComponentToBeDrawnAgainWhenAParameterChanges)
+{
+    // Each change is made twice: the value the effect already has asks for nothing
+    const auto expectDrawnAgainOnce = [this] (ComponentEffect::Ptr effect, const std::function<void()>& change)
+    {
+        subject.setComponentEffect (effect);
+        settle();
+
+        change();
+        EXPECT_EQ (1, getNumAreasAsked());
+        EXPECT_EQ (0, takeNumDamagedAreas (subject));
+
+        settle();
+
+        change();
+        EXPECT_EQ (0, getNumAreasAsked());
+    };
+
+    {
+        SCOPED_TRACE ("blur");
+        const ReferenceCountedObjectPtr<BlurEffect> blur (new BlurEffect (2.0f));
+
+        expectDrawnAgainOnce (blur, [&] { blur->setRadius (5.0f); });
+    }
+
+    {
+        SCOPED_TRACE ("drop shadow");
+        const ReferenceCountedObjectPtr<DropShadowEffect> shadow (new DropShadowEffect());
+
+        expectDrawnAgainOnce (shadow, [&] { shadow->setColor (Colors::red); });
+        expectDrawnAgainOnce (shadow, [&] { shadow->setRadius (9.0f); });
+        expectDrawnAgainOnce (shadow, [&] { shadow->setOffset ({ 2.0f, 8.0f }); });
+    }
+
+    {
+        SCOPED_TRACE ("glow");
+        const ReferenceCountedObjectPtr<GlowEffect> glow (new GlowEffect());
+
+        expectDrawnAgainOnce (glow, [&] { glow->setRadius (9.0f); });
+        expectDrawnAgainOnce (glow, [&] { glow->setIntensity (0.25f); });
+        expectDrawnAgainOnce (glow, [&] { glow->setColor (Colors::red); });
+    }
+
+    {
+        SCOPED_TRACE ("color matrix");
+        const ReferenceCountedObjectPtr<ColorMatrixEffect> matrix (new ColorMatrixEffect());
+
+        expectDrawnAgainOnce (matrix, [&] { matrix->setMatrix (ColorMatrixEffect::grayscaleMatrix()); });
+    }
+
+    {
+        SCOPED_TRACE ("filter");
+        const ReferenceCountedObjectPtr<FilterEffect> filter (new FilterEffect());
+
+        expectDrawnAgainOnce (filter, [&] { filter->setOperations ({ FilterEffect::Operation::blur (3.0f) }); });
+    }
 }
 
 // =============================================================================
@@ -887,6 +1157,32 @@ TEST_F (ComponentEffectGpuTest, EffectCanvasIsReusedUntilTheComponentIsResized)
     EXPECT_NE (firstCanvas.get(), resizedCanvas.get());
     EXPECT_EQ (64, resizedCanvas->getWidth());
     EXPECT_EQ (64, resizedCanvas->getHeight());
+}
+
+TEST_F (ComponentEffectGpuTest, AnEffectWithNothingToApplyRepaintsItsComponentWhenItChanges)
+{
+    struct IdleEffect : CountingEffect
+    {
+        bool isActive() const override { return false; }
+    };
+
+    auto comp = makeComp ("test", 64, 64);
+    comp->setVisible (true);
+    comp->setCachedToTexture (true);
+
+    const ReferenceCountedObjectPtr<IdleEffect> effect (new IdleEffect());
+    comp->setComponentEffect (effect);
+
+    triggerPaintOnCanvas (*comp, 64, 64);
+    triggerPaintOnCanvas (*comp, 64, 64);
+    EXPECT_EQ (comp->paintCount, 1);
+
+    // The component is not drawn through the effect: it is painted again as by a repaint, and so is what it cached
+    effect->setAmount (0.5f);
+    triggerPaintOnCanvas (*comp, 64, 64);
+
+    EXPECT_EQ (comp->paintCount, 2);
+    EXPECT_EQ (effect->applyCount, 0);
 }
 
 // =============================================================================
@@ -1370,6 +1666,119 @@ TEST_F (ComponentEffectPartialRepaintTest, NothingDirtyPaintsNoChildButAppliesTh
     EXPECT_GT (effect->applyCount, applied);
 }
 
+TEST_F (ComponentEffectPartialRepaintTest, AnEffectThatChangedPaintsNoChildButIsAppliedAgain)
+{
+    const auto applied = effect->applyCount;
+
+    effect->setAmount (0.5f);
+    paintRoot();
+
+    EXPECT_EQ (0, left.paints);
+    EXPECT_EQ (0, right.paints);
+    EXPECT_EQ (effect->applyCount, applied + 1);
+
+    // A repaint is what paints again what the effect is given
+    root->repaint();
+    paintRoot();
+
+    EXPECT_EQ (1, left.paints);
+    EXPECT_EQ (1, right.paints);
+}
+
+TEST_F (ComponentEffectPartialRepaintTest, AnEffectSwitchedOffAndOnAgainPaintsWhatChangedMeanwhile)
+{
+    struct SwitchedEffect : CountingEffect
+    {
+        bool isActive() const override { return isOn; }
+
+        bool isOn = true;
+    };
+
+    const ReferenceCountedObjectPtr<SwitchedEffect> switched (new SwitchedEffect());
+    root->setComponentEffect (switched);
+    paintRoot();
+    left.paints = 0;
+    right.paints = 0;
+
+    // No paint comes in between to let go of what the component kept, which is told of nothing while the
+    // effect has nothing to apply
+    switched->isOn = false;
+    left.repaint();
+    switched->isOn = true;
+
+    switched->setAmount (0.5f);
+    paintRoot();
+
+    EXPECT_EQ (1, left.paints);
+    EXPECT_EQ (0, right.paints);
+}
+
+TEST_F (ComponentEffectPartialRepaintTest, TransparentRootWithNothingDirtyPaintsNoChild)
+{
+    // Painted in full once, as what it is now
+    root->setOpaque (false);
+    root->repaint();
+    paintRoot();
+    left.paints = 0;
+    right.paints = 0;
+
+    const auto applied = effect->applyCount;
+
+    // Nothing has to be painted over what was kept, so nothing opaque has to cover it
+    paintRoot();
+    effect->setAmount (0.5f);
+    paintRoot();
+
+    EXPECT_EQ (0, left.paints);
+    EXPECT_EQ (0, right.paints);
+    EXPECT_EQ (effect->applyCount, applied + 2);
+}
+
+TEST_F (ComponentEffectPartialRepaintTest, UnclippedRootWithNothingDirtyPaintsNoChild)
+{
+    root->enableRenderingUnclipped (true);
+    root->repaint();
+    paintRoot();
+    left.paints = 0;
+    right.paints = 0;
+
+    paintRoot();
+
+    EXPECT_EQ (0, left.paints);
+    EXPECT_EQ (0, right.paints);
+}
+
+TEST_F (ComponentEffectPartialRepaintTest, SiblingRepaintingOverATransparentRootPaintsNoChildOfIt)
+{
+    FillComponent parent ("parent");
+    parent.setBounds (0, 0, 128, 128);
+    parent.setVisible (true);
+    parent.addChildComponent (*root);
+
+    CountingChild sibling { Color (0x8000ff00) };
+    sibling.setOpaque (false);
+    sibling.setBounds (32, 32, 64, 64);
+    parent.addAndMakeVisible (sibling);
+
+    root->setOpaque (false);
+    root->repaint();
+    triggerPaintOnCanvas (parent, 128, 128);
+    left.paints = 0;
+    right.paints = 0;
+    sibling.paints = 0;
+
+    const auto applied = effect->applyCount;
+
+    sibling.repaint();
+    triggerPaintOnCanvas (parent, 128, 128);
+
+    // The root is drawn again under its sibling, from what it kept
+    EXPECT_EQ (1, sibling.paints);
+    EXPECT_EQ (0, left.paints);
+    EXPECT_EQ (0, right.paints);
+    EXPECT_GT (effect->applyCount, applied);
+}
+
 TEST_F (ComponentEffectPartialRepaintTest, TransparentRootRepaintsEverything)
 {
     root->setOpaque (false);
@@ -1581,7 +1990,7 @@ protected:
 
         void style (const String& text)
         {
-            auto sheet = StyleSheet::parse (text);
+            auto sheet = YuiParser::parseStyleSheet (text);
             ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
 
             root.setStyleSheet (sheet.getReference());

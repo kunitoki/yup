@@ -46,6 +46,11 @@ bool isSpace (yup_wchar character)
     return character == ' ' || character == '\t' || character == '\n' || character == '\r';
 }
 
+bool isQuote (yup_wchar character)
+{
+    return character == '"' || character == '\'';
+}
+
 // The value of a hexadecimal digit, or -1
 int readHexDigit (yup_wchar character)
 {
@@ -175,17 +180,17 @@ void YuiToolIndex::blankCommentsAndStrings()
             blank (position, stop);
             position = stop;
         }
-        else if (character == '"')
+        else if (isQuote (character))
         {
             auto stop = position + 1;
 
             // A string ends with its line, so one being typed does not take the rest of the text
-            while (stop < size && at (stop) != '"' && at (stop) != '\n')
+            while (stop < size && at (stop) != character && at (stop) != '\n')
                 stop += at (stop) == '\\' ? 2 : 1;
 
             stop = jmin (size, stop);
             blank (position + 1, stop);
-            position = at (stop) == '"' ? stop + 1 : stop;
+            position = at (stop) == character ? stop + 1 : stop;
         }
         else
         {
@@ -278,12 +283,12 @@ void YuiToolIndex::readDeclarations()
         // The path is between the quotes of the statement, which only the text as it is written still has
         auto start = statement.start;
 
-        while (start < statement.end && text[static_cast<size_t> (start)] != '"')
+        while (start < statement.end && ! isQuote (getCodeAt (start)))
             ++start;
 
         auto end = start + 1;
 
-        while (end < statement.end && text[static_cast<size_t> (end)] != '"')
+        while (end < statement.end && ! isQuote (getCodeAt (end)))
             ++end;
 
         if (end < statement.end)
@@ -337,13 +342,13 @@ void YuiToolIndex::addDeclaration (const YuiToolBlock& block)
     }
     else
     {
-        // `drawing Name`, `palette Name` or `component Name : Base`, and nothing more
+        // `drawing Name`, `shader Name`, `palette Name` or `component Name : Base`, and nothing more
         auto position = block.start;
 
         if (readName (position, block.open, declaration.kind) < 0)
             return;
 
-        if (declaration.kind != "drawing" && declaration.kind != "palette" && declaration.kind != "component")
+        if (declaration.kind != "drawing" && declaration.kind != "shader" && declaration.kind != "palette" && declaration.kind != "component")
             return;
 
         declaration.offset = readName (position, block.open, declaration.name);
@@ -366,7 +371,7 @@ void YuiToolIndex::addMembers (YuiToolDeclaration& declaration) const
 {
     const auto isPalette = declaration.kind == "palette";
     const auto isComponent = declaration.kind == "component";
-    const auto declaresProperties = isComponent || declaration.kind == "drawing";
+    const auto declaresProperties = isComponent || declaration.kind == "drawing" || declaration.kind == "shader";
 
     for (const auto& statement : declaration.block->statements)
     {

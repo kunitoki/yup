@@ -20,6 +20,7 @@
 */
 
 #include <yup_audio_gui/yup_audio_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 
 #include <gtest/gtest.h>
 
@@ -199,6 +200,32 @@ TEST_F (AudioParameterBindingProviderTests, WrapsGesturesInChangeGestures)
     parameter (1)->removeListener (&host);
 }
 
+TEST_F (AudioParameterBindingProviderTests, ShowsAndReadsAValueAsTheTextOfItsParameter)
+{
+    const auto withUnit = AudioParameterBuilder()
+                              .withID ("pitch")
+                              .withName ("Pitch")
+                              .withRange (0.0f, 100.0f)
+                              .withDefault (10.0f)
+                              .withValueToString ([] (float value) { return String (roundToInt (value)) + " st"; })
+                              .withStringToValue ([] (const String& text) { return text.upToFirstOccurrenceOf (" ", false, false).getFloatValue(); })
+                              .build();
+
+    const std::vector<AudioParameter::Ptr> parameters { withUnit };
+    AudioParameterBindingProvider provider (editor, parameters);
+
+    // The value given, which need not be the current one
+    EXPECT_EQ (provider.getTextForValue ("pitch", 24.0).value_or ("none"), "24 st");
+    EXPECT_FLOAT_EQ (static_cast<float> (provider.getValueForText ("pitch", "36 st").value_or (var())), 36.0f);
+    EXPECT_FLOAT_EQ (withUnit->getValue(), 10.0f);
+
+    // A parameter with no conversion of its own has the default one, and an unknown name has none
+    AudioParameterBindingProvider plain (editor, processor.getParameters());
+    EXPECT_EQ (plain.getTextForValue ("gain", 0.25).value_or ("none"), parameter (1)->convertToString (0.25f));
+    EXPECT_FALSE (plain.getTextForValue ("nothing", 0.25).has_value());
+    EXPECT_FALSE (plain.getValueForText ("nothing", "0.25").has_value());
+}
+
 TEST_F (AudioParameterBindingProviderTests, DrivesABuiltUserInterface)
 {
     AudioParameterBindingProvider provider (editor, processor.getParameters());
@@ -214,7 +241,7 @@ TEST_F (AudioParameterBindingProviderTests, DrivesABuiltUserInterface)
 
     const auto result = builder.build (parsed.document);
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* knob = builder.findById<Slider> ("knob");
     ASSERT_NE (knob, nullptr);

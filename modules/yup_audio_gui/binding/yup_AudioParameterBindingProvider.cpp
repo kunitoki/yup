@@ -107,4 +107,20 @@ void AudioParameterBindingProvider::endGesture (const Identifier& name)
         parameter->endChangeGesture();
 }
 
+std::optional<String> AudioParameterBindingProvider::getTextForValue (const Identifier& name, const var& value) const
+{
+    if (const auto* parameter = findParameter (name))
+        return parameter->convertToString (static_cast<float> (value));
+
+    return std::nullopt;
+}
+
+std::optional<var> AudioParameterBindingProvider::getValueForText (const Identifier& name, const String& text) const
+{
+    if (const auto* parameter = findParameter (name))
+        return var (static_cast<double> (parameter->convertFromString (text)));
+
+    return std::nullopt;
+}
+
 } // namespace yup

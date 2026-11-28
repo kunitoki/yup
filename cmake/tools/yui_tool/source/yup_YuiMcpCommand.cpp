@@ -21,7 +21,7 @@
 
 #include "yup_YuiAgentTools.h"
 #include "yup_YuiCommands.h"
-#include "yup_YuiToolSupport.h"
+#include "yup_YuiToolView.h"
 
 #include <yup_ai/yup_ai.h>
 

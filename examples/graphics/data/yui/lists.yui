@@ -1,0 +1,80 @@
+// Lists and views: the widgets that hold rows, pages or scrolled content. A ListBox is filled
+// from its items, a TreeView from the paths of its items, a TabComponent turns its children
+// into pages and a Viewport scrolls its child.
+style {
+    .caption { textFillColor: palette.textMuted; }
+    .readout { textFillColor: palette.accent; }
+}
+
+Grid {
+    columns: "1fr 1fr";
+    rows: "1fr 1fr";
+    padding: 12;
+    gap: 10;
+
+    Column {
+        gap: 4;
+
+        Label { class: caption; text: "ListBox"; preferredHeight: 16; }
+        ListBox { id: list; items: ["Kick", "Snare", "Hat", "Clap", "Tom", "Ride", "Crash", "Cowbell"]; selectedRow: 1; flexGrow: 1;
+                  onSelectionChanged: action ("row", self.selectedRow); }
+        Label { class: readout; text: list.selectedRow < 0 ? "nothing selected" : format ("row %d", list.selectedRow + 1); preferredHeight: 16; }
+    }
+
+    Column {
+        gap: 4;
+
+        Label { class: caption; text: "TreeView"; preferredHeight: 16; }
+        TreeView { id: tree; indentGuidesVisible: true; flexGrow: 1; onSelectionChanged: action ("tree");
+                   items: ["Sources/main.cpp", "Sources/Editor.cpp", "Sources/Editor.h", "Resources/ui.yui", "Resources/logo.png", "README.md"]; }
+    }
+
+    Column {
+        gap: 4;
+
+        Label { class: caption; text: "Viewport"; preferredHeight: 16; }
+        Viewport {
+            flexGrow: 1;
+
+            Column {
+                width: 220;
+                height: 360;
+                gap: 4;
+
+                repeat i in 0 .. 9 {
+                    TextButton { text: format ("Row %d", i + 1); flexGrow: 1; onClick: action ("scrolled row", i + 1); }
+                }
+            }
+        }
+    }
+
+    Column {
+        gap: 4;
+
+        Label { class: caption; text: "TabComponent"; preferredHeight: 16; }
+        TabComponent {
+            id: pages;
+            selectedTab: "code";
+            flexGrow: 1;
+            onTabChanged: (tab) => action ("tab", tab);
+
+            Column {
+                id: code;
+                title: "Code";
+                CodeEditor { syntax: yui; scheme: oneDark; text: "Slider { id: knob; value: 0.5; }"; minimapVisible: false; flexGrow: 1; }
+            }
+
+            Column {
+                id: pad;
+                title: "Pad";
+                JoystickComponent { flexGrow: 1; onValueChanged: action ("pad"); }
+            }
+
+            Column {
+                id: picture;
+                title: "Image";
+                Image { source: "../logo.png"; fitting: scaleToFit; flexGrow: 1; }
+            }
+        }
+    }
+}

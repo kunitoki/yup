@@ -63,7 +63,12 @@ struct ComponentSignal
     /** The name of the signal, as used in `.yui`, for example "onClick". */
     Identifier name;
 
-    /** Connects a handler to a component of the type declaring the signal. */
+    /** Connects a handler to a component of the type declaring the signal.
+
+        A signal has one handler: the one connected replaces the one before. A null handler
+        disconnects the signal, leaving the component as it is before any handler is connected:
+        an implementation must not keep it to call it.
+    */
     std::function<void (Component&, Handler)> connect;
 
     /** A human readable description, surfaced by tooling. */

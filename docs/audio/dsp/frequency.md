@@ -136,8 +136,24 @@ analyzers. It follows the classic split between data collection and rendering:
 - **UI thread** polls `isFFTDataReady()`, then pulls overlapping FFT frames with
   `getFFTData()`.
 
-Defaults: FFT size 2048, overlap factor `0.75` (hop size 512 at 2048), FIFO
-capacity `4 × fftSize`.
+Defaults: FFT size 2048, overlap factor `0.75` (hop size 512 at 2048). The FIFO
+is allocated once, when the state is created, for the largest FFT size the state
+will take, and holds `4 × fftSize` samples of the current size: nothing is
+allocated afterwards, so the FFT size and the overlap can change from any thread
+while the audio thread pushes.
+
+The largest size is the second argument of the constructor. Without it a state
+takes every size up to `maxFftSize` (65536), which costs about 1 MB: four frames
+of the largest size, at 4 bytes a sample. Give the largest size you will set to
+hold less, for example 32 KB for 2048:
+
+```cpp
+SpectrumAnalyzerState anySize (2048);           // any size up to 65536: about 1 MB
+SpectrumAnalyzerState upTo4096 (1024, 4096);    // starts at 1024, up to 4096: 64 KB
+```
+
+The largest size does not change afterwards, and a size above it is ignored.
+`getMaxFftSize()` returns it.
 
 ```cpp
 SpectrumAnalyzerState analyzer (2048);
@@ -154,16 +170,23 @@ if (analyzer.isFFTDataReady())
 Key methods:
 
 - `pushSample (float)` / `pushSamples (const float*, int)` — audio-thread
-  writes; raise the ready flag once at least `fftSize` samples are buffered.
+  writes. The samples that do not fit are dropped: the audio thread never
+  waits.
 - `isFFTDataReady() const` — `true` when a full frame is available.
 - `getFFTData (float* destBuffer)` — copies the oldest `fftSize` samples into
   `destBuffer` and advances the read position by only `hopSize`, so consecutive
   frames overlap. Returns `false` when no data is ready.
-- `setOverlapFactor (float)` — overlap in `[0, 1)`, clamped to `[0.0, 0.95]`;
-  recomputes the hop size (`min 1`).
-- `setFftSize (int)` — changes size and reinitializes the FIFO (clears buffered
-  data).
-- `reset()` — clears the FIFO and the ready flag.
+- `getFFTData (Span<float>)` - the same, for a reader that does not set the
+  FFT size itself: it returns `false` when the buffer is not of the FFT size,
+  as it is right after another thread changed it.
+- `skipSamples (int)` - drops the oldest samples, for a reader that fell behind.
+- `setOverlapFactor (float)` - overlap in `[0, 1)`, clamped to `[0.0, 0.95]`.
+- `setFftSize (int)` - a power of 2 from `minFftSize` to `getMaxFftSize()`, any
+  other size is ignored. The buffered samples are kept.
+- `getMaxFftSize()` - the largest FFT size the state takes, the one it was
+  created for.
+- `reset()` - drops the buffered samples. Like the other reading methods it
+  belongs to the reading side, one thread at a time.
 
 ## Related
 

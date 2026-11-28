@@ -49,7 +49,7 @@ CURVE_STEPS = 16
 ICONS = {
     "modules/yup_dsp_jit/tools/vscode-ydsp/images/ydsp-icon.png": ("#36b3ff", "#0a6fe8"),  # .ydsp
     "modules/yup_dsp_jit/tools/vscode-ydsp/images/ydsp-project-icon.png": ("#ffb22e", "#f06400"),  # .ydsp-project
-    "modules/yup_gui/tools/vscode-yui/images/yui-icon.png": ("#ff6cb0", "#d11f78"),  # .yui
+    "modules/yup_gui_markup/tools/vscode-yui/images/yui-icon.png": ("#ff6cb0", "#d11f78"),  # .yui
 }
 
 Matrix = tuple[float, float, float, float, float, float]

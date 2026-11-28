@@ -10,6 +10,10 @@ Pipelines support both **fullscreen post-process effects** and **custom geometry
 rendering** (indexed or non-indexed) with vertex buffers, culling, and
 depth/stencil state.
 
+For an effect that is one fragment shader over a whole target, a
+[`GpuImageShader`](image-shaders.md) is simpler: it compiles the pipeline,
+binds the textures and fills the uniform block by name.
+
 <p align="center">
   <img class="rounded" src="../../_static/images/yup_rhi_pbr.jpg" alt="Spheres shaded by custom PBR pipelines, in the graphics example" width="640">
 </p>

@@ -43,6 +43,9 @@ namespace yup
     AudioParameterAttachment per parameter, so the editor must call
     AudioProcessorEditor::startParameterListening.
 
+    A value edited as text, as `edit (params.cutoff)` does, opens with the text of
+    AudioParameter::convertToString and is read back with AudioParameter::convertFromString.
+
     The IDs must be valid identifiers to be read in expressions (`cutoff`, not `filter.cutoff`).
     The editor must outlive the provider; create and destroy it on the message thread.
 
@@ -88,6 +91,10 @@ public:
     void beginGesture (const Identifier& name) override;
     /** @internal */
     void endGesture (const Identifier& name) override;
+    /** @internal */
+    std::optional<String> getTextForValue (const Identifier& name, const var& value) const override;
+    /** @internal */
+    std::optional<var> getValueForText (const Identifier& name, const String& text) const override;
 
 private:
     //==============================================================================

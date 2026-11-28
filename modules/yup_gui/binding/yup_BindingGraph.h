@@ -57,7 +57,7 @@ namespace yup
     run. Symbols resolve through DrawingScope: bare names and `self.` on the target, `parent.`
     on its parent, `palette.` on the palette, and any other prefix through the resolver.
 
-    @see PropertyExpression, DrawingScope, YuiBuilder
+    @see PropertyExpression, DrawingScope
 
     @tags{UI}
 */
@@ -145,6 +145,28 @@ public:
     /** Returns how many links the graph holds. */
     int getNumLinks() const noexcept { return static_cast<int> (links.size()); }
 
+    /** A property of a model, as reported by findLinkedModel(). */
+    struct ModelProperty
+    {
+        /** The model holding the property. */
+        BindingModel* model = nullptr;
+
+        /** The property of the model. */
+        Identifier property;
+    };
+
+    /** Returns the property of a model a property is linked to, or nothing when it is linked to none.
+
+        The links are followed through the properties between the two, as the alias of a
+        `component` block is: with `dial.value <=> root.value <=> params.gain`, the value of the
+        dial is found linked to `params.gain`. A property of a model is found as itself, and a
+        link to one element of a list is not followed, as the property is not the whole list.
+
+        @param component  The component holding the property.
+        @param property   The property.
+    */
+    std::optional<ModelProperty> findLinkedModel (const Component& component, const Identifier& property) const;
+
     //==============================================================================
     /** Returns how many live bindings the graph holds. */
     int getNumBindings() const noexcept { return static_cast<int> (bindings.size()); }
@@ -208,14 +230,37 @@ private:
         }
     };
 
+    /** One property of one component: what the bindings and the links are found by when it changes. */
+    struct PropertyKey
+    {
+        const Component* component = nullptr;
+        Identifier property;
+
+        bool operator== (const PropertyKey& other) const noexcept
+        {
+            return component == other.component && property == other.property;
+        }
+    };
+
+    struct PropertyKeyHash
+    {
+        std::size_t operator() (const PropertyKey& key) const noexcept
+        {
+            return std::hash<const void*>() (key.component) ^ (std::hash<Identifier>() (key.property) * 0x9e3779b9u);
+        }
+    };
+
     void handlePropertyChanged (Component& component, const Identifier& property);
     void handleComponentDeleted (Component& component);
 
     void addObservedOf (const Binding& binding);
     void removeObservedOf (const Binding& binding);
+    void addToIndex (Binding& binding);
+    void removeFromIndex (const Binding& binding);
     void removeBinding (int index);
+    void removeBinding (const Binding& binding);
     void removeLink (int index);
-    void syncLinks (Component& component, const Identifier& property);
+    void syncLinks (const PropertyKey& changed);
 
     /** Returns what a component was given for a property, or what it shows for one it was given
         nothing for. A link moves this rather than the value in effect, which for `enabled`
@@ -228,13 +273,21 @@ private:
 
     /** Gives a side of a link its value: an element of a list is written with the rest of the list. */
     static void writeLinkSide (const Link& link, bool isFirst, const var& value);
-    void invalidate (const Component& component, const Identifier& property);
+    void invalidate (const PropertyKey& changed);
     void markDirty (Binding& binding);
     void flush();
 
     //==============================================================================
     std::vector<std::unique_ptr<Binding>> bindings;
     std::vector<std::shared_ptr<Link>> links;
+
+    // What a change is looked up in, each list in the order its bindings or links were made. A key is there only
+    // while one of them holds it, and all of them go when its component is deleted: none outlives its component
+    std::unordered_map<PropertyKey, Binding*, PropertyKeyHash> bindingsByTarget;
+    std::unordered_map<PropertyKey, std::vector<Binding*>, PropertyKeyHash> bindingsByInput;
+    std::unordered_map<PropertyKey, std::vector<std::shared_ptr<Link>>, PropertyKeyHash> linksByProperty;
+    const Identifier paletteProperty { "palette" };
+
     std::vector<Binding*> dirty;
     DependencyObserver observer;
     Binding* writingBinding = nullptr;

@@ -1,0 +1,27 @@
+// size: 560 150
+drawing Curves {
+    let steps: 57;
+    let stepWidth: bounds.width / (steps - 1.0);
+
+    rect { bounds: bounds; cornerRadius: 6; fill: palette.surface; }
+
+    repeat i in 0 .. steps {
+        let x: bounds.x + i * stepWidth;
+        let wave: 0.42 + 0.3 * sin (i * 0.24) * cos (i * 0.07);
+        let middle: bounds.y + 30 + 10 * sin (i * 0.2);
+
+        vertex { id: area; at: point (x, bounds.bottom - wave * bounds.height); base: point (x, bounds.bottom); smooth: 0.6;
+                 fill: palette.accent.withAlpha (0.2); stroke: palette.accent; strokeWidth: 2; }
+
+        vertex { id: band; series: 1; at: point (x, middle - 8); base: point (x, middle + 8); smooth: 0.6;
+                 fill: palette.textMuted.withAlpha (0.3); }
+
+        vertex { id: line; series: 2; at: point (x, middle); stroke: palette.text; strokeWidth: 1.5; }
+    }
+}
+
+style {
+    .curves { drawing: Curves; }
+}
+
+Component { id: curves; class: curves; }

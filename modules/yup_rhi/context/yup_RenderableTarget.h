@@ -23,28 +23,31 @@ namespace yup
 {
 
 //==============================================================================
-/** An OffscreenTarget backed by a dedicated Rive render context.
+/** An OffscreenTarget a 2D Graphics frame can draw into.
 
     Created by GraphicsContext::createRenderableTarget(). Unlike a plain
-    OffscreenTarget, a RenderableTarget reserves a backend-owned RenderContext
-    exclusively, for its whole lifetime, and returns it to the pool when
-    destroyed. This dedicated context is what enables 2D drawing through a
-    Graphics frame (GpuCanvas::beginDraw) and what makes recursive offscreen
-    rendering safe (TransparencyLayer inside GpuCanvas, a Lottie matte inside a
-    precomp inside another matte) without re-entering beginFrame.
+    OffscreenTarget, a RenderableTarget is drawn with a backend-owned Rive
+    RenderContext, which it leases from a pool for each frame: from
+    GpuDevice::beginOffscreen() to GpuDevice::endOffscreen(). This is what
+    enables 2D drawing through a Graphics frame (GpuCanvas::beginDraw) and what
+    makes recursive offscreen rendering safe (TransparencyLayer inside GpuCanvas,
+    a Lottie matte inside a precomp inside another matte) without re-entering
+    beginFrame.
 
-    The reservation deliberately outlives any single frame. Targets are commonly
-    pooled and reused across frames, and the nesting order between two pooled
-    targets can differ from one frame to the next; sharing one context between
-    them would make the inner target skip beginFrame and then be flushed against
-    the outer frame's descriptor, producing undefined contents.
+    The lease is exclusive while the frame is open, so a target whose frame
+    nests in the frame of another is always drawn with another context. A
+    target keeps no context between its frames: the targets of an interface
+    share the few contexts their frames need at once.
 
     The GraphicsContext must outlive every RenderableTarget it creates.
 */
 class YUP_API RenderableTarget : public OffscreenTarget
 {
 public:
-    /** Returns the dedicated Rive render context backing this target. Never nullptr. */
+    /** Returns the Rive render context the frame of this target is drawn with.
+
+        @returns The context leased for the frame that is open, or nullptr outside a frame.
+    */
     virtual rive::gpu::RenderContext* getRenderContext() noexcept = 0;
 };
 

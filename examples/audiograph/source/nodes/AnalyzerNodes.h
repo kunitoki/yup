@@ -150,7 +150,7 @@ public:
         : AudioProcessor ("Oscilloscope",
                           yup::AudioBusLayout ({ yup::AudioBus ("Main", yup::AudioBus::Audio, yup::AudioBus::Input, 2) },
                                                { yup::AudioBus ("Main", yup::AudioBus::Audio, yup::AudioBus::Output, 2) }))
-        , analyzerState (512)
+        , analyzerState (512, 512)
     {
         analyzerState.setOverlapFactor (0.0f);
     }
@@ -374,7 +374,7 @@ public:
         : AudioProcessor ("Spectrum Analyzer",
                           yup::AudioBusLayout ({ yup::AudioBus ("Main", yup::AudioBus::Audio, yup::AudioBus::Input, 2) },
                                                { yup::AudioBus ("Main", yup::AudioBus::Audio, yup::AudioBus::Output, 2) }))
-        , analyzerState (1024)
+        , analyzerState (1024, 1024)
     {
         analyzerState.setOverlapFactor (0.5f);
     }

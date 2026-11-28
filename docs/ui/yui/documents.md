@@ -30,7 +30,7 @@ Row {
 ## Loading a document
 
 ```cpp
-#include <yup_gui/yup_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 
 YuiDocument document;
 document.setModel ("params", paramsProvider);
@@ -54,14 +54,14 @@ When the text has a syntax error, an invalid stylesheet or an unknown component
 type, the interface already loaded is kept, so a live editor keeps showing the
 last good version, and the failed result carries the error with its location.
 Values that can't be applied, such as an unknown property, don't make loading
-fail. Both are listed by `getDiagnostics()`, each a `YuiDiagnostic` holding the
+fail. Both are listed by `getDiagnostics()`, each a `DataTreeDiagnostic` holding the
 message, the import path (empty for the main text), the line and the column:
 
 ```cpp
 for (const auto& problem : document.getDiagnostics())
     editor.setErrorLine (problem.line - 1, true); // lines and columns start at 1
 
-DBG (YuiDiagnostic::join (document.getDiagnostics())); // "style.yui:7:9: Unknown cursor 'finger'"
+DBG (DataTreeDiagnostic::join (document.getDiagnostics())); // "style.yui:7:9: Unknown cursor 'finger'"
 ```
 
 Style rules are checked when they start matching, so a `:hover` rule with a bad
@@ -94,7 +94,9 @@ enabledToggle.onClick = [&] { view.setEnabled (enabledToggle.getToggleState()); 
 ```
 
 To host the root another way, a `YuiDocument::Listener` hears about every load,
-successful or not, including the loads of undo and redo.
+successful or not, including the loads of undo and redo, and about each time
+the interface is built again without one, for a change made to its tree or to
+the range of a [`repeat`](#repeating-components).
 
 ## Reloading
 
@@ -111,10 +113,14 @@ and safe for the application:
 - A value the document no longer writes goes back to what a new component has,
   and the components of removed elements are destroyed.
 - Changing the type of an element creates a new component.
-- When the `style`, `palette`, `drawing` and `keyframes` blocks are unchanged
-  and in the same place, the stylesheet is kept: running transitions and
-  animations go on, and a class changed by the reload transitions as it would
-  from code. Any change to them restyles the interface from scratch.
+- The stylesheet is kept when the `style`, `palette`, `drawing`, `shader` and
+  `keyframes` blocks are unchanged, the `tokens` and `component` blocks still
+  declare the same properties with the same types, and each of these blocks is
+  still at the same place among the blocks of the document: running transitions
+  and animations go on, and a class changed by the reload transitions as it
+  would from code. What else a `tokens` or `component` block holds, the value of
+  a token or the components a `component` is made of, can change too. Any other
+  change to these blocks restyles the interface from scratch.
 
 Reloads can be undone. With an `UndoManager` set, each successful load is one
 transaction, and undoing it loads the previous document in place:
@@ -130,8 +136,60 @@ undoManager.undo(); // back to the previous document, keeping the components
 `.yui` tree from another, optionally recording the changes in an
 `UndoManager`.
 
+The loaded tree, `document.getTree()`, can also be changed in place, as a
+visual editor does to write an edit without going through the text. The
+interface is built again once the changes are over, from the message loop,
+whatever their number, and the listeners are told as for a load. A tool or a
+test with no message loop calls `document.applyPendingChanges()` to have it
+done at once. The stylesheet is kept as it is by a reload, so an edit that
+leaves the style alone restarts no transition. Problems found after an element
+was added, removed or moved this way have no line and column until a text is
+loaded again, and until then each change makes the stylesheet again.
+
 To load from files, reload when they change on disk, or load files embedded in
 the binary, use a `YuiLoader`, see [Hot reloading](hot-reload.md).
+
+## Reading files through the document
+
+A document also reads the files its elements name: the shaders of `shader`
+blocks, the images, the models and the textures of a [3D scene](scenes.md). They are read
+through the document, so they come from where its text comes from, and code
+reads its own files the same way:
+
+```cpp
+// From anything that has a component of the document
+if (const auto bytes = YuiDocument::readAssetFor (&component, "tables/curve.bin"))
+    load (*bytes);
+
+// Reading again when the file changes
+struct CurveUser : YuiDocument::Listener
+{
+    void documentLoaded (YuiDocument&, const Result&) override {}
+
+    void documentAssetChanged (YuiDocument& document, const String& path) override
+    {
+        if (path != "tables/curve.bin")                 // the path as it was read
+            return;
+
+        if (const auto bytes = document.readAsset (path))
+            load (*bytes);
+    }
+};
+```
+
+- `readAsset (path)` asks the asset reader of the document first, which a
+  `YuiLoader` installs to serve its files, its overrides and its embedded
+  resources. Else it reads the file: an absolute path as it is, a relative one
+  under the folder of the main file, then under the working directory.
+- `setAssetReader()` serves files from anywhere else, an archive for example,
+  for a document loaded without a `YuiLoader`. Returning nothing leaves the
+  file to be read as usual.
+- `getAssetFile (path)` is the file a path stands for, for what has to follow
+  the references of a file. It is no file for a document loaded from embedded
+  resources.
+- `notifyAssetChanged (path)` tells the listeners that a file changed. A
+  `YuiLoader` calls it for the files it watches, and then loads the document
+  again. Call it yourself for what nobody else watches.
 
 ## Tokens
 
@@ -204,8 +262,8 @@ component LabeledKnob : Column {
   reaches it as a `ColumnComponent`.
 - `property name: type = default;` declares a typed property, such as a
   `number`, `integer`, `boolean`, `string`, `color`, `point`, `rectangle`,
-  `transform`, `font`, `drawing`, `any`, or an array of expression types
-  (`number[]`, `transform[]`, ...). Inside the block it is read as
+  `transform`, `font`, `drawing` (the name of a drawing or of a shader),
+  `any`, or an array of expression types (`number[]`, `transform[]`, ...). Inside the block it is read as
   `root.label`; from outside it is set like any other property.
 - `property alias value <=> knob.value;` exposes a property of a part under a
   new name, with the type of the original.
@@ -236,6 +294,8 @@ emitted. It holds one call, or a block of calls run in order:
 
 ```yui
 TextButton { text: "Reset"; onClick: action ("reset"); }
+TextButton { text: "Mute"; onClick: set (params.mute, ! params.mute); }
+Label      { text: "Cutoff"; onDoubleClick: edit (params.cutoff); }
 Slider     { onValueChanged: action ("changed", "Cutoff", value); }
 Slider     { onValueChanged: (v) => root.onChanged (v * 100); }
 TextButton { onClick: { action ("save"); root.onDone (); } }
@@ -244,6 +304,13 @@ TextButton { onClick: { action ("save"); root.onDone (); } }
 - `action ("name", arguments...)` runs the function registered with
   `setAction`, passing the values of the arguments. With no arguments, the
   action receives the arguments of the signal instead.
+- `set (element.property, value)` writes a property, with no code in the
+  application: one of an element, as `knob.value` or `self.text`, or one of a
+  [model](#models), as `params.mute`. The value is an expression, converted to
+  the type of the property. A model takes the write as a gesture of its own,
+  so a host records it and it is undone in one step.
+- `edit (element.property)` opens a text editor to type the value of a
+  property, see [Editing a value as text](#editing-a-value-as-text).
 - `root.signal (arguments...)` or `id.signal (...)` emits a signal declared by
   a `component` block, converting the arguments to the types it declares.
 - `(a, b) => call` names the arguments of the signal, in order. The names hide
@@ -259,14 +326,24 @@ after loading.
 
 | Component      | Signal                  | Arguments          |
 |----------------|-------------------------|--------------------|
+| any            | `onDoubleClick`         |                    |
 | `TextButton`   | `onClick`               |                    |
 | `ToggleButton` | `onClick`               |                    |
 | `SwitchButton` | `onClick`               |                    |
 | `Slider`       | `onValueChanged`        | `value` (number)   |
 | `TextEditor`   | `onTextChange`          |                    |
+| `TextEditor`   | `onReturnKey`           |                    |
+| `TextEditor`   | `onEscapeKey`           |                    |
+| `TextEditor`   | `onFocusLost`           |                    |
 | `ComboBox`     | `onSelectedItemChanged` |                    |
 | `ListBox`      | `onSelectionChanged`    |                    |
 | `TabComponent` | `onTabChanged`          | `tab` (string, id) |
+
+`onDoubleClick` is a signal of every component. Its handler runs in place of
+what the component does itself on a double click, so a `Slider` with one no
+longer goes back to its default value, and it does not run while the component
+is disabled. A single line `TextEditor` keeps Return and Escape only while
+`onReturnKey` and `onEscapeKey` have a handler.
 
 `changed property: handler;` runs a handler whenever a property of the element
 changes, from the user, code or a binding, with the new value as its argument:
@@ -283,8 +360,10 @@ document.setAction ("changed", [this] (const Array<var>& args)
 });
 ```
 
-Don't load a document again synchronously from inside an action: the component
-emitting the signal would be destroyed while it runs.
+An action can change the tree of the document: the change is applied once the
+handler is over (see [Reloading](#reloading)). Don't load a document again
+synchronously from inside an action: it ends the handler, whose calls left are
+not run, and the component emitting the signal may be destroyed while it runs.
 
 ## Two-way bindings
 
@@ -343,6 +422,12 @@ survive any reload, even one that creates the components again, and changes
 made to the tree by anything else, such as undo or loading a preset, show up in
 the UI immediately.
 
+A provider can also expose values it does not list, such as the ones it only
+finds by name or makes when they are first asked for. A link, a handler or an
+expression naming `params.cutoff` asks the provider's `findProperty` for
+`cutoff` when `getProperties` does not list it, and the model keeps what it
+finds from then on.
+
 A press on a component linked to the model starts a *gesture*, which ends on
 release. Any other change, from the keyboard, the mouse wheel or code, is a
 gesture of its own. `DataTreeBindingProvider` starts a new undo transaction for
@@ -375,6 +460,149 @@ thread reach the UI on the editor's parameter dispatch. Writes and gestures on
 read-only parameters, such as meters, are ignored. Give a slider the range of its parameter with `minimum`,
 `maximum`, `interval` and `skew`; `minValue` and `maxValue` are the thumbs of a
 two-value slider, not its range.
+
+## Editing a value as text
+
+`edit (element.property)` in a handler opens a single line text editor over
+the component the handler is on, to type the value of a property: a number, an
+integer or a string, of an element or of a [model](#models). With
+`onDoubleClick` it makes a knob and its labels editable, with no code in the
+application:
+
+```yui
+component Knob : Column {
+    property label: string;
+    property scale: number = 1;
+    property alias value <=> dial.value;
+
+    Label  { text: root.label; onDoubleClick: readout.edit (dial.value); }
+    Slider { id: dial; sliderType: rotaryVerticalDrag;
+             onDoubleClick: readout.edit (dial.value, dial.value * root.scale, input / root.scale); }
+    Label  { id: readout; text: format ("%.0f", dial.value * root.scale); onDoubleClick: edit (dial.value); }
+}
+
+Knob { label: "MIX"; scale: 100; value <=> params.mix; }
+```
+
+- `edit (element.property)` opens the editor over the component the handler
+  is on, and `id.edit (element.property)` over another one, as `readout`
+  above. A signal named `edit` that a `component` block declares is still
+  emitted by `id.edit (...)`.
+- The editor opens with the text of the value selected. That is the text the
+  model shows the value with when the property is linked to one that has
+  texts of its own, as `params.mix` is through `root.value` above, and the
+  value with no zero after it otherwise.
+- `edit (element.property, shown, parsed)` gives both: `shown` is the text, or
+  the number, the editor opens with, and `parsed` the value of what was typed.
+  `parsed` reads `text`, what was typed, and `input`, the number it starts
+  with: `"440 Hz"` gives 440.
+- Return and a press anywhere else commit, as does the editor losing the
+  keyboard focus. Escape cancels. A text left as it opened, and one with no
+  number to read, write nothing.
+- The value is written through the property, so a slider keeps it in its range
+  and on its steps as it does a drag, and a model takes it as one gesture.
+- Nothing opens while the component holding the property is disabled.
+
+One editor is open at a time, and it closes when the document is loaded again.
+It is a `TextEditor` of class `edit`, styled as the others unless a rule says
+otherwise:
+
+```yui
+style {
+    TextEditor.edit { backgroundColor: palette.surface; cornerRadius: 2; }
+}
+```
+
+An `AudioParameterBindingProvider` shows and reads a value with
+`AudioParameter::convertToString` and `convertFromString`, so the editor of a
+parameter opens with its unit. Another provider does the same by overriding
+`BindingProvider::getTextForValue` and `getValueForText`.
+
+A slider has what goes with it. `dragSensitivity` is how far a drag moves the
+value: 1 crosses the range in the length of the slider, and a rotary slider
+made in C++ has 0.3. While the `fineDragModifier` key is held (`none`,
+`shift`, `ctrl`, `alt` or `command`, `shift` by default) a drag and the wheel
+are `fineDragScale` times as fast, 0.1 by default. A click with the
+`resetModifier` key, `alt` by default, brings `defaultValue` back, which a
+double click no longer does on a slider with an `onDoubleClick` handler:
+
+```yui
+Slider { sliderType: rotaryVerticalDrag; dragSensitivity: 0.3; fineDragScale: 0.1; fineDragModifier: shift;
+         resetModifier: alt; defaultValue: 0.5; }
+```
+
+## Setting up components from C++
+
+Some components show something a document can't write: the state a keyboard
+plays into, the levels a meter reads, the audio a waveform draws. It belongs to
+the application, which hands it over with an *initializer*, a function run on
+each component of a type when the document creates it:
+
+```cpp
+document.setInitializer<MidiKeyboardComponent> ([this] (MidiKeyboardComponent& keyboard)
+{
+    keyboard.setState (&processor.getKeyboardState());
+});
+```
+
+```yui
+Row {
+    gap: 8;
+
+    ModWheel   { preferredWidth: 36; }
+    PitchWheel { preferredWidth: 36; }
+
+    MidiKeyboard { rangeStart: 48; rangeEnd: 84; flexGrow: 1; }
+}
+```
+
+A call made once after loading, on what `findById` returns, would not last: a
+reload, or a `repeat` whose range changes, creates components again, and the
+new ones would be left without what the first ones were given.
+
+With an ID, the initializer only runs on the components written with it, which
+tells apart two components of one type:
+
+```cpp
+document.setInitializer<SpectrumAnalyzerComponent> ("input", [this] (SpectrumAnalyzerComponent& analyzer)
+{
+    analyzer.setState (&processor.getInputAnalyzerState());
+});
+
+document.setInitializer<SpectrumAnalyzerComponent> ("output", [this] (SpectrumAnalyzerComponent& analyzer)
+{
+    analyzer.setState (&processor.getOutputAnalyzerState());
+});
+```
+
+```yui
+Row {
+    SpectrumAnalyzer { id: input; }
+    SpectrumAnalyzer { id: output; displayType: lines; }
+}
+```
+
+- An initializer runs once the whole tree is created and before the values of
+  the document are applied, so what the document writes wins over what the
+  initializer sets.
+- It runs on the components of the type and of the types derived from it,
+  which the instances of a `component` block based on the type are.
+- The initializers of an ID run after the ones without, whatever the order
+  they were set in, so the more specific one wins. Those of one kind run in
+  the order they were set.
+- The ID is the one the element is written with, so an initializer reaches the
+  components inside a `component` block or a `repeat`, which `findById` does
+  not.
+- A component a reload keeps isn't set up again, unless its ID changed.
+- Initializers are set before or after loading: one set later runs right away
+  on the components already there. `clear()` keeps them, and setting a null
+  function removes one.
+- What a function captures must outlive the document.
+
+Initializers work for any component, yours included once its type is
+registered with `ComponentTypeRegistry`. The components of `yup_audio_gui` a
+document creates are listed in
+[Audio GUI](../../audio/audio-gui.md#in-yui-documents).
 
 ## Repeating components
 
@@ -436,7 +664,8 @@ Column {
 </p>
 
 A tool or a test with no message loop calls
-`document.applyPendingChanges()` to have the components made again at once.
+`document.applyPendingChanges()` to have the components made again at once. It
+applies the changes made to the tree of the document too.
 
 ## Exclusive buttons and steppers
 
@@ -451,6 +680,33 @@ Row {
     ToggleButton { text: "STEP"; radioGroup: 1; checked <=> mod.step; }
 }
 ```
+
+Buttons that stand for the values of one property share it instead. Each has a
+`value`, and links its `selection` to the property: it is checked while the
+selection is its value, and a click selects that value. They are exclusive
+whatever their parents, and none needs a `checked` of its own to bind:
+
+```yui
+Row {
+    ToggleButton { text: "LFO";  value: 1; selection <=> mod.source; }
+    ToggleButton { text: "STEP"; value: 2; selection <=> mod.source; }
+}
+
+Row {
+    repeat note in 1 .. 13 {
+        ToggleButton { value: note; selection <=> params.rootNote; offValue: 0; }
+    }
+}
+```
+
+- A value is a number, a text or a boolean. Numbers are compared by what they
+  are worth: `2` is `2.0`.
+- A click on the button that is checked leaves it checked. With an
+  `offValue` it selects that value instead, so no button is left checked.
+- The buttons follow the property whoever changes it: another button, a
+  handler calling `set (mod.source, 2)`, a preset or a host.
+- Don't set `checked` or a `radioGroup` on a button that has a value: the
+  selection decides.
 
 A `Slider` of type `incDecButtons` is a stepper: a button at each end with the
 value between them, on a line when it is wider than tall and one above the
@@ -500,8 +756,33 @@ Row {
 - [`.yui` interfaces from Python](../../scripting/python-yui.md) - documents,
   actions and models from the Python bindings.
 
-The `YuiDrawing` graphics example edits a complete UI built this way, split
-across `ui.yui`, `components.yui`, four knob drawings (`knob.yui`,
-`haloknob.yui`, `flutedknob.yui`, `brushedknob.yui`), `palette.yui` and
-`style.yui`. It rebuilds shortly after each keystroke, and on desktop it
-reloads when one of the files is saved in another editor.
+The `YuiDrawing` graphics example (the `YUI` page) edits a complete UI built
+this way, its Filter, split across `ui.yui`, `components.yui`, four knob
+drawings (`knob.yui`, `haloknob.yui`, `flutedknob.yui`, `brushedknob.yui`),
+`palette.yui` and `style.yui` in
+[`examples/graphics/data/yui/filter`](https://github.com/kunitoki/yup/tree/main/examples/graphics/data/yui/filter).
+It rebuilds shortly after each keystroke, and on desktop it reloads when one
+of the files is saved in another editor.
+
+The other pages of the example are single files, each complete by itself and
+covering one area:
+
+| Page | File | Shows |
+| --- | --- | --- |
+| Widgets | `widgets.yui` | Every control with the readout of what it tells |
+| Lists | `lists.yui` | `ListBox`, `TreeView`, `Viewport`, `TabComponent`, `CodeEditor` |
+| Layout | `layout.yui` | `Row`, `Column`, `FlexBox`, `Grid`, `Stack` and item properties |
+| Styles | `styles.yui` | Selectors, tokens, scoped palettes, transitions, animations, effects |
+| Bindings | `bindings.yui` | Expressions, links, composite components, handlers, `repeat` |
+| Drawing | `drawing.yui` | Shapes, paints, text, scopes, filters, patterns and markers |
+| Series | `series.yui` | `vertex` lines, areas and bands, `sample`, `min` and `max` |
+| Parts | `parts.yui` | The `part` elements of editors, buttons, labels and images |
+| Controls | `controls.yui` | Widgets painted whole from their geometry, a menu from its item series |
+| Audio | `audio.yui` | The analyzer, the meter and the keyboard painted from what they tell |
+| Shaders | `shaders.yui` | A series sampled by a shader as a texture |
+
+The page gives the documents what they can't write, with
+[initializers](#setting-up-components-from-c): the states of the audio
+widgets. The tests load and paint every page
+(`YuiExamplePagesTests`), so they are the first place to look when a widget,
+a part or a series stops working.

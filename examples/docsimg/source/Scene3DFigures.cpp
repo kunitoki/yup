@@ -102,6 +102,52 @@ yup::LightNode& addSun (yup::Scene& scene)
     return light;
 }
 
+/** A dark room for a model standing at the origin: a sun casting shadows from the left, and a
+    camera looking at a point from a position. */
+yup::Scene::Ptr createRoom (const yup::Vector3<float>& cameraPosition, const yup::Vector3<float>& target)
+{
+    using namespace yup;
+
+    auto scene = Scene::Ptr (new Scene());
+    scene->getRoot().attach<BackgroundNode> (Color (0xff101116));
+    scene->getRoot().attach<AmbientLightNode> (Color (0xff2a3040));
+    scene->getRoot().attach<ToneMappingNode> (ToneMappingOperator::aces);
+
+    auto sun = scene->createEntity ("sun");
+    sun.attach<TransformNode> (Vector3<float> { -3.5f, 6.0f, 3.0f }).lookAt ({ 0.0f, 0.0f, 0.0f });
+
+    auto& light = sun.attach<LightNode>();
+    light.intensity = 1.8f;
+    light.radius = 0.015f;
+    light.castsShadows = true;
+
+    auto camera = scene->createEntity ("camera");
+    camera.attach<CameraNode>().yFov = degreesToRadians (32.0f);
+    camera.attach<TransformNode> (cameraPosition).lookAt (target);
+    scene->setActiveCamera (camera);
+
+    return scene;
+}
+
+/** Adds an instance of a model of examples/docsimg/data to a scene, and returns its root entity:
+    an invalid one, failing the figure, when the model cannot be loaded. */
+yup::Entity addModel (yup::Scene& scene, yup::StringRef path, const yup::Vector3<float>& position = {}, const yup::Quaternion& rotation = {}, float scale = 1.0f)
+{
+    using namespace yup;
+
+    const auto model = GltfModel::loadFromFile (docsimgFile (path));
+    if (model.failed())
+    {
+        failFigure (model.getErrorMessage());
+        return {};
+    }
+
+    auto holder = scene.createEntity ("model");
+    holder.attach<TransformNode> (position, rotation, Vector3<float> { scale, scale, scale });
+
+    return model.getReference().instantiate (scene, holder);
+}
+
 std::unique_ptr<yup::SceneComponent> show (yup::Scene::Ptr scene, const yup::RenderSettings& settings = {})
 {
     auto view = std::make_unique<yup::SceneComponent>();
@@ -197,6 +243,65 @@ void addScene3DFigures (Figures& f)
             auto scene = createCoinScene();
             addStudio (*scene);
             scene->getRoot().attach<ToneMappingNode> (static_cast<ToneMappingOperator> (index));
+
+            gallery->add (names[index], show (scene));
+        }
+
+        return gallery;
+    }).frames = settledFrames;
+
+    f.component ("3d/animation_clip", { 560.0f, 220.0f }, []() -> std::unique_ptr<Component>
+    {
+        const std::pair<const char*, double> poses[] = { { "setTime (0.0)", 0.0 }, { "setTime (0.7)", 0.7 }, { "setTime (1.4)", 1.4 } };
+        auto gallery = std::make_unique<Gallery> (3);
+
+        for (const auto& [name, time] : poses)
+        {
+            auto scene = createRoom ({ 0.0f, 1.9f, 6.0f }, { 0.0f, 0.95f, 0.0f });
+            addModel (*scene, "data/stage.glb");
+
+            // The lamp reaches towards its +z: turned a quarter, it is seen from its side
+            const auto lamp = addModel (*scene, "data/lamp.glb", { -0.9f, 0.0f, 0.0f }, Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, MathConstants<float>::halfPi));
+
+            if (auto* animation = lamp.isValid() ? lamp.get<AnimationNode>() : nullptr)
+            {
+                animation->setCurrentClip (animation->findClip ("Bow"));
+                animation->setTime (time);
+            }
+
+            // The gooseneck is skinned: it follows its joints when the scene is updated
+            scene->update (0.0);
+
+            gallery->add (name, show (scene));
+        }
+
+        return gallery;
+    }).frames = settledFrames;
+
+    f.component ("3d/custom-materials_toon", { 560.0f, 220.0f }, []() -> std::unique_ptr<Component>
+    {
+        const char* const names[] = { "its Material", "a MaterialShaderNode" };
+        auto gallery = std::make_unique<Gallery> (2);
+
+        // Compiled when the figure is drawn, in the template the module keeps beside its shaders
+        const auto shader = MaterialShader::createFromSource (docsimgFile ("data/toon.glsl").loadFileAsString());
+        if (shader.failed())
+            failFigure (shader.getErrorMessage());
+
+        for (int index = 0; index < 2; ++index)
+        {
+            auto scene = createRoom ({ 0.0f, 0.4f, 5.0f }, {});
+
+            const auto turn = Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, degreesToRadians (30.0f)) * Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, degreesToRadians (60.0f));
+            auto knot = addModel (*scene, "data/knot.glb", {}, turn, 0.6f);
+
+            if (index == 1 && shader.wasOk() && knot.isValid())
+            {
+                auto& toon = knot.attach<MaterialShaderNode> (shader.getValue());
+                toon.getUniforms().set ("tint", { 1.0f, 0.5f, 0.12f, 1.0f });
+                toon.getUniforms().set ("light", { -1.0f, 0.6f, 0.2f, 0.0f });
+                toon.getUniforms().set ("steps", 4.0f);
+            }
 
             gallery->add (names[index], show (scene));
         }

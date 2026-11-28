@@ -34,6 +34,7 @@
 
     dependencies:         yup_events yup_data_model yup_graphics rive
     optionalDeps:         yup_audio_gui
+    testDeps:             yup_gui_markup
     appleFrameworks:      Metal
     appleWeakFrameworks:  UniformTypeIdentifiers
     iosFrameworks:        CoreMotion
@@ -56,12 +57,6 @@
 #include <yup_graphics/yup_graphics.h>
 
 #include <rive/rive.h>
-
-namespace rive::cmd
-{
-class DeferredSession;
-class DeferredReplayer;
-} // namespace rive::cmd
 
 //==============================================================================
 /** Config: YUP_EMBED_DEFAULT_THEME_TEXT_SERIF_FONT
@@ -176,16 +171,20 @@ class DeferredReplayer;
 #include "effects/yup_FilterEffect.h"
 #include "effects/yup_ComponentEffectRegistry.h"
 #include "themes/yup_ThemePalette.h"
+#include "themes/yup_TextLayoutCache.h"
 #include "component/yup_ComponentStyle.h"
 #include "component/yup_ComponentPaintMetrics.h"
 #include "component/yup_ComponentListener.h"
 #include "component/yup_ComponentProperty.h"
 #include "component/yup_ComponentSignal.h"
+#include "component/yup_ComponentPart.h"
 #include "component/yup_Component.h"
 #include "component/yup_FrameAttachment.h"
 #include "mouse/yup_PointerSimulator.h"
 #include "component/yup_ComponentTypeInfo.h"
 #include "component/yup_ComponentTypeRegistry.h"
+#include "effects/yup_ShaderProperty.h"
+#include "effects/yup_ShaderEffect.h"
 #include "drawing/yup_DrawingScope.h"
 #include "drawing/yup_PropertyExpression.h"
 #include "drawing/yup_DrawingStyle.h"
@@ -194,20 +193,12 @@ class DeferredReplayer;
 #include "binding/yup_BindingModel.h"
 #include "binding/yup_DependencyObserver.h"
 #include "binding/yup_BindingGraph.h"
-#include "markup/yup_YuiDiagnostic.h"
+#include "component/yup_ComponentDocument.h"
 #include "styling/yup_StyleState.h"
 #include "styling/yup_StyleAnimator.h"
 #include "styling/yup_StyleSelector.h"
 #include "styling/yup_StyleSheet.h"
 #include "styling/yup_StyleContext.h"
-#include "markup/yup_YuiParser.h"
-#include "markup/yup_YuiWriter.h"
-#include "markup/yup_YuiSvgImporter.h"
-#include "markup/yup_YuiTreeDiff.h"
-#include "markup/yup_YuiBuilder.h"
-#include "markup/yup_YuiDocument.h"
-#include "markup/yup_YuiLoader.h"
-#include "markup/yup_YuiView.h"
 #include "dragdrop/yup_DragAndDropData.h"
 #include "dragdrop/yup_DragAndDropTarget.h"
 #include "dragdrop/yup_NativeDragAndDrop.h"
@@ -227,6 +218,7 @@ class DeferredReplayer;
 #include "code/yup_CodeEditorScheme.h"
 #include "code/yup_CodeEditor.h"
 #include "widgets/yup_TextEditor.h"
+#include "widgets/yup_InPlaceTextEditor.h"
 #include "widgets/yup_Label.h"
 #include "code/yup_CodeFindBar.h"
 #include "widgets/yup_Slider.h"
@@ -247,11 +239,6 @@ class DeferredReplayer;
 #include "widgets/yup_TabButton.h"
 #include "widgets/yup_TabBar.h"
 #include "widgets/yup_TabComponent.h"
-#include "artboard/yup_ArtboardViewModel.h"
-#include "artboard/yup_ArtboardViewModelInstance.h"
-#include "artboard/yup_ArtboardFile.h"
-#include "artboard/yup_ArtboardNode.h"
-#include "artboard/yup_Artboard.h"
 #include "windowing/yup_DocumentWindow.h"
 #include "dialogs/yup_FileChooser.h"
 

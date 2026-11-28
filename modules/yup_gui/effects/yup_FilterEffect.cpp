@@ -741,8 +741,16 @@ std::vector<FilterEffect::Operation> FilterEffect::operationsFromVar (const var&
 
 void FilterEffect::setOperations (std::vector<Operation> newOperations)
 {
-    const ScopedLock sl (operationsLock);
-    operations = std::move (newOperations);
+    {
+        const ScopedLock sl (operationsLock);
+
+        if (operations == newOperations)
+            return;
+
+        operations = std::move (newOperations);
+    }
+
+    invalidate();
 }
 
 std::vector<FilterEffect::Operation> FilterEffect::getOperations() const
@@ -780,6 +788,20 @@ EdgeSpacing<float> FilterEffect::getRequiredMargin() const noexcept
     }
 
     return { left, top, right, bottom };
+}
+
+void FilterEffect::releaseResources()
+{
+    blurPipeline = nullptr;
+    colorMatrixPipeline = nullptr;
+    targetA = nullptr;
+    targetB = nullptr;
+    targetC = nullptr;
+    compositeCanvas = nullptr;
+    blurDevice = nullptr;
+    colorMatrixDevice = nullptr;
+    blurCompileAttempted = false;
+    colorMatrixCompileAttempted = false;
 }
 
 void FilterEffect::apply (Graphics& g, GpuTexture::Ptr inputTexture, Rectangle<float> bounds)

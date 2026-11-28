@@ -1,0 +1,174 @@
+// Parts: what a drawing has no shape for - the text a widget laid out, its caret and its
+// selection, the image it was given - painted by the theme and placed by a drawing among its
+// shapes with a `part` element. Each row shows a widget as the theme paints it, then the same
+// widget in a look of its own, painted by a drawing: both edit, toggle and open the same way,
+// since the widget still does everything but paint.
+
+// An editor with no frame: a tinted band over a thick underline, its text in the accent color
+drawing Field {
+    rect { id: band; bounds: bounds; fill: palette.accent.withAlpha (focused ? 0.2 : 0.08); }
+    line { id: underline; from: point (bounds.x, bounds.bottom - 1.5); to: point (bounds.right, bounds.bottom - 1.5);
+           stroke: focused ? palette.accent : palette.outline; strokeWidth: 3; }
+
+    part selection { fill: palette.text.withAlpha (0.3); }
+    part text { fill: palette.accent.brighter (0.4); }
+    part caret { fill: palette.text; }
+}
+
+// A pill filled with a gradient of the accent color, whose text sinks with it when pressed
+drawing Pill {
+    let body: bounds.reduced (2);
+    let sink: pressed ? 1.5 : 0.0;
+
+    rect { id: shade; bounds: body.translated (0, 2); cornerRadius: body.height / 2; fill: palette.accent.darker (0.6); }
+    rect { id: face; bounds: body.translated (0, sink); cornerRadius: body.height / 2;
+           fillGradient: linearGradient (palette.accent.brighter (hovered ? 0.5 : 0.25), body.topLeft, palette.accent.darker (0.2), body.bottomLeft); }
+
+    part text { fill: palette.onAccent; transform: transform.translation (0, sink); }
+}
+
+// A check box: the text stays where the button puts it, a transform moves it aside of the box
+drawing Check {
+    let square: rect (bounds.x + 6, bounds.centerY - 8, 16, 16);
+
+    rect { id: box; bounds: square; cornerRadius: 4; fill: checked ? palette.accent : palette.surface;
+           stroke: checked ? palette.accent : palette.outline; strokeWidth: 1.5; }
+
+    path { id: tick; data: path().moveTo (square.x + 3.5, square.centerY).lineTo (square.x + 7, square.bottom - 4.5).lineTo (square.right - 3, square.y + 4.5);
+           stroke: palette.onAccent; strokeWidth: 2; cap: round; join: round; visible: checked; }
+
+    part text { fill: checked ? palette.accent : palette.textMuted; transform: transform.translation (14, 0); }
+}
+
+// A part in a repeat is painted once for each turn: the text leaves a trail behind it
+drawing Echo {
+    repeat i in 0 .. 3 {
+        part text { fill: palette.accent; opacity: 0.25 + 0.25 * i; transform: transform.translation ((3 - i) * 5, (3 - i) * 3); }
+    }
+
+    part text { fill: palette.text; }
+}
+
+// A chip of the accent color. The text of a ComboBox fits any area, so it takes `bounds`
+drawing Choice {
+    rect { id: chip; bounds: bounds.reduced (1); cornerRadius: bounds.height / 2; fill: open ? palette.accent.darker (0.25) : palette.accent; }
+
+    part text { bounds: rect (bounds.x + 14, bounds.y, bounds.width - 46, bounds.height); fill: palette.onAccent; }
+
+    circle { id: badge; center: point (bounds.right - 16, bounds.centerY); radius: 8; fill: palette.onAccent; }
+    line { from: point (bounds.right - 20, bounds.centerY - 2); to: point (bounds.right - 16, bounds.centerY + 2);
+           stroke: palette.accent; strokeWidth: 1.5; cap: round; }
+    line { from: point (bounds.right - 16, bounds.centerY + 2); to: point (bounds.right - 12, bounds.centerY - 2);
+           stroke: palette.accent; strokeWidth: 1.5; cap: round; }
+}
+
+// The menu the chip opens is a component of its own, styled through the ComboBox that opens it. Its items are
+// not components: the menu tells them as series of the same length, read with one index
+drawing ChoiceMenu {
+    rect { id: sheet; bounds: bounds; cornerRadius: 12; fill: palette.accent; }
+
+    repeat i in 0 .. len (itemTexts) {
+        rect { id: highlight; bounds: itemBounds[i].reduced (4, 1); cornerRadius: (itemBounds[i].height - 2) / 2; fill: palette.onAccent;
+               visible: itemHovered[i] && itemEnabled[i] && ! itemSeparator[i]; }
+
+        circle { id: tick; center: point (itemBounds[i].x + 14, itemBounds[i].centerY); radius: 3;
+                 fill: itemHovered[i] ? palette.accent : palette.onAccent; visible: itemTicked[i]; }
+
+        text { id: item; bounds: rect (itemBounds[i].x + 24, itemBounds[i].y, itemBounds[i].width - 32, itemBounds[i].height);
+               text: itemTexts[i]; justification: centerLeft;
+               fill: itemHovered[i] ? palette.accent : palette.onAccent; visible: ! itemSeparator[i]; }
+    }
+}
+
+// An image in a disc: placed in an area of the drawing, clipped to it and tinted until the pointer is over it
+drawing Framed {
+    let disc: bounds.reduced (4).largestFittingSquare();
+
+    circle { id: plate; center: disc.center; radius: disc.width / 2; fill: palette.accent.withAlpha (0.2); }
+    part image { bounds: disc.reduced (6); clipPath: path().addRoundedRectangle (disc, disc.width / 2); tint: hovered ? #ffffff : palette.accent; }
+    circle { id: ring; center: disc.center; radius: disc.width / 2; fill: none; stroke: palette.accent; strokeWidth: 3; }
+}
+
+// What a CodeEditor shows is one part, here under a dashed frame with a badge over its corner
+drawing CodeFrame {
+    let badge: rect (bounds.right - 60, bounds.bottom - 22, 54, 16);
+
+    part content { }
+
+    rect { id: frame; bounds: bounds.reduced (1.5); cornerRadius: 4; fill: none; stroke: palette.accent; strokeWidth: 3; dash: dash (8, 5); }
+    rect { id: tag; bounds: badge; cornerRadius: 8; fill: palette.accent; }
+    text { bounds: badge; text: "drawing"; fill: palette.onAccent; }
+}
+
+style {
+    .caption  { textFillColor: palette.textMuted; }
+    .field    { drawing: Field; }
+    .pill     { drawing: Pill; cursor: hand; }
+    .check    { drawing: Check; cursor: hand; }
+    .echo     { drawing: Echo; }
+    .choice   { drawing: Choice; cursor: hand; }
+
+    // The menu of the chip only: the other ComboBox keeps the menu of the theme
+    .choice > PopupMenu { drawing: ChoiceMenu; cornerRadius: 12; shadow: 0 6 16 #00000050; }
+
+    .framed   { drawing: Framed; }
+    .code     { drawing: CodeFrame; }
+}
+
+component Pair : Row {
+    property name: string = "";
+
+    gap: 8;
+    flexGrow: 1;
+
+    Label { class: caption; text: root.name; preferredWidth: 88; }
+}
+
+Column {
+    padding: 12;
+    gap: 6;
+
+    Pair {
+        name: "TextEditor";
+        TextEditor { text: "Painted by the theme"; flexGrow: 1; }
+        TextEditor { id: field; class: field; text: "Painted by a drawing"; flexGrow: 1; }
+    }
+
+    Pair {
+        name: "TextButton";
+        TextButton { text: "Theme"; flexGrow: 1; }
+        TextButton { id: pill; class: pill; text: "Drawing"; flexGrow: 1; onClick: action ("clicked", "pill"); }
+    }
+
+    Pair {
+        name: "ToggleButton";
+        ToggleButton { text: "Theme"; checked: true; flexGrow: 1; }
+        ToggleButton { id: check; class: check; text: "Drawing"; checked: true; flexGrow: 1; }
+    }
+
+    Pair {
+        name: "Label";
+        Label { text: "Theme"; flexGrow: 1; }
+        Label { id: echo; class: echo; text: "Drawing"; flexGrow: 1; }
+    }
+
+    Pair {
+        name: "ComboBox";
+        ComboBox { items: ["Theme", "Second", "Third"]; selectedIndex: 0; flexGrow: 1; }
+        ComboBox { id: choice; class: choice; items: ["Drawing", "Second", "Third"]; selectedIndex: 0; flexGrow: 1; }
+    }
+
+    Pair {
+        name: "Image";
+        flexGrow: 2;
+        Image { source: "../logo.png"; fitting: scaleToFit; flexGrow: 1; }
+        Image { id: framed; class: framed; source: "../logo.png"; fitting: scaleToFit; flexGrow: 1; }
+    }
+
+    Pair {
+        name: "CodeEditor";
+        flexGrow: 2;
+        CodeEditor { syntax: yui; text: "Slider { value: 0.5; }"; minimapVisible: false; flexGrow: 1; }
+        CodeEditor { id: code; class: code; syntax: yui; text: "Slider { value: 0.5; }"; minimapVisible: false; flexGrow: 1; }
+    }
+}

@@ -31,6 +31,51 @@ static float getLinearDeterminant (const Matrix4& m) noexcept
          + m (0, 2) * (m (1, 0) * m (2, 1) - m (2, 0) * m (1, 1));
 }
 
+using FrustumPlanes = std::array<std::array<float, 4>, 6>;
+
+/** The planes of the clip volume -w <= x, y, z <= w of @p viewProjection, in world space: a point
+    is inside where a * x + b * y + c * z + d >= 0 for the four values of each plane. The volume
+    holds the one of a 0 to 1 depth range, reversed or not, so no depth convention loses what it shows.
+*/
+static FrustumPlanes getFrustumPlanes (const Matrix4& viewProjection) noexcept
+{
+    FrustumPlanes planes;
+    const auto* m = viewProjection.getData();
+
+    for (size_t axis = 0; axis < 3; ++axis)
+    {
+        for (size_t i = 0; i < 4; ++i)
+        {
+            planes[2 * axis][i] = m[4 * i + 3] + m[4 * i + axis];
+            planes[2 * axis + 1][i] = m[4 * i + 3] - m[4 * i + axis];
+        }
+    }
+
+    return planes;
+}
+
+/** False when @p box lies wholly behind one of @p planes, by more than the rounding of the sums
+    can hide. A box that is not a number is never behind.
+*/
+static bool isBoxInFrustum (const FrustumPlanes& planes, const BoundingBox& box) noexcept
+{
+    const auto& low = box.getMin();
+    const auto& high = box.getMax();
+
+    for (const auto& plane : planes)
+    {
+        // The corner the farthest in front of the plane
+        const auto x = plane[0] * (plane[0] < 0.0f ? low.getX() : high.getX());
+        const auto y = plane[1] * (plane[1] < 0.0f ? low.getY() : high.getY());
+        const auto z = plane[2] * (plane[2] < 0.0f ? low.getZ() : high.getZ());
+
+        if (x + y + z + plane[3] < -1.0e-5f * (std::abs (x) + std::abs (y) + std::abs (z) + std::abs (plane[3])))
+            return false;
+    }
+
+    return true;
+}
+
 //==============================================================================
 
 SceneDrawList::SceneDrawList()
@@ -58,20 +103,30 @@ void SceneDrawList::build (const Entity& root, const Matrix4& view, const BuildO
     clear();
 
     if (auto* scene = root.getScene(); scene != nullptr && root.isValid())
-        collect (*scene, root, view);
+        collect (*scene, root, view, options);
 
     if (options.addDefaultLight && lights.empty())
         lights.push_back ({ defaultLight.get(), {}, Vector3<float> (-0.35f, -0.75f, -0.55f).normalized() });
 
     if (options.selectLightsPerDraw)
-    {
         rankLights (lights, lightRankings);
 
+    const auto culls = options.projection.has_value();
+    const auto frustum = culls ? getFrustumPlanes (view.followedBy (*options.projection)) : FrustumPlanes {};
+
+    if (culls || options.selectLightsPerDraw)
+    {
         for (auto* items : { &opaqueItems, &blendItems })
         {
             for (auto& item : *items)
             {
                 const auto worldBounds = item.primitive->bounds.transformedBy (item.world);
+                item.inView = ! culls || isBoxInFrustum (frustum, worldBounds);
+
+                // A material shader is unlit, and only the passes drawing the view read the selection
+                if (! options.selectLightsPerDraw || ! item.inView || item.materialShader != nullptr)
+                    continue;
+
                 item.numLights = selectLights (worldBounds, lights, lightRankings, item.lightIndices, item.lightWeights);
                 item.reflectionProbes = selectReflectionProbes (reflectionProbes, worldBounds);
                 item.irradianceVolume = selectIrradianceVolume (irradianceVolumes, worldBounds);
@@ -81,8 +136,20 @@ void SceneDrawList::build (const Entity& root, const Matrix4& view, const BuildO
 
     const auto less = std::less<const Material*>();
 
-    std::stable_sort (opaqueItems.begin(), opaqueItems.end(), [&less] (const DrawItem& a, const DrawItem& b)
+    const auto getShader = [] (const DrawItem& item) -> const MaterialShader*
     {
+        return item.materialShader != nullptr ? item.materialShader->getShader().get() : nullptr;
+    };
+
+    std::stable_sort (opaqueItems.begin(), opaqueItems.end(), [&less, &getShader] (const DrawItem& a, const DrawItem& b)
+    {
+        const auto* shaderA = getShader (a);
+        const auto* shaderB = getShader (b);
+
+        // The items of a material shader last, one shader after the other: each draws with its own pipelines
+        if (shaderA != shaderB)
+            return shaderB != nullptr && (shaderA == nullptr || std::less<const MaterialShader*>() (shaderA, shaderB));
+
         if (a.material->doubleSided != b.material->doubleSided)
             return b.material->doubleSided;
 
@@ -91,6 +158,11 @@ void SceneDrawList::build (const Entity& root, const Matrix4& view, const BuildO
 
         return less (a.material, b.material);
     });
+
+    numDeferredItems = static_cast<size_t> (std::count_if (opaqueItems.begin(), opaqueItems.end(), [] (const DrawItem& item)
+    {
+        return item.materialShader == nullptr;
+    }));
 
     std::stable_sort (blendItems.begin(), blendItems.end(), [] (const DrawItem& a, const DrawItem& b)
     {
@@ -307,13 +379,14 @@ int SceneDrawList::selectIrradianceVolume (Span<const IrradianceVolume> volumes,
 void SceneDrawList::clear()
 {
     opaqueItems.clear();
+    numDeferredItems = 0;
     blendItems.clear();
     lights.clear();
     reflectionProbes.clear();
     irradianceVolumes.clear();
 }
 
-const SceneDrawList::EntityState& SceneDrawList::resolveEntity (Entity entity, const Entity& root)
+const SceneDrawList::EntityState& SceneDrawList::resolveEntity (Entity entity, const Entity& root, const BuildOptions& options)
 {
     static const EntityState inactive;
 
@@ -350,12 +423,22 @@ const SceneDrawList::EntityState& SceneDrawList::resolveEntity (Entity entity, c
         const auto reachesRoot = *it == root || (parentState != nullptr && parentState->active);
         state.active = reachesRoot && it->isVisible();
         state.overrideMaterial = nullptr;
+        state.materialShader = nullptr;
 
         if (state.active)
         {
             const auto* node = it->get<MaterialNode>();
             state.overrideMaterial = node != nullptr && node->material != nullptr ? node->material.get()
                                                                                   : (*it == root ? nullptr : parentState->overrideMaterial);
+
+            // The nearest node with a shader wins, as a MaterialNode with a material does, also when
+            // the build refuses its shader: its meshes are then left to their materials
+            const auto* shaderNode = options.materialShaders != nullptr ? it->get<MaterialShaderNode>() : nullptr;
+
+            if (shaderNode != nullptr && shaderNode->getShader() != nullptr)
+                state.materialShader = options.materialShaders (shaderNode->getShader()) ? shaderNode : nullptr;
+            else if (*it != root)
+                state.materialShader = parentState->materialShader;
         }
 
         parentState = &state;
@@ -364,7 +447,7 @@ const SceneDrawList::EntityState& SceneDrawList::resolveEntity (Entity entity, c
     return *parentState;
 }
 
-void SceneDrawList::collect (Scene& scene, const Entity& root, const Matrix4& view)
+void SceneDrawList::collect (Scene& scene, const Entity& root, const Matrix4& view, const BuildOptions& options)
 {
     if (++buildStamp == 0)
     {
@@ -377,11 +460,12 @@ void SceneDrawList::collect (Scene& scene, const Entity& root, const Matrix4& vi
         if (node.mesh == nullptr)
             return;
 
-        const auto& state = resolveEntity (entity, root);
+        const auto& state = resolveEntity (entity, root, options);
         if (! state.active)
             return;
 
         const auto* overrideMaterial = state.overrideMaterial;
+        const auto* materialShader = state.materialShader;
 
         const auto world = entity.getWorldMatrix();
         const auto mirrored = getLinearDeterminant (world) < 0.0f;
@@ -401,6 +485,7 @@ void SceneDrawList::collect (Scene& scene, const Entity& root, const Matrix4& vi
                                                           : defaultMaterial.get();
             item.viewDistance = -view.transformPoint (world.transformPoint (primitive.bounds.getCenter())).getZ();
             item.mirrored = mirrored;
+            item.materialShader = materialShader;
 
             if (item.material->alphaMode == Material::AlphaMode::blend)
                 blendItems.push_back (item);
@@ -411,7 +496,7 @@ void SceneDrawList::collect (Scene& scene, const Entity& root, const Matrix4& vi
 
     scene.collect<LightNode>().forEach ([&] (Entity entity, LightNode& node)
     {
-        if (! resolveEntity (entity, root).active)
+        if (! resolveEntity (entity, root, options).active)
             return;
 
         const auto world = entity.getWorldMatrix();
@@ -427,7 +512,7 @@ void SceneDrawList::collect (Scene& scene, const Entity& root, const Matrix4& vi
         const auto hasInfluence = isBox ? jmin (extents.getX(), extents.getY(), extents.getZ()) > 0.0f
                                         : node.influenceRadius > 0.0f;
 
-        if (! hasInfluence || ! resolveEntity (entity, root).active)
+        if (! hasInfluence || ! resolveEntity (entity, root, options).active)
             return;
 
         // A probe flattened by a zero scale reaches nothing
@@ -456,7 +541,7 @@ void SceneDrawList::collect (Scene& scene, const Entity& root, const Matrix4& vi
     {
         // A volume without extent, or flattened by a zero scale, lights nothing
         const auto& extents = node.extents;
-        if (jmin (extents.getX(), extents.getY(), extents.getZ()) <= 0.0f || ! resolveEntity (entity, root).active)
+        if (jmin (extents.getX(), extents.getY(), extents.getZ()) <= 0.0f || ! resolveEntity (entity, root, options).active)
             return;
 
         const auto world = entity.getWorldMatrix();

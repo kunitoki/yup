@@ -305,7 +305,8 @@ void registerYupExpressionBindings (py::module_& m)
         .def ("hasChanged", [] (const ExpressionState& self, std::optional<int> index)
         {
             return index ? self.hasOutputChanged (*index) : self.hasChanged();
-        }, "index"_a = py::none());
+        }, "index"_a = py::none())
+        .def ("isUpToDate", &ExpressionState::isUpToDate);
 
     // clang-format on
 }

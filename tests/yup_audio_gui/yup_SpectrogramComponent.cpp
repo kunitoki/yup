@@ -94,9 +94,146 @@ bool spectrogramRowsEqual (const Image& a, int rowA, const Image& b, int rowB)
 
 } // namespace
 
+class SpectrogramComponentTests;
+
+namespace yup
+{
+
+/** What the tests of the spectrogram reach of a component to put it in a window of their own. */
+template <>
+class ComponentTestHelper<SpectrogramComponentTests>
+{
+public:
+    /** Attaches a native the caller built, which the component then owns. */
+    static void attachNative (Component& component, ComponentNative* newNative)
+    {
+        component.native = newNative;
+    }
+};
+
+} // namespace yup
+
 class SpectrogramComponentTests : public ::testing::Test
 {
 protected:
+    /** A window with no display: its frames are the ones a test sends, and it counts the repaints it is asked for. */
+    class FakeWindow final : public ComponentNative
+    {
+    public:
+        explicit FakeWindow (Component& window)
+            : ComponentNative (window, ComponentNative::defaultFlags)
+        {
+        }
+
+        using ComponentNative::callFrameListeners;
+        using ComponentNative::hasFrameListeners;
+
+        void repaint() override { ++numRepaints; }
+
+        void repaint (const Rectangle<float>&) override { ++numRepaints; }
+
+        const RectangleList<float>& getRepaintAreas() const override { return repaintAreas; }
+
+        void setTitle (const String&) override {}
+
+        String getTitle() const override { return {}; }
+
+        void setVisible (bool) override {}
+
+        bool isVisible() const override { return false; }
+
+        bool isResizable() const override { return false; }
+
+        void setResizable (bool) override {}
+
+        void toFront() override {}
+
+        void setSize (const Size<int>&) override {}
+
+        Size<int> getSize() const override { return {}; }
+
+        Size<int> getContentSize() const override { return {}; }
+
+        Point<int> getPosition() const override { return {}; }
+
+        void setPosition (const Point<int>&) override {}
+
+        Rectangle<int> getBounds() const override { return {}; }
+
+        void setBounds (const Rectangle<int>&) override {}
+
+        Rectangle<int> getSafeAreaBounds() const override { return {}; }
+
+        void setFullScreen (bool) override {}
+
+        bool isFullScreen() const override { return false; }
+
+        bool isDecorated() const override { return false; }
+
+        void setAspectRatio (std::optional<float>) override {}
+
+        std::optional<float> getAspectRatio() const override { return std::nullopt; }
+
+        void setOpacity (float) override {}
+
+        float getOpacity() const override { return 1.0f; }
+
+        void setFocusedComponent (Component*, FocusChangeType) override {}
+
+        Component* getFocusedComponent() const override { return nullptr; }
+
+        Component* getPointerTarget() const override { return nullptr; }
+
+        bool isContinuousRepaintingEnabled() const override { return false; }
+
+        void enableContinuousRepainting (bool) override {}
+
+        bool isAtomicModeEnabled() const override { return false; }
+
+        void enableAtomicMode (bool) override {}
+
+        bool isWireframeEnabled() const override { return false; }
+
+        void enableWireframe (bool) override {}
+
+        GpuTriangulationThresholds getTriangulationThresholds() const override { return {}; }
+
+        void setTriangulationThresholds (const GpuTriangulationThresholds&) override {}
+
+        void setGlobalMouseCaptureActive (bool) override {}
+
+        void cancelCurrentMouseGesture() override {}
+
+        void startTextInput (Component&) override {}
+
+        void stopTextInput (Component&) override {}
+
+        void updateTextInputRect (Component&) override {}
+
+        float getScaleDpi() const override { return 1.0f; }
+
+        float getCurrentFrameRate() const override { return 60.0f; }
+
+        float getDesiredFrameRate() const override { return 60.0f; }
+
+        void setDesiredFrameRate (std::optional<float>) override {}
+
+        bool isVsyncEnabled() const override { return false; }
+
+        void setVsyncEnabled (bool) override {}
+
+        void* getNativeHandle() const override { return nullptr; }
+
+        rive::Factory* getFactory() override { return nullptr; }
+
+        GraphicsContext* getGraphicsContext() override { return nullptr; }
+
+        int numRepaints = 0;
+
+    private:
+        RectangleList<float> repaintAreas;
+    };
+
     void SetUp() override
     {
         mm = MessageManager::getInstance();
@@ -109,6 +246,15 @@ protected:
     {
         spectrogram.reset();
         state.reset();
+    }
+
+    /** Puts a component in a window of its own, shown, and returns the native that sends its frames. */
+    static FakeWindow& makeWindow (Component& window)
+    {
+        auto* native = new FakeWindow (window);
+        ComponentTestHelper<SpectrogramComponentTests>::attachNative (window, native);
+        window.setVisible (true);
+        return *native;
     }
 
     MessageManager* mm = nullptr;
@@ -176,7 +322,6 @@ TEST_F (SpectrogramComponentTests, ConstructorInitializesDefaults)
     EXPECT_FLOAT_EQ (0.0f, spectrogram->getMaxDecibels());
     EXPECT_DOUBLE_EQ (44100.0, spectrogram->getSampleRate());
     EXPECT_EQ (256, spectrogram->getNumHistoryFrames());
-    EXPECT_FLOAT_EQ (0.75f, spectrogram->getOverlapFactor());
     EXPECT_EQ (256, spectrogram->getColorMap().getNumColorStops());
     EXPECT_FALSE (spectrogram->getSpectrogramImage().isValid());
 }
@@ -193,17 +338,15 @@ TEST_F (SpectrogramComponentTests, ConstructorUsesAnalyzerStateFFTSize)
 // Configuration Tests
 //==============================================================================
 
-TEST_F (SpectrogramComponentTests, SetFFTSizeUpdatesComponentAndState)
+TEST_F (SpectrogramComponentTests, FFTSizeIsTheOneOfTheState)
 {
-    spectrogram->setFFTSize (4096);
+    state->setFftSize (4096);
 
     EXPECT_EQ (4096, spectrogram->getFFTSize());
-    EXPECT_EQ (4096, state->getFftSize());
 
-    spectrogram->setFFTSize (1024);
+    state->setFftSize (1024);
 
     EXPECT_EQ (1024, spectrogram->getFFTSize());
-    EXPECT_EQ (1024, state->getFftSize());
 }
 
 TEST_F (SpectrogramComponentTests, SetWindowTypeUpdatesCurrentWindow)
@@ -274,20 +417,6 @@ TEST_F (SpectrogramComponentTests, SetNumHistoryFramesUpdatesAndClampsToMinimum)
     EXPECT_EQ (4, spectrogram->getNumHistoryFrames());
 }
 
-TEST_F (SpectrogramComponentTests, SetOverlapFactorDelegatesToAnalyzerState)
-{
-    spectrogram->setOverlapFactor (0.5f);
-
-    EXPECT_FLOAT_EQ (0.5f, spectrogram->getOverlapFactor());
-    EXPECT_FLOAT_EQ (0.5f, state->getOverlapFactor());
-    EXPECT_EQ (spectrogram->getFFTSize() / 2, state->getHopSize());
-
-    spectrogram->setOverlapFactor (0.0f);
-
-    EXPECT_FLOAT_EQ (0.0f, spectrogram->getOverlapFactor());
-    EXPECT_EQ (spectrogram->getFFTSize(), state->getHopSize());
-}
-
 TEST_F (SpectrogramComponentTests, SetScrollSpeedClampsToNonNegative)
 {
     EXPECT_FLOAT_EQ (1.0f, spectrogram->getScrollSpeed());
@@ -330,8 +459,8 @@ TEST_F (SpectrogramComponentTests, RefreshDisplaySkipsStaleBacklog)
     parent->setVisible (true);
     parent->addAndMakeVisible (*spectrogram);
 
-    spectrogram->setFFTSize (512);
-    spectrogram->setOverlapFactor (0.75f); // hop = fftSize / 4
+    state->setFftSize (512);
+    state->setOverlapFactor (0.75f); // hop = fftSize / 4
 
     // Fill the FIFO with far more than one analysis window (a stale backlog).
     const auto testData = createSineBuffer (spectrogram->getFFTSize() * 8, 100.0f);
@@ -343,6 +472,165 @@ TEST_F (SpectrogramComponentTests, RefreshDisplaySkipsStaleBacklog)
     // full window instead of accumulating the backlog (which would make the
     // display lag progressively behind the audio).
     EXPECT_LT (state->getNumAvailableSamples(), spectrogram->getFFTSize());
+}
+
+TEST_F (SpectrogramComponentTests, FollowsALargerFFTSizeSetOnTheState)
+{
+    // refreshDisplay() only processes FFTs while the component is showing.
+    auto parent = std::make_unique<Component> ("parent");
+    parent->setVisible (true);
+    parent->addAndMakeVisible (*spectrogram);
+
+    // A frame of the state is now larger than the buffers the spectrogram sized in setState()
+    state->setFftSize (8192);
+    state->setOverlapFactor (0.0f);
+
+    const auto testData = createSineBuffer (8192, 100.0f);
+    state->pushSamples (testData.data(), static_cast<int> (testData.size()));
+
+    spectrogram->refreshDisplay (1.0 / 60.0);
+
+    EXPECT_EQ (8192, spectrogram->getFFTSize());
+    EXPECT_EQ (0, state->getNumAvailableSamples());
+}
+
+TEST_F (SpectrogramComponentTests, NeverGoesBeyondTheMaximumFFTSizeOfItsState)
+{
+    SpectrumAnalyzerState small (256, 512);
+    small.setOverlapFactor (0.0f);
+
+    // refreshDisplay() only processes FFTs while the component is showing.
+    auto parent = std::make_unique<Component> ("parent");
+    parent->setVisible (true);
+    parent->addAndMakeVisible (*spectrogram);
+
+    spectrogram->setState (&small);
+
+    EXPECT_EQ (256, spectrogram->getFFTSize());
+
+    // The largest size the state takes is analyzed as any other, and the spectrogram leaves the state at it
+    small.setFftSize (small.getMaxFftSize());
+
+    const auto testData = createSineBuffer (512, 100.0f);
+    small.pushSamples (testData.data(), static_cast<int> (testData.size()));
+
+    spectrogram->refreshDisplay (1.0 / 60.0);
+
+    EXPECT_EQ (512, spectrogram->getFFTSize());
+    EXPECT_EQ (512, small.getFftSize());
+    EXPECT_EQ (0, small.getNumAvailableSamples());
+
+    spectrogram->setState (state.get());
+}
+
+TEST_F (SpectrogramComponentTests, RefreshDisplayWhileHiddenDropsTheBufferedSamples)
+{
+    const auto testData = createSineBuffer (2048, 100.0f);
+    state->pushSamples (testData.data(), static_cast<int> (testData.size()));
+
+    spectrogram->refreshDisplay (1.0 / 60.0);
+
+    // What was pushed while the spectrogram was hidden is not shown when it comes back
+    EXPECT_EQ (0, state->getNumAvailableSamples());
+}
+
+TEST_F (SpectrogramComponentTests, WhatWasPushedWhileHiddenIsDroppedWhenTheSpectrogramShows)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.addChildComponent (*spectrogram);
+
+    // A hidden spectrogram takes no frame of its window, so nothing reads its state
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    const auto testData = createSineBuffer (2048, 100.0f);
+    state->pushSamples (testData.data(), static_cast<int> (testData.size()));
+
+    spectrogram->setVisible (true);
+
+    EXPECT_EQ (0, state->getNumAvailableSamples());
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    // Hidden by its parent, and without a state
+    window.setVisible (false);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    window.setVisible (true);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    spectrogram->setState (nullptr);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    spectrogram->setState (state.get());
+    EXPECT_TRUE (native.hasFrameListeners());
+}
+
+TEST_F (SpectrogramComponentTests, ComesToRestWithoutSamplesAndWakesWhenTheyArrive)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.addAndMakeVisible (*spectrogram);
+
+    const int numRepaints = native.numRepaints;
+
+    // No row to show and none to scroll: the frame asks for no repaint, and is the last one taken
+    native.callFrameListeners (1.0 / 60.0);
+
+    EXPECT_FALSE (native.hasFrameListeners());
+    EXPECT_EQ (numRepaints, native.numRepaints);
+
+    // At rest the spectrogram looks at its state ten times a second, which is the call made here
+    spectrogram->refreshDisplay (0.1);
+
+    EXPECT_FALSE (native.hasFrameListeners());
+    EXPECT_EQ (numRepaints, native.numRepaints);
+
+    const auto testData = createSineBuffer (2048, 100.0f);
+    state->pushSamples (testData.data(), static_cast<int> (testData.size()));
+
+    spectrogram->refreshDisplay (0.1);
+
+    EXPECT_TRUE (native.hasFrameListeners());
+    EXPECT_GT (native.numRepaints, numRepaints);
+
+    // The row waits for a paint, which keeps the frames coming: here there is no GPU to write it with, so
+    // the paint drops it, and with the audio stopped the spectrogram is back at rest
+    native.callFrameListeners (1.0 / 60.0);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
+    auto renderer = context->makeRenderer (800, 400);
+    Graphics g (*context, *renderer);
+
+    spectrogram->paint (g);
+    native.callFrameListeners (1.0 / 60.0);
+
+    EXPECT_FALSE (native.hasFrameListeners());
+}
+
+TEST_F (SpectrogramComponentTests, ASpectrogramAtRestLooksForSamplesByItself)
+{
+#if YUP_MODAL_LOOPS_PERMITTED
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.addAndMakeVisible (*spectrogram);
+
+    native.callFrameListeners (1.0 / 60.0);
+    ASSERT_FALSE (native.hasFrameListeners());
+
+    const auto testData = createSineBuffer (2048, 100.0f);
+    state->pushSamples (testData.data(), static_cast<int> (testData.size()));
+
+    // Nothing tells the spectrogram that samples came, the audio thread least of all
+    const auto startMs = Time::getMillisecondCounterHiRes();
+
+    while (! native.hasFrameListeners() && Time::getMillisecondCounterHiRes() - startMs < 2000.0)
+        mm->runDispatchLoopUntil (10);
+
+    EXPECT_TRUE (native.hasFrameListeners());
+#else
+    GTEST_SKIP() << "the spectrogram looks at its state from a timer, which needs a message loop the test can run";
+#endif
 }
 
 TEST_F (SpectrogramComponentTests, ClearHistoryDoesNotChangeConfiguration)
@@ -405,13 +693,13 @@ TEST_F (SpectrogramComponentTests, ResizedDoesNotCrash)
 
 TEST_F (SpectrogramComponentTests, CompleteWorkflow)
 {
-    spectrogram->setFFTSize (4096);
+    state->setFftSize (4096);
     spectrogram->setWindowType (WindowType::hamming);
     spectrogram->setFrequencyRange (20.0f, 20000.0f);
     spectrogram->setDecibelRange (-100.0f, 0.0f);
     spectrogram->setSampleRate (48000.0);
     spectrogram->setNumHistoryFrames (128);
-    spectrogram->setOverlapFactor (0.5f);
+    state->setOverlapFactor (0.5f);
     spectrogram->setColorMap (SpectrogramColorMap::Type::warm);
 
     const auto testData = createSineBuffer (4096, 100.0f);
@@ -427,7 +715,73 @@ TEST_F (SpectrogramComponentTests, CompleteWorkflow)
     EXPECT_EQ (4096, spectrogram->getFFTSize());
     EXPECT_EQ (WindowType::hamming, spectrogram->getWindowType());
     EXPECT_EQ (128, spectrogram->getNumHistoryFrames());
-    EXPECT_FLOAT_EQ (0.5f, spectrogram->getOverlapFactor());
+}
+
+//==============================================================================
+// State Tests
+//==============================================================================
+
+TEST_F (SpectrogramComponentTests, ASpectrogramWithoutAStateIsConfiguredAndPainted)
+{
+    SpectrogramComponent stateless;
+    stateless.setBounds (0.0f, 0.0f, 300.0f, 150.0f);
+
+    EXPECT_EQ (nullptr, stateless.getState());
+    EXPECT_EQ (4096, stateless.getFFTSize());
+
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
+    auto renderer = context->makeRenderer (300, 150);
+    Graphics g (*context, *renderer);
+
+    stateless.refreshDisplay (1.0 / 60.0);
+    stateless.paint (g);
+}
+
+TEST_F (SpectrogramComponentTests, SetStateTakesTheFFTSizeOfTheNewState)
+{
+    SpectrumAnalyzerState other (1024);
+
+    spectrogram->setState (&other);
+
+    EXPECT_EQ (&other, spectrogram->getState());
+    EXPECT_EQ (1024, spectrogram->getFFTSize());
+
+    // The size is the one of the state the spectrogram has, which is where it is set
+    other.setFftSize (512);
+
+    EXPECT_EQ (512, spectrogram->getFFTSize());
+    EXPECT_EQ (2048, state->getFftSize());
+
+    spectrogram->setState (nullptr);
+
+    EXPECT_EQ (nullptr, spectrogram->getState());
+}
+
+TEST_F (SpectrogramComponentTests, TheTypeInfoSetsTheColorMapAndTheRanges)
+{
+    const auto& type = SpectrogramComponent::getClassTypeInfo();
+    EXPECT_EQ (type.getTypeName().toString(), "Spectrogram");
+    EXPECT_EQ (&spectrogram->getTypeInfo(), &type);
+
+    const auto created = type.createInstance();
+    auto* instance = dynamic_cast<SpectrogramComponent*> (created.get());
+    ASSERT_NE (nullptr, instance);
+    EXPECT_EQ (nullptr, instance->getState());
+    EXPECT_EQ (instance->getProperty ("colorMap").toString(), "heatmap");
+
+    instance->setProperty ("colorMap", "viridis");
+    EXPECT_EQ (SpectrogramColorMap::Type::viridis, instance->getColorMap().getType());
+    EXPECT_EQ (instance->getProperty ("colorMap").toString(), "viridis");
+
+    instance->setProperty ("maxFrequency", 10.0);
+    instance->setProperty ("minFrequency", 2.0);
+    EXPECT_FLOAT_EQ (2.0f, instance->getMinFrequency());
+    EXPECT_FLOAT_EQ (10.0f, instance->getMaxFrequency());
+
+    instance->setProperty ("historyFrames", 64);
+    instance->setProperty ("scrollSpeed", 0.5);
+    EXPECT_EQ (64, instance->getNumHistoryFrames());
+    EXPECT_FLOAT_EQ (0.5f, instance->getScrollSpeed());
 }
 
 //==============================================================================
@@ -496,6 +850,43 @@ protected:
         paintComponent();
     }
 
+    // Shows grays up to 3 dB below full scale: a full-scale sine saturates it, where a level read too low does not
+    void showLevelsAsGraysBelowFullScale()
+    {
+        spectrogram->setNumHistoryFrames (8);
+        spectrogram->setColorMap (SpectrogramColorMap::Type::grayscale);
+        spectrogram->setWindowType (WindowType::rectangular);
+        spectrogram->setDecibelRange (-100.0f, -3.0f);
+        state->setOverlapFactor (0.0f); // one FFT per fftSize samples
+    }
+
+    // One FFT frame of a sine of full scale lasting a whole number of periods, which puts it on a bin
+    void pushOneFullScaleSineRow()
+    {
+        const auto testData = createSineBuffer (spectrogram->getFFTSize(), 32.0f);
+        state->pushSamples (testData.data(), static_cast<int> (testData.size()));
+        spectrogram->refreshDisplay (1.0 / 60.0);
+        paintComponent();
+    }
+
+    // Returns true when a pixel of the given row is white
+    static bool rowHasWhitePixel (const Image& image, int row)
+    {
+        const auto raw = image.getRawData();
+        const auto rowBytes = static_cast<size_t> (image.getWidth()) * 4u;
+        const auto rowData = raw.data() + static_cast<size_t> (row) * rowBytes;
+
+        for (int x = 0; x < image.getWidth(); ++x)
+        {
+            const auto pixel = rowData + static_cast<size_t> (x) * 4u;
+
+            if (pixel[0] == 0xff && pixel[1] == 0xff && pixel[2] == 0xff && pixel[3] == 0xff)
+                return true;
+        }
+
+        return false;
+    }
+
     static std::unique_ptr<GraphicsContext> gpuContext;
 
     MessageManager* mm = nullptr;
@@ -510,7 +901,7 @@ std::unique_ptr<GraphicsContext> SpectrogramComponentGpuTests::gpuContext;
 TEST_F (SpectrogramComponentGpuTests, AppliesRowsAndScrollsHistoryOnGpu)
 {
     spectrogram->setNumHistoryFrames (16);
-    spectrogram->setOverlapFactor (0.0f); // one FFT per fftSize samples
+    state->setOverlapFactor (0.0f); // one FFT per fftSize samples
 
     paintComponent(); // first paint creates the internal ping-pong canvases
 
@@ -544,8 +935,8 @@ TEST_F (SpectrogramComponentGpuTests, AppliesRowsAndScrollsHistoryOnGpu)
 TEST_F (SpectrogramComponentGpuTests, FrameProducingMoreRowsThanOnePassKeepsEveryRow)
 {
     spectrogram->setNumHistoryFrames (32);
-    spectrogram->setFFTSize (512);
-    spectrogram->setOverlapFactor (0.75f); // hop = fftSize / 4
+    state->setFftSize (512);
+    state->setOverlapFactor (0.75f); // hop = fftSize / 4
 
     paintComponent(); // first paint creates the internal ping-pong canvases
 
@@ -584,7 +975,7 @@ TEST_F (SpectrogramComponentGpuTests, FrameProducingMoreRowsThanOnePassKeepsEver
 TEST_F (SpectrogramComponentGpuTests, ClearHistoryResetsGpuHistoryToBackground)
 {
     spectrogram->setNumHistoryFrames (8);
-    spectrogram->setOverlapFactor (0.0f);
+    state->setOverlapFactor (0.0f);
 
     paintComponent();
     pushOneFftRow();
@@ -615,4 +1006,34 @@ TEST_F (SpectrogramComponentGpuTests, GetSpectrogramImageReturnsCurrentHistoryIm
     EXPECT_EQ (SpectrogramComponent::defaultSpectrogramRenderWidth, image.getWidth());
     EXPECT_EQ (8, image.getHeight());
     EXPECT_EQ (PixelFormat::RGBA, image.getPixelFormat());
+}
+
+TEST_F (SpectrogramComponentGpuTests, AFullScaleSineReadsZeroDecibels)
+{
+    showLevelsAsGraysBelowFullScale();
+
+    paintComponent(); // first paint creates the internal ping-pong canvases
+    pushOneFullScaleSineRow();
+
+    const auto image = spectrogram->getSpectrogramImage();
+
+    ASSERT_TRUE (image.isValid());
+    EXPECT_TRUE (rowHasWhitePixel (image, 0));
+}
+
+TEST_F (SpectrogramComponentGpuTests, FollowsASmallerFFTSizeSetOnTheState)
+{
+    showLevelsAsGraysBelowFullScale();
+
+    paintComponent(); // first paint creates the internal ping-pong canvases
+
+    // The spectrogram took a size of 2048 from the state in setState(): a frame of 512 samples
+    // analyzed at that size would read the sine 12 dB too low
+    state->setFftSize (512);
+    pushOneFullScaleSineRow();
+
+    const auto image = spectrogram->getSpectrogramImage();
+
+    ASSERT_TRUE (image.isValid());
+    EXPECT_TRUE (rowHasWhitePixel (image, 0));
 }

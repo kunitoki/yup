@@ -543,6 +543,23 @@ struct ExpressionCompiler
             return emit (args[0].type->getLengthThunk(), {}, &ExpressionType::intType(), args, true);
         }
 
+        if (name == "sample" && args.size() == 2 && args[0].type->getSampleThunk() != nullptr)
+        {
+            const auto position = convert (args[1], &ExpressionType::floatType(), e);
+
+            return emit (args[0].type->getSampleThunk(), {}, &ExpressionType::floatType(), { args[0], position }, true);
+        }
+
+        // The extreme of a range of an array of numbers, rather than of three numbers
+        if ((name == "min" || name == "max") && args.size() == 3 && args[0].type->getRangeMinThunk() != nullptr)
+        {
+            const auto thunk = name == "min" ? args[0].type->getRangeMinThunk() : args[0].type->getRangeMaxThunk();
+            const auto from = convert (args[1], &ExpressionType::intType(), e);
+            const auto to = convert (args[2], &ExpressionType::intType(), e);
+
+            return emit (thunk, {}, args[0].type->getElementType(), { args[0], from, to }, true);
+        }
+
         if ((name == "min" || name == "max") && args.size() > 2)
         {
             auto result = callFunction (name, { args[0], args[1] }, e);

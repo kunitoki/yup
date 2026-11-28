@@ -225,6 +225,10 @@ String schemeIdFromDisplayName (const String& displayName)
 
 //==============================================================================
 
+const Identifier CodeEditor::Style::contentPartId { "content" };
+
+//==============================================================================
+
 const ComponentTypeInfo& CodeEditor::getClassTypeInfo()
 {
     static const auto info = ComponentTypeBuilder<CodeEditor> (Identifier ("CodeEditor"))
@@ -285,6 +289,9 @@ const ComponentTypeInfo& CodeEditor::getClassTypeInfo()
                                  .property (CodeEditorIds::indentGuidesVisible, &CodeEditor::isIndentGuidesVisible, &CodeEditor::setIndentGuidesVisible, true, "Whether vertical indent guides are painted.")
                                  .property (CodeEditorIds::whitespaceVisible, &CodeEditor::isWhitespaceVisible, &CodeEditor::setWhitespaceVisible, false, "Whether whitespace markers are rendered.")
                                  .property (CodeEditorIds::minimapVisible, &CodeEditor::isMinimapVisible, &CodeEditor::setMinimapVisible, false, "Whether the minimap overview is visible.")
+                                 .readOnly ("gutterWidth", &CodeEditor::getGutterWidth, 0.0, "The width of the gutter holding the line numbers and the markers.")
+                                 .readOnly ("textBounds", &CodeEditor::getTextBounds, {}, "The area the lines of text are shown in.")
+                                 .fixedPart (Style::contentPartId, "The editor as the theme paints it, with the colors of its scheme: background, gutter, selection, markers, text and caret.")
                                  .build();
 
     return info;
@@ -410,7 +417,7 @@ public:
         }
 
         const float viewY = editor.scrollOffset.getY() * scale;
-        const float viewH = jmin (bounds.getHeight() - viewY, editor.getTextArea().getHeight() * scale);
+        const float viewH = jmin (bounds.getHeight() - viewY, editor.getTextBounds().getHeight() * scale);
 
         g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::minimapViewport).value_or (Color (0x3300a0ff)));
         g.fillRect (Rectangle<float> (0.0f, viewY, minimapWidth, jmax (2.0f, viewH)));
@@ -436,7 +443,7 @@ private:
 
         editor.updateStyledTextIfNeeded();
 
-        const auto textArea = editor.getTextArea();
+        const auto textArea = editor.getTextBounds();
         const float totalHeight = jmax (1.0f, static_cast<float> (editor.document->getNumLines()) * editor.getLineHeight());
         const float scale = textArea.getHeight() / totalHeight;
 
@@ -1519,7 +1526,7 @@ void CodeEditor::scrollToLine (int lineNumber)
     if (document == nullptr)
         return;
 
-    const auto textArea = getTextArea();
+    const auto textArea = getTextBounds();
     const float lineHeight = getLineHeight();
 
     scrollOffset.setY (jmax (0.0f, lineNumber * lineHeight - textArea.getHeight() * 0.5f));
@@ -1547,7 +1554,7 @@ Range<int> CodeEditor::computeShapingWindow() const
     if (numLines <= 0)
         return { 0, 0 };
 
-    const auto textArea = getTextArea();
+    const auto textArea = getTextBounds();
     if (textArea.getHeight() <= 0.0f)
         return { 0, numLines - 1 };
 
@@ -1721,7 +1728,7 @@ void CodeEditor::ensureCaretVisible()
     if (document == nullptr)
         return;
 
-    const auto textArea = getTextArea();
+    const auto textArea = getTextBounds();
     const auto caretBounds = getCaretBoundsInDocument();
 
     bool needsRepaint = false;
@@ -1775,7 +1782,7 @@ void CodeEditor::clampScrollOffsetIfNeeded()
     if (document == nullptr)
         return;
 
-    const auto textArea = getTextArea();
+    const auto textArea = getTextBounds();
     const auto textSize = styledText.getComputedTextBounds();
     const float documentHeight = document->getNumLines() * getLineHeight();
 
@@ -1806,7 +1813,7 @@ void CodeEditor::stopCaretBlinking()
 
 //==============================================================================
 
-Rectangle<float> CodeEditor::getTextArea() const
+Rectangle<float> CodeEditor::getTextBounds() const
 {
     const auto bounds = getLocalBounds().reduced (4.0f);
     const float gutterWidth = getGutterWidth();
@@ -1834,7 +1841,7 @@ void CodeEditor::updateScrollBar()
     if (scrollBar == nullptr || document == nullptr)
         return;
 
-    const auto textArea = getTextArea();
+    const auto textArea = getTextBounds();
     const float documentHeight = document->getNumLines() * getLineHeight();
 
     scrollBar->setRangeLimits (0.0, documentHeight);
@@ -1897,7 +1904,7 @@ Rectangle<float> CodeEditor::getCaretBounds() const
     if (document == nullptr)
         return {};
 
-    const auto textArea = getTextArea();
+    const auto textArea = getTextBounds();
     const auto caretBounds = getCaretBoundsInDocument();
 
     if (caretBounds.isEmpty())
@@ -1934,7 +1941,7 @@ std::vector<Rectangle<float>> CodeEditor::getSelectionRectanglesInDocument (int 
 
 std::vector<Rectangle<float>> CodeEditor::getViewRectangles (int startIndex, int endIndex) const
 {
-    const auto offset = getTextArea().getTopLeft() - scrollOffset;
+    const auto offset = getTextBounds().getTopLeft() - scrollOffset;
 
     auto rectangles = getSelectionRectanglesInDocument (startIndex, endIndex);
     for (auto& rectangle : rectangles)
@@ -2104,7 +2111,7 @@ std::vector<Rectangle<float>> CodeEditor::getIndentGuideAreas() const
 
     const int numLines = document->getNumLines();
     const auto visibleLines = computeShapingWindow();
-    const auto textArea = getTextArea();
+    const auto textArea = getTextBounds();
     const float lineHeight = getLineHeight();
     const float charWidth = getCharacterWidth();
 
@@ -2232,7 +2239,7 @@ std::vector<CodeEditor::DiagnosticMarker> CodeEditor::getDiagnosticGutterMarkers
     if (document == nullptr || diagnostics.empty() || ! lineNumbersVisible)
         return {};
 
-    const auto textArea = getTextArea();
+    const auto textArea = getTextBounds();
     const float lineHeight = getLineHeight();
     if (lineHeight <= 0.0f)
         return {};
@@ -2269,7 +2276,7 @@ std::vector<CodeEditor::DiagnosticMarker> CodeEditor::getDiagnosticGutterMarkers
 
 int CodeEditor::getGlyphIndexAtPosition (const Point<float>& position) const
 {
-    const auto textArea = getTextArea();
+    const auto textArea = getTextBounds();
     const auto relativePosition = position - textArea.getTopLeft() + scrollOffset;
 
     if (document != nullptr && relativePosition.getY() >= 0.0f)
@@ -2299,8 +2306,7 @@ void CodeEditor::paint (Graphics& g)
 {
     updateStyledTextIfNeeded();
 
-    if (auto style = ApplicationTheme::findComponentStyle (*this))
-        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
+    Component::paint (g);
 }
 
 void CodeEditor::resized()
@@ -3025,7 +3031,7 @@ int CodeEditor::getLinesPerPage() const
     if (lineHeight <= 0.0f)
         return 1;
 
-    return jmax (1, static_cast<int> (getTextArea().getHeight() / lineHeight) - 1);
+    return jmax (1, static_cast<int> (getTextBounds().getHeight() / lineHeight) - 1);
 }
 
 void CodeEditor::moveCaretToStartOfLine (bool extendSelection)
@@ -3571,7 +3577,7 @@ bool CodeEditor::isHoverVisible() const noexcept
 
 int CodeEditor::getCharacterIndexAt (const Point<float>& position)
 {
-    if (document == nullptr || ! getTextArea().contains (position))
+    if (document == nullptr || ! getTextBounds().contains (position))
         return -1;
 
     updateStyledTextIfNeeded();
@@ -3822,7 +3828,7 @@ void CodeEditor::layoutFindBar()
     if (findBar == nullptr)
         return;
 
-    const auto textArea = getTextArea();
+    const auto textArea = getTextBounds();
     const float width = jmin (textArea.getWidth(), 460.0f);
 
     findBar->setBounds (textArea.getRight() - width, textArea.getY(), width, findBar->getPreferredHeight());
@@ -4118,7 +4124,7 @@ void CodeEditor::toggleBreakpointAt (const Point<float>& position)
         return;
 
     const float lineHeight = getLineHeight();
-    const int line = static_cast<int> ((position.getY() - getTextArea().getY() + scrollOffset.getY()) / lineHeight);
+    const int line = static_cast<int> ((position.getY() - getTextBounds().getY() + scrollOffset.getY()) / lineHeight);
 
     if (line >= 0 && line < document->getNumLines())
         setBreakpoint (line, ! getBreakpoint (line));

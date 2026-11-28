@@ -29,6 +29,8 @@
 
 #include "yup_YupCore_bindings.h"
 
+#include "../scripting/yup_ScriptBindings.h"
+
 #define YUP_PYTHON_INCLUDE_PYBIND11_FUNCTIONAL
 #define YUP_PYTHON_INCLUDE_PYBIND11_IOSTREAM
 #define YUP_PYTHON_INCLUDE_PYBIND11_OPERATORS
@@ -40,8 +42,36 @@
 #include <exception>
 #include <functional>
 #include <memory>
+#include <typeinfo>
 #include <vector>
 #include <utility>
+
+// =================================================================================================
+
+namespace PYBIND11_NAMESPACE
+{
+
+// In the header: every file that hands a Component to Python has to convert it the same way
+template <>
+struct polymorphic_type_hook<yup::Component>
+{
+    static const void* get (const yup::Component* src, const std::type_info*& type)
+    {
+        if (src == nullptr)
+            return src;
+
+        auto& map = yup::Bindings::getComponentTypeMap();
+        auto demangledName = yup::Helpers::demangleClassName (typeid (*src).name());
+
+        auto it = map.typeMap.find (demangledName);
+        if (it != map.typeMap.end())
+            return it->second (src, type);
+
+        return src;
+    }
+};
+
+} // namespace PYBIND11_NAMESPACE
 
 namespace yup::Bindings
 {
@@ -341,6 +371,16 @@ struct PyComponentEffect : Base
     void apply (yup::Graphics& g, yup::GpuTexture::Ptr inputTexture, yup::Rectangle<float> bounds) override
     {
         PYBIND11_OVERRIDE_PURE (void, Base, apply, g, inputTexture, bounds);
+    }
+
+    bool isActive() const override
+    {
+        PYBIND11_OVERRIDE (bool, Base, isActive);
+    }
+
+    void releaseResources() override
+    {
+        PYBIND11_OVERRIDE (void, Base, releaseResources);
     }
 
     std::optional<yup::Point<float>> displayToContent (yup::Point<float> displayPoint, yup::Rectangle<float> bounds) const override

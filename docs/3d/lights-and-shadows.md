@@ -66,10 +66,10 @@ Camera moves redraw the cascades, and the point and spot light views when a
 light's size on screen changes enough to resize them. A shadowed point or spot
 light coming or going, or growing on screen past a quarter of the atlas, can
 move and resize the other lights' views, which are then redrawn. A camera
-orbiting a compact scene usually redraws no shadow at all. The renderer cannot
-see vertices edited in place in a `Mesh`: after such edits call
-`getRenderer().restartAccumulation()`, on either tier, which also redraws every
-shadow map.
+orbiting a compact scene usually redraws no shadow at all. A mesh given new
+vertices with [`Mesh::setVertices()`](meshes-and-gltf.md#changing-a-mesh), or
+deformed by a skin or by morph targets, is a caster that changed: the shadow
+maps it casts into are drawn again, and only those.
 
 A shadow map the device cannot create, such as a large atlas on a device short
 of memory, leaves the lights that need it without shadow maps instead of failing

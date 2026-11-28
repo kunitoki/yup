@@ -26,6 +26,8 @@ env:
   ANDROID_CMAKE_VERSION: 3.31.6
   ANDROID_ABI: arm64-v8a
   ANDROID_PLATFORM: android-21
+  CCACHE_SIZE_EXAMPLES: '{"graphics": "350M"}'
+  CCACHE_SIZE_EXAMPLE: 200M
   INSTALL_DEPS: >-
     libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev libfreetype6-dev
     libx11-dev libxcomposite-dev libxcursor-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev
@@ -53,10 +55,10 @@ jobs:
       with:
         distribution: ${{env.JAVA_DISTRIBUTION}}
         java-version: ${{env.JAVA_VERSION}}
-    - uses: hendrikmuhs/ccache-action@v1.2
+    - uses: ./.github/actions/ccache
       with:
         key: android-tests-${{ matrix.config }}
-        max-size: 1G
+        max-size: 350M
     - name: Setup Android SDK
       uses: android-actions/setup-android@v4
       with:
@@ -68,7 +70,7 @@ jobs:
         ndk-version: ${{env.NDK_VERSION}}
     - name: Configure
       run: |
-        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build \
+        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -C ${{ github.workspace }}/.github/ci_settings.cmake \
           -DCMAKE_TOOLCHAIN_FILE=${{ steps.setup-ndk.outputs.ndk-path }}/build/cmake/android.toolchain.cmake \
           -DANDROID_ABI=${{ env.ANDROID_ABI }} -DANDROID_PLATFORM=${{ env.ANDROID_PLATFORM }} -DANDROID_STL=c++_shared \
           -DANDROID_CPP_FEATURES="rtti exceptions" -DYUP_ANDROID_ASSETS_DIR=${{ runner.workspace }}/build/assets \
@@ -100,9 +102,10 @@ jobs:
       with:
         distribution: ${{env.JAVA_DISTRIBUTION}}
         java-version: ${{env.JAVA_VERSION}}
-    - uses: hendrikmuhs/ccache-action@v1.2
+    - uses: ./.github/actions/ccache
       with:
         key: android-example-${{ matrix.example }}
+        max-size: ${{ fromJson(env.CCACHE_SIZE_EXAMPLES)[matrix.example] || env.CCACHE_SIZE_EXAMPLE }}
     - name: Setup Android SDK
       uses: android-actions/setup-android@v4
       with:
@@ -111,11 +114,6 @@ jobs:
       uses: nttld/setup-ndk@v1
       with:
         ndk-version: ${{env.NDK_VERSION}}
-    - uses: actions/cache/restore@v5
-      id: cache-restore
-      with:
-        path: ${{ runner.workspace }}/build
-        key: android-build-${{ github.sha }}-${{ github.run_id }}
     - name: Configure
       run: |
         cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build \

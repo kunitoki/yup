@@ -777,6 +777,12 @@ public:
     void setMinimapVisible (bool shouldBeVisible);
 
     //==============================================================================
+    struct Style
+    {
+        static const Identifier contentPartId; /**< Name of the part that is the editor as the theme paints it: `part content { }` in a drawing */
+    };
+
+    //==============================================================================
     /** Returns the static type info describing the CodeEditor type. */
     static const ComponentTypeInfo& getClassTypeInfo();
 
@@ -785,7 +791,7 @@ public:
 
     //==============================================================================
     /** @internal Returns the rectangle of the text area (used by the theme for painting). */
-    Rectangle<float> getTextArea() const;
+    Rectangle<float> getTextBounds() const;
 
     /** @internal Returns the height of a single line of text. */
     float getLineHeight() const;

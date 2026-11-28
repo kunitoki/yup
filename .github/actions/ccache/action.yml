@@ -1,0 +1,30 @@
+name: Compiler cache
+
+description: >-
+  Sets up ccache with the cache policy of the repository, which has 10 GB of Actions cache
+  for every branch and platform. Only main and dev/** save their cache, other refs restore
+  the one of main. Objects no build used for some days are dropped before saving, and
+  cache_cleanup.yml keeps the newest cache of each key and branch. Needs a checkout.
+
+inputs:
+  key:
+    description: Name of the cache, unique to the job and its matrix values
+    required: true
+  max-size:
+    description: Size limit of the cache, about 1.25 times what one build of the job stores
+    required: true
+
+runs:
+  using: composite
+  steps:
+  - uses: hendrikmuhs/ccache-action@v1.2
+    with:
+      key: ${{ inputs.key }}
+      max-size: ${{ inputs.max-size }}
+      save: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/dev/') }}
+      # By age and not by job: a branch often builds a part of the modules, and a cancelled job a part of its targets
+      evict-old-files: 3d
+      # The packaged ccache of Ubuntu 24.04 can't cache the coverage builds (-fprofile-update needs ccache 4.10)
+      install: ${{ runner.os == 'Linux' && 'binary' || 'detect' }}
+      # Prints why calls were not cacheable
+      verbose: 1

@@ -73,7 +73,7 @@ struct YuiToolBlock
     yup::String getKeyword() const;
 };
 
-/** What a declaration holds that its users name: a property of a drawing, a color of a palette, a token. */
+/** What a declaration holds that its users name: a property of a drawing or of a shader, a color of a palette, a token. */
 struct YuiToolMember
 {
     yup::String name;
@@ -83,10 +83,10 @@ struct YuiToolMember
     yup::String detail;
 };
 
-/** A drawing, a palette, a component or the tokens a document declares. */
+/** A drawing, a shader, a palette, a component or the tokens a document declares. */
 struct YuiToolDeclaration
 {
-    /** `drawing`, `palette`, `component` or `tokens`. */
+    /** `drawing`, `shader`, `palette`, `component` or `tokens`. */
     yup::String kind;
 
     /** The name it is declared with, `tokens` for the tokens. */
@@ -136,7 +136,7 @@ public:
     /** Returns the text as one block holding those written at its top level. */
     const YuiToolBlock& getDocument() const noexcept { return document; }
 
-    /** Returns the drawings, palettes, components and tokens declared, those of a `style` block included. */
+    /** Returns the drawings, shaders, palettes, components and tokens declared, those of a `style` block included. */
     const std::vector<YuiToolDeclaration>& getDeclarations() const noexcept { return declarations; }
 
     /** Returns the declaration of a kind and a name, or nullptr. */

@@ -355,7 +355,11 @@ private:
     class ShaderEffect : public yup::ComponentEffect
     {
     public:
-        void setEffectParameter (float v) { param = v; }
+        void setEffectParameter (float v)
+        {
+            param = v;
+            invalidate();
+        }
 
         /** CPU ticks spent inside the most recent apply() call. */
         yup::int64 getLastApplyTicks() const noexcept { return applyTicks; }
@@ -376,6 +380,13 @@ private:
                 g.drawTexture (input, bounds);
 
             applyTicks = yup::Time::getHighResolutionTicks() - startTicks;
+        }
+
+        /** The pipeline is the one of the device of the window the component leaves: the next apply() compiles it again. */
+        void releaseResources() override
+        {
+            pipeline = nullptr;
+            compileAttempted = false;
         }
 
     protected:
@@ -420,6 +431,13 @@ private:
     /** Two-pass separable Gaussian blur. Parameter = sigma (0..64). */
     class ShaderBlurEffect : public ShaderEffect
     {
+    public:
+        void releaseResources() override
+        {
+            ShaderEffect::releaseResources();
+            targetA = targetB = nullptr;
+        }
+
     protected:
         const char* getShaderName() const override { return "effect_blur"; }
 
@@ -471,6 +489,13 @@ private:
     /** Single-pass fullscreen effect base. Shared by Pixelate, Edge, Wave, Sharpen, CRT. */
     class SinglePassEffect : public ShaderEffect
     {
+    public:
+        void releaseResources() override
+        {
+            ShaderEffect::releaseResources();
+            target = nullptr;
+        }
+
     protected:
         /** Fills the uniform block for this effect from the input dimensions. */
         virtual EffectParams getEffectParams (const yup::GpuTexture& input) const = 0;
@@ -669,6 +694,16 @@ private:
             effect->apply (g, std::move (input), bounds);
 
             applyTicks = yup::Time::getHighResolutionTicks() - startTicks;
+        }
+
+        bool isActive() const override
+        {
+            return effect->isActive();
+        }
+
+        void releaseResources() override
+        {
+            effect->releaseResources();
         }
 
         std::optional<yup::Point<float>> displayToContent (yup::Point<float> displayPoint, yup::Rectangle<float> bounds) const override
@@ -1082,7 +1117,12 @@ private:
             return;
 
         setParameter (value);
-        stage.subject.repaint();
+
+        // The effect measured is set on no component, the probe is: the subject is drawn through it again, without
+        // being painted again
+        if (probe != nullptr)
+            probe->invalidate();
+
         describeSpread();
     }
 
@@ -1252,24 +1292,32 @@ private:
     /** Gives the subject the `shadow:`, `glow:` and `filter:` chosen through a stylesheet. */
     void applyStyle()
     {
-        yup::String declarations;
+        // The sheet is written as the tree a `.yui` text is parsed into, so no parser is needed
+        yup::DataTree rule ("rule", { { "selector", "#subject" } });
+
+        const auto declare = [&rule] (const char* name, const yup::String& value)
+        {
+            rule.beginTransaction().addChild (yup::DataTree ("declaration", { { "name", name }, { "value", value } }));
+        };
 
         if (shadowToggle.getToggleState())
-            declarations << "shadow: 0 10 20 #000000b0; ";
+            declare ("shadow", "0 10 20 #000000b0");
 
         if (glowToggle.getToggleState())
-            declarations << "glow: 16 2 palette.accent.withAlpha (0.6); ";
+            declare ("glow", "16 2 palette.accent.withAlpha (0.6)");
 
         if (filterToggle.getToggleState())
-            declarations << "filter: hue-rotate(120deg) saturate(130%); ";
+            declare ("filter", "hue-rotate(120deg) saturate(130%)");
 
-        if (declarations.isEmpty())
+        if (rule.getNumChildren() == 0)
         {
             stage.setStyleSheet (nullptr);
             return;
         }
 
-        auto sheet = yup::StyleSheet::parse ("style { #subject { cornerRadius: " + yup::String (Subject::cornerRadius) + "; " + declarations + "} }");
+        declare ("cornerRadius", yup::String (Subject::cornerRadius));
+
+        auto sheet = yup::StyleSheet::fromTree (yup::DataTree ("style", { rule }));
 
         if (sheet.failed())
         {

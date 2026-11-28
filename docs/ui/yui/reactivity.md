@@ -48,6 +48,17 @@ Slider { id: knob; }
 Label  { text: "tweaking"; opacity: knob.pressed ? 1 : 0.3; }
 ```
 
+A binding is evaluated again when a component tells that a property it reads
+changed. Every property set by a document, by another binding or with
+`setProperty()` is told. So are the value of a `Slider` or of a wheel, the text
+of a `TextEditor`, the selection of a `ListBox`, a `ComboBox` or a `TabBar`,
+the state of a toggle and the levels of a `KMeter`, when the user or the widget
+changes them. What a widget computes for its painting is not told: its
+geometry, such as `trackBounds`, a scroll offset, the phase of an animation,
+and its [series](drawing.md#data-series). The drawing of the widget reads them
+each time it paints. From C++, change a property a binding reads with
+`setProperty()`: some widgets have setters that change it without telling.
+
 The whole element tree is created before any value is applied, so an expression
 can reference an element declared further down the document.
 
@@ -102,9 +113,20 @@ graph.bind (meter, "value", "gain.value * 2", ComponentProperty::Type::number, r
 ```
 
 `YuiBuilder` owns one graph for everything it builds, reachable with
-`YuiBuilder::getBindings()` (or `YuiDocument::getBuilder().getBindings()`),
+`YuiBuilder::getBindings()` (or `YuiDocument::getBindings()`),
 where bindings can be inspected, removed with `unbind`, or added to the built
 tree.
+
+`findLinkedModel` tells which property of a model a property is linked to,
+following the links between the two, as the alias of a `component` block is.
+It is how [`edit`](documents.md#editing-a-value-as-text) finds the text a model
+shows a value with:
+
+```cpp
+if (const auto linked = graph.findLinkedModel (dial, "value"))
+    if (auto* provider = linked->model->getProvider())
+        text = provider->getTextForValue (linked->property, dial.getValue()).value_or (text);
+```
 
 ## See also
 

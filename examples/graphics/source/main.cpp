@@ -24,6 +24,9 @@
 #include <yup_graphics/yup_graphics.h>
 #include <yup_gui/yup_gui.h>
 
+#if YUP_MODULE_AVAILABLE_yup_artboard
+#include <yup_artboard/yup_artboard.h>
+#endif
 #if YUP_MODULE_AVAILABLE_yup_audio_devices
 #include <yup_audio_devices/yup_audio_devices.h>
 #endif
@@ -375,6 +378,9 @@ private:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Widgets
 #include "examples/Widgets.h"
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Yui3D
+#include "examples/Yui3D.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_YuiDrawing
 #include "examples/YuiDrawing.h"
 #endif
@@ -640,8 +646,11 @@ public:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Widgets
         addDemo ("Widgets", "Widgets", [] { return std::make_unique<WidgetsDemo>(); });
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Yui3D
+        addDemo ("Yui3D", "YUI 3D", [] { return std::make_unique<Yui3DDemo>(); });
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_YuiDrawing
-        addDemo ("YuiDrawing", "YUI Drawing", [] { return std::make_unique<YuiDrawingDemo>(); });
+        addDemo ("YuiDrawing", "YUI", [] { return std::make_unique<YuiDrawingDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_YdspSynths && YUP_MODULE_AVAILABLE_yup_dsp_jit
         addDemo ("YdspSynths", "YDSP Synths", [] { return std::make_unique<YdspSynthDemo>(); });
@@ -856,6 +865,8 @@ public:
             }
         }
 
+        releaseUnusedGpuResources();
+
         currentDemo = index;
 
         // Whichever of the list and the tabs is hidden follows the one that was used
@@ -909,6 +920,15 @@ public:
     }
 
 private:
+    void releaseUnusedGpuResources()
+    {
+        auto* nativeComponent = getNativeComponent();
+        auto* context = nativeComponent != nullptr ? nativeComponent->getGraphicsContext() : nullptr;
+
+        if (auto device = context != nullptr ? context->getGpuDevice() : nullptr; device != nullptr)
+            device->releaseUnusedResources();
+    }
+
     bool isProfilerOpen() const
     {
         return profilerWindow != nullptr || (profilerPanel.isVisible() && profilerPanel.getParentComponent() == this);

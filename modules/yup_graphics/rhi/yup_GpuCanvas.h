@@ -38,10 +38,10 @@ class Image;
     GPU target into a single, backend-agnostic object. It replaces the lower-level
     GraphicsContext::createOffscreenTarget / beginOffscreen / endOffscreen API.
 
-    GpuCanvas builds on a GpuTarget (accessible via getTarget()) but is backed by
-    a dedicated render context, which adds 2D drawing through beginDraw()/commit().
-    For render-pass-only work that does not need 2D drawing primitives, prefer
-    GpuTarget, which avoids allocating a dedicated render context.
+    GpuCanvas builds on a GpuTarget (accessible via getTarget()) and adds 2D
+    drawing through beginDraw()/commit(), with a render context it leases from
+    its device for each frame. For render-pass-only work that does not need 2D
+    drawing primitives, prefer GpuTarget.
 
     Typical usage:
     @code

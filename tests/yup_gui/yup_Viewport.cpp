@@ -204,6 +204,7 @@ TEST (ViewportTests, ResizingContentClampsTheCurrentPosition)
 TEST (ViewportTests, WheelOverTheContentScrollsTheViewport)
 {
     Viewport viewport;
+    viewport.setVisible (true);
     viewport.setBounds (0.0f, 0.0f, 100.0f, 100.0f);
 
     auto content = std::make_unique<Component>();
@@ -262,11 +263,108 @@ TEST (ViewportTests, WheelAtTheInnerViewportLimitScrollsTheOuterViewport)
     innerContent->setSize (100.0f, 200.0f);
     auto* innerContentPointer = innerContent.get();
     innerViewport.setViewedComponent (innerContent.release(), true);
-    innerViewport.setViewPosition ({ 0.0f, 100.0f });
+
+    // The scrollbars take their share of the viewport, so the limit is read from the visible area
+    const auto innerLimit = 200.0f - innerViewport.getVisibleArea().getHeight();
+    innerViewport.setViewPosition ({ 0.0f, innerLimit });
 
     const MouseEvent event (MouseEvent::noButtons, KeyModifiers(), Point<float> (10.0f, 10.0f));
     ComponentTestHelper<Viewport>::triggerMouseWheel (*innerContentPointer, event.withSourceComponent (innerContentPointer), MouseWheelData (0.0f, -1.0f));
 
-    EXPECT_FLOAT_EQ (100.0f, innerViewport.getViewPosition().getY());
+    EXPECT_FLOAT_EQ (innerLimit, innerViewport.getViewPosition().getY());
     EXPECT_FLOAT_EQ (40.0f, outerViewport.getViewPosition().getY());
+}
+
+TEST (ViewportTests, AsksForFramesOnlyWhileAPanMovesTheContent)
+{
+    Component window ("window");
+    auto* native = new StubComponentNative (window, ComponentNative::defaultFlags);
+    yup::ComponentTestHelper<Component>::attachNative (window, native);
+    window.setBounds (0.0f, 0.0f, 100.0f, 100.0f);
+    window.setVisible (true);
+
+    Viewport viewport;
+    viewport.setBounds (0.0f, 0.0f, 100.0f, 100.0f);
+    window.addAndMakeVisible (viewport);
+
+    auto content = std::make_unique<Component>();
+    content->setSize (300.0f, 4000.0f);
+    viewport.setViewedComponent (content.release(), true);
+
+    EXPECT_FALSE (native->hasFrameListeners());
+
+    // A jump moves nothing over time
+    viewport.setViewPosition ({ 0.0f, 100.0f });
+    EXPECT_FALSE (native->hasFrameListeners());
+
+    // The fingers are timed by the frames, which give the content its speed when they let go
+    viewport.gesturePan (GestureEvent (GestureType::pan, GestureEvent::Phase::began)
+                             .withPosition ({ 50.0f, 90.0f }));
+    EXPECT_TRUE (native->hasFrameListeners());
+
+    for (int step = 1; step <= 5; ++step)
+    {
+        native->callFrameListeners (1.0 / 60.0);
+        viewport.gesturePan (GestureEvent (GestureType::pan, GestureEvent::Phase::changed)
+                                 .withPosition ({ 50.0f, 90.0f - 10.0f * static_cast<float> (step) }));
+    }
+
+    viewport.gesturePan (GestureEvent (GestureType::pan, GestureEvent::Phase::ended)
+                             .withPosition ({ 50.0f, 40.0f }));
+
+    const auto released = viewport.getViewPosition().getY();
+    EXPECT_FLOAT_EQ (150.0f, released);
+    EXPECT_TRUE (native->hasFrameListeners());
+
+    for (int frame = 0; frame < 600 && native->hasFrameListeners(); ++frame)
+        native->callFrameListeners (1.0 / 60.0);
+
+    EXPECT_FALSE (native->hasFrameListeners());
+    EXPECT_GT (viewport.getViewPosition().getY(), released);
+}
+
+TEST (ViewportTests, AHiddenViewportAsksForNoFrameAndScrollsOnWhenItShowsAgain)
+{
+    Component window ("window");
+    auto* native = new StubComponentNative (window, ComponentNative::defaultFlags);
+    yup::ComponentTestHelper<Component>::attachNative (window, native);
+    window.setBounds (0.0f, 0.0f, 100.0f, 100.0f);
+    window.setVisible (true);
+
+    Viewport viewport;
+    viewport.setBounds (0.0f, 0.0f, 100.0f, 100.0f);
+    window.addAndMakeVisible (viewport);
+
+    auto content = std::make_unique<Component>();
+    content->setSize (300.0f, 4000.0f);
+    viewport.setViewedComponent (content.release(), true);
+
+    viewport.gesturePan (GestureEvent (GestureType::pan, GestureEvent::Phase::began)
+                             .withPosition ({ 50.0f, 90.0f }));
+
+    for (int step = 1; step <= 5; ++step)
+    {
+        native->callFrameListeners (1.0 / 60.0);
+        viewport.gesturePan (GestureEvent (GestureType::pan, GestureEvent::Phase::changed)
+                                 .withPosition ({ 50.0f, 90.0f - 10.0f * static_cast<float> (step) }));
+    }
+
+    viewport.gesturePan (GestureEvent (GestureType::pan, GestureEvent::Phase::ended)
+                             .withPosition ({ 50.0f, 40.0f }));
+    ASSERT_TRUE (native->hasFrameListeners());
+
+    // Hiding a parent hides the viewport
+    window.setVisible (false);
+    EXPECT_FALSE (native->hasFrameListeners());
+
+    const auto hidden = viewport.getViewPosition().getY();
+
+    window.setVisible (true);
+    EXPECT_TRUE (native->hasFrameListeners());
+
+    for (int frame = 0; frame < 600 && native->hasFrameListeners(); ++frame)
+        native->callFrameListeners (1.0 / 60.0);
+
+    EXPECT_FALSE (native->hasFrameListeners());
+    EXPECT_GT (viewport.getViewPosition().getY(), hidden);
 }

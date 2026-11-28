@@ -68,6 +68,9 @@ protected:
     /** @internal */
     void performLayout (Rectangle<float> area) override;
 
+    /** @internal */
+    std::optional<Size<float>> measureContent() const override;
+
 private:
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FlexBoxComponent)
 };

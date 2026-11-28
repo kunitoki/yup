@@ -20,6 +20,7 @@
 */
 
 #include <yup_gui/yup_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 
 #include <gtest/gtest.h>
 
@@ -44,7 +45,7 @@ protected:
 
     static StyleSheet::Ptr buildStyle (const String& yui)
     {
-        auto sheet = StyleSheet::parse (yui);
+        auto sheet = YuiParser::parseStyleSheet (yui);
         EXPECT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
         return sheet.wasOk() ? sheet.getReference() : nullptr;
     }
@@ -316,7 +317,7 @@ TEST_F (FilterEffectTests, StripsCommentsInDirectAndStylesheetFilters)
 
     ASSERT_NE (knob.getStyleContext(), nullptr);
     EXPECT_TRUE (knob.getStyleContext()->getDiagnostics().empty())
-        << YuiDiagnostic::join (knob.getStyleContext()->getDiagnostics());
+        << DataTreeDiagnostic::join (knob.getStyleContext()->getDiagnostics());
 
     ASSERT_NE (knob.getStyleState(), nullptr);
     ASSERT_NE (knob.getStyleState()->getFilterEffect(), nullptr);

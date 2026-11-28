@@ -174,6 +174,17 @@ public:
     bool isPopupShown() const;
 
     //==============================================================================
+    /** Returns the area the text of the selected item is laid out in, in the coordinates of the box.
+
+        It is where the theme paints the text, and where a drawing placing the `text` part
+        without an area of its own paints it.
+    */
+    Rectangle<float> getTextBounds() const;
+
+    /** Returns the area of the arrow at the end of the box, in its coordinates. */
+    Rectangle<float> getArrowBounds() const;
+
+    //==============================================================================
     /** Style identifiers for customizing the appearance of the ComboBox. */
     struct Style
     {
@@ -186,6 +197,8 @@ public:
         static const Identifier cornerRadiusId;        /**< Corner radius, 4 by default */
         static const Identifier outlineWidthId;        /**< Border width, 1 by default */
         static const Identifier focusedOutlineWidthId; /**< Border width with focus or the popup open, 2 by default */
+
+        static const Identifier textPartId;            /**< Name of the part that is the text of the selected item: `part text { }` in a drawing */
     };
 
     //==============================================================================
@@ -196,8 +209,6 @@ public:
     const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
     //==============================================================================
-    /** @internal */
-    void paint (Graphics& g) override;
     /** @internal */
     void resized() override;
     /** @internal */
@@ -232,6 +243,8 @@ private:
     bool textIsEditable = false;
     bool ignoreMouseDownAfterPopupDismissal = false;
     bool dismissingPopupFromMouseDown = false;
+
+    static constexpr float arrowWidth = 20.0f;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComboBox)
 };

@@ -841,12 +841,37 @@ public:
                                            const Options& options,
                                            void* parent);
 
+    /** Returns the graphics API a window is given when it asks for none (see Options::withGraphicsApi):
+        the first one this platform prefers that the build and the machine support.
+
+        It needs no window and creates none, so it tells which API is to draw a component before the
+        component is in a window. This is what a shader made from its source is compiled for until
+        then (see StyleContext::findShader). A window created with another API draws with that one.
+
+        Call it on the message thread, or with the message manager locked.
+
+        @return The graphics API of a window created with no Options::graphicsApi.
+    */
+    static GpuPlatform getDefaultGraphicsApi();
+
 protected:
     /** Returns true when at least one frame listener is registered.
 
         Safe to call from any thread, without the message manager locked.
     */
     bool hasFrameListeners() const noexcept;
+
+    /** Returns true when a theme changed since the frame listeners were last called.
+
+        A stylesheet that is up to date takes no frame, so the window is what tells it that the
+        theme changed: a backend runs a frame when this is true, and callFrameListeners() then has
+        the stylesheets of the components of the window look at the theme again.
+
+        Safe to call from any thread, without the message manager locked.
+
+        @see ApplicationTheme::getLastGeneration
+    */
+    bool hasThemeChanged() const noexcept;
 
     /** Calls the frame listeners.
 
@@ -866,6 +891,7 @@ protected:
 private:
     ListenerList<FrameListener> frameListeners;
     std::atomic<int> numFrameListeners { 0 };
+    std::atomic<uint32> lastThemeGeneration { 0 };
 
     YUP_DECLARE_WEAK_REFERENCEABLE (ComponentNative)
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComponentNative)

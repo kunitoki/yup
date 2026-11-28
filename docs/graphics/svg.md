@@ -191,9 +191,9 @@ The raster is kept, so a filter only runs again when the SVG is painted larger.
 ## Editing an SVG as a drawing
 
 A `Drawable` paints an SVG as it is. To bind its shapes to the properties of a
-component, animate them or edit them, `YuiSvgImporter` (in `yup_gui`) writes the
-SVG as a [`.yui` drawing](../ui/yui/drawing.md#importing-an-svg) made of native
-shapes, painting what the `Drawable` paints:
+component, animate them or edit them, `YuiSvgImporter` (in `yup_gui_markup`)
+writes the SVG as a [`.yui` drawing](../ui/yui/drawing.md#importing-an-svg) made
+of native shapes, painting what the `Drawable` paints:
 
 ```cpp
 const auto imported = YuiSvgImporter::importSvg (File ("logo.svg"));

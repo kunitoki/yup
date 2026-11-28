@@ -371,12 +371,13 @@ endfunction()
 
 #==============================================================================
 
-function (_yup_module_collect_objc_sources_from_target target_name output_variable visited_variable)
-    set (arc_sources "${${output_variable}}")
+# Collects a source list property (YUP_MODULE_SOURCES, YUP_MODULE_ARC_SOURCES) of the modules a target links, directly or not.
+function (_yup_module_collect_sources_from_target target_name source_property output_variable visited_variable)
+    set (sources "${${output_variable}}")
     set (visited_targets "${${visited_variable}}")
 
     if (NOT TARGET "${target_name}")
-        set (${output_variable} "${arc_sources}" PARENT_SCOPE)
+        set (${output_variable} "${sources}" PARENT_SCOPE)
         set (${visited_variable} "${visited_targets}" PARENT_SCOPE)
         return()
     endif()
@@ -387,26 +388,26 @@ function (_yup_module_collect_objc_sources_from_target target_name output_variab
     endif()
 
     if ("${target_name}" IN_LIST visited_targets)
-        set (${output_variable} "${arc_sources}" PARENT_SCOPE)
+        set (${output_variable} "${sources}" PARENT_SCOPE)
         set (${visited_variable} "${visited_targets}" PARENT_SCOPE)
         return()
     endif()
 
     list (APPEND visited_targets "${target_name}")
 
-    get_target_property (target_arc_sources "${target_name}" YUP_MODULE_ARC_SOURCES)
-    if (target_arc_sources)
-        list (APPEND arc_sources ${target_arc_sources})
+    get_target_property (target_sources "${target_name}" ${source_property})
+    if (target_sources)
+        list (APPEND sources ${target_sources})
     endif()
 
     foreach (link_property IN ITEMS INTERFACE_LINK_LIBRARIES LINK_LIBRARIES)
         get_target_property (target_libraries "${target_name}" ${link_property})
         foreach (target_library IN LISTS target_libraries)
-            _yup_module_collect_objc_sources_from_target ("${target_library}" arc_sources visited_targets)
+            _yup_module_collect_sources_from_target ("${target_library}" ${source_property} sources visited_targets)
         endforeach()
     endforeach()
 
-    set (${output_variable} "${arc_sources}" PARENT_SCOPE)
+    set (${output_variable} "${sources}" PARENT_SCOPE)
     set (${visited_variable} "${visited_targets}" PARENT_SCOPE)
 endfunction()
 
@@ -420,12 +421,35 @@ function (_yup_module_apply_arc_to_target_sources target_name)
     set (arc_sources "")
     set (visited_targets "")
     foreach (linked_target IN LISTS ARGN)
-        _yup_module_collect_objc_sources_from_target ("${linked_target}" arc_sources visited_targets)
+        _yup_module_collect_sources_from_target ("${linked_target}" YUP_MODULE_ARC_SOURCES arc_sources visited_targets)
     endforeach()
 
     if (arc_sources)
         list (REMOVE_DUPLICATES arc_sources)
         _yup_module_apply_objc_arc_to_sources ("${target_name}" ${arc_sources})
+    endif()
+endfunction()
+
+#==============================================================================
+
+# Precompiles headers for the C++ sources of a target compiling the given modules. The sources of the modules are
+# left out: a module source refuses to compile after its own header, and the third party ones expect no prefix.
+function (_yup_module_precompile_target_headers target_name headers)
+    string (REPLACE ">" "$<ANGLE-R>" headers "${headers}")
+    list (TRANSFORM headers REPLACE "^(.+)$" "$<$<COMPILE_LANGUAGE:CXX>:\\1>")
+    target_precompile_headers (${target_name} PRIVATE ${headers})
+
+    set (module_sources "")
+    set (visited_targets "")
+    foreach (linked_target IN LISTS ARGN)
+        _yup_module_collect_sources_from_target ("${linked_target}" YUP_MODULE_SOURCES module_sources visited_targets)
+    endforeach()
+
+    if (module_sources)
+        list (REMOVE_DUPLICATES module_sources)
+        set_property (SOURCE ${module_sources}
+            TARGET_DIRECTORY ${target_name}
+            PROPERTY SKIP_PRECOMPILE_HEADERS ON)
     endif()
 endfunction()
 

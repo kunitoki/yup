@@ -1,0 +1,104 @@
+// Widgets: every control a document creates, as the theme paints it. The readout at the end of
+// a row follows what its widget tells, so a readout that does not follow shows a property that
+// is wrong. This file is complete by itself: the actions it raises are shown by the page.
+component Field : Row {
+    property name: string = "";
+
+    gap: 8;
+    flexGrow: 1;
+
+    Label { class: caption; text: root.name; preferredWidth: 88; }
+}
+
+style {
+    .caption { textFillColor: palette.textMuted; }
+    .readout { textFillColor: palette.accent; }
+}
+
+Column {
+    padding: 12;
+    gap: 6;
+
+    Field {
+        name: "TextButton";
+        TextButton { id: click; text: "Click"; flexGrow: 1; onClick: action ("clicked", "TextButton"); }
+        TextButton { text: "Disabled"; enabled: false; flexGrow: 1; }
+        Label { class: readout; text: click.pressed ? "pressed" : (click.hovered ? "hovered" : "idle"); preferredWidth: 72; }
+    }
+
+    Field {
+        name: "ToggleButton";
+        ToggleButton { id: sine; text: "Sine"; radioGroup: 1; checked: true; flexGrow: 1; }
+        ToggleButton { id: saw; text: "Saw"; radioGroup: 1; flexGrow: 1; }
+        ToggleButton { id: sync; text: "Sync"; flexGrow: 1; }
+        Label { class: readout; text: (sine.checked ? "sine" : "saw") + (sync.checked ? " sync" : ""); preferredWidth: 72; }
+    }
+
+    Field {
+        name: "SwitchButton";
+        SwitchButton { id: power; checked: true; preferredWidth: 56; }
+        Component { flexGrow: 1; }
+        Label { class: readout; text: power.checked ? "on" : "off"; preferredWidth: 72; }
+    }
+
+    Field {
+        name: "ComboBox";
+        ComboBox { id: wave; enabled: power.checked; items: ["Sine", "Square", "Triangle", "Noise"]; selectedIndex: 1; flexGrow: 1;
+                   onSelectedItemChanged: action ("selected", self.text); }
+        Label { class: readout; text: wave.text; preferredWidth: 72; }
+    }
+
+    Field {
+        name: "Slider";
+        Slider { id: level; enabled: power.checked; value: 0.4; flexGrow: 1; }
+        Label { class: readout; text: format ("%.2f", level.value); preferredWidth: 72; }
+    }
+
+    Field {
+        name: "Bar";
+        Slider { id: bar; sliderType: linearBarHorizontal; value: 0.6; flexGrow: 1; }
+        Label { class: readout; text: format ("%.0f %%", bar.value * 100); preferredWidth: 72; }
+    }
+
+    Field {
+        name: "Two values";
+        Slider { id: span; sliderType: twoValueHorizontal; minValue: 0.2; maxValue: 0.8; flexGrow: 1; }
+        Label { class: readout; text: format ("%.1f", span.minValue) + format (" - %.1f", span.maxValue); preferredWidth: 72; }
+    }
+
+    Field {
+        name: "Steps";
+        Slider { id: steps; sliderType: incDecButtons; minimum: 0; maximum: 16; interval: 1; value: 8; flexGrow: 1; }
+        Label { class: readout; text: format ("%.0f", steps.value); preferredWidth: 72; }
+    }
+
+    Field {
+        name: "Rotary";
+        flexGrow: 2;
+        Slider { id: knob; sliderType: rotaryVerticalDrag; value: 0.3; preferredWidth: 56; }
+        Slider { sliderType: rotaryHorizontalDrag; value <=> knob.value; preferredWidth: 56; }
+        Slider { sliderType: linearVertical; value <=> knob.value; preferredWidth: 28; }
+        Component { flexGrow: 1; }
+        Label { class: readout; text: format ("%.2f", knob.value); preferredWidth: 72; }
+    }
+
+    Field {
+        name: "TextEditor";
+        TextEditor { id: name; text: "Type here"; flexGrow: 1; onTextChange: action ("typed"); }
+        Label { class: readout; text: name.text; preferredWidth: 72; }
+    }
+
+    Field {
+        name: "Multi line";
+        flexGrow: 2;
+        TextEditor { multiLine: true; text: "Several lines of text, wrapped where the editor ends."; flexGrow: 1; }
+        TextEditor { readOnly: true; text: "Read only"; preferredWidth: 96; }
+    }
+
+    Field {
+        name: "Label";
+        Label { text: "left"; justification: centerLeft; flexGrow: 1; }
+        Label { text: "center"; justification: center; flexGrow: 1; }
+        Label { text: "right"; justification: centerRight; flexGrow: 1; }
+    }
+}

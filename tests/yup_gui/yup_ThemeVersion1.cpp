@@ -20,6 +20,7 @@
 */
 
 #include <yup_audio_gui/yup_audio_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 
 #include <gtest/gtest.h>
 
@@ -332,7 +333,7 @@ TEST_F (ThemeVersion1GeometryTests, StylesheetSetsGeometryThroughQualifiedNames)
     root.addChildComponent (switchButton);
     root.addChildComponent (progressBar);
 
-    auto sheet = StyleSheet::parse ("style { :root { SwitchButton.thumbInset: 2; ProgressBar.cornerRadius: 3; } }");
+    auto sheet = YuiParser::parseStyleSheet ("style { :root { SwitchButton.thumbInset: 2; ProgressBar.cornerRadius: 3; } }");
     ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
     root.setStyleSheet (sheet.getReference());
     root.getStyleContext()->restyleNow();
@@ -340,4 +341,77 @@ TEST_F (ThemeVersion1GeometryTests, StylesheetSetsGeometryThroughQualifiedNames)
     EXPECT_FLOAT_EQ (2.0f, switchButton.findPropertyAs<float> (Identifier ("thumbInset")));
     EXPECT_FLOAT_EQ (3.0f, progressBar.findPropertyAs<float> (Identifier ("cornerRadius")));
     EXPECT_TRUE (switchButton.findProperty (Identifier ("cornerRadius")).isVoid());
+}
+
+TEST_F (ThemeVersion1GeometryTests, PaintsThePartsOfTheWidgetsUnderTheNamesTheyTell)
+{
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
+    auto renderer = context->makeRenderer (200, 100);
+    Graphics g (*context, *renderer);
+
+    TextButton textButton;
+    ToggleButton toggleButton;
+    ComboBox comboBox;
+    Label label;
+    TextEditor textEditor;
+    ListBoxItem listBoxItem;
+    TreeViewRow treeViewRow;
+    TabBar tabBar;
+    auto& tabButton = tabBar.addTab ("tab", "Tab");
+
+    // A widget tells the name of each of its parts, the one a drawing places it with: its type declares the part
+    // under that name and the theme paints it
+    const auto isPainted = [&] (const Component& widget, const Identifier& partName, const char* nameInADrawing)
+    {
+        return partName == Identifier (nameInADrawing)
+            && widget.getTypeInfo().hasPart (partName)
+            && theme->paintPart (g, widget, partName, { 0.0f, 0.0f, 40.0f, 20.0f });
+    };
+
+    EXPECT_TRUE (isPainted (textButton, TextButton::Style::textPartId, "text"));
+    EXPECT_TRUE (isPainted (toggleButton, ToggleButton::Style::textPartId, "text"));
+    EXPECT_TRUE (isPainted (comboBox, ComboBox::Style::textPartId, "text"));
+    EXPECT_TRUE (isPainted (label, Label::Style::textPartId, "text"));
+    EXPECT_TRUE (isPainted (label, Label::Style::textOutlinePartId, "textOutline"));
+    EXPECT_TRUE (isPainted (textEditor, TextEditor::Style::selectionPartId, "selection"));
+    EXPECT_TRUE (isPainted (textEditor, TextEditor::Style::textPartId, "text"));
+    EXPECT_TRUE (isPainted (textEditor, TextEditor::Style::caretPartId, "caret"));
+    EXPECT_TRUE (isPainted (listBoxItem, ListBoxItem::Style::iconPartId, "icon"));
+    EXPECT_TRUE (isPainted (listBoxItem, ListBoxItem::Style::textPartId, "text"));
+    EXPECT_TRUE (isPainted (treeViewRow, TreeViewRow::Style::iconPartId, "icon"));
+    EXPECT_TRUE (isPainted (treeViewRow, TreeViewRow::Style::textPartId, "text"));
+    EXPECT_TRUE (isPainted (tabButton, TabButton::Style::iconPartId, "icon"));
+    EXPECT_TRUE (isPainted (tabButton, TabButton::Style::textPartId, "text"));
+}
+
+TEST_F (ThemeVersion1GeometryTests, PaintsEveryPartARegisteredTypeDeclares)
+{
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
+    auto renderer = context->makeRenderer (200, 100);
+    Graphics g (*context, *renderer);
+
+    registerBuiltInComponentTypes();
+
+    int numParts = 0;
+
+    for (const auto* type : ComponentTypeRegistry::getInstance().getRegisteredTypes())
+    {
+        const auto parts = type->getAllParts();
+
+        // A type that can't be made by its name, as the one of a tab, is painted by the test above
+        const auto component = parts.empty() ? nullptr : type->createInstance();
+        if (component == nullptr)
+            continue;
+
+        for (const auto* part : parts)
+        {
+            EXPECT_TRUE (theme->paintPart (g, *component, part->name, { 0.0f, 0.0f, 40.0f, 20.0f }))
+                << type->getTypeName().toString() << "." << part->name.toString();
+
+            ++numParts;
+        }
+    }
+
+    // Those of the buttons, the combo box, the label, the image, the editors and the rows
+    EXPECT_GE (numParts, 14);
 }

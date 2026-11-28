@@ -248,7 +248,7 @@ void parseRuleDeclarationValue (StyleSheet::Declaration& declaration)
     }
 }
 
-std::optional<YuiDiagnostic> readDeclarations (const DataTree& parent,
+std::optional<DataTreeDiagnostic> readDeclarations (const DataTree& parent,
                                                std::vector<StyleSheet::Declaration>& target,
                                                std::map<Identifier, ComponentProperty>& declaredProperties,
                                                bool isKeyframe)
@@ -263,7 +263,7 @@ std::optional<YuiDiagnostic> readDeclarations (const DataTree& parent,
         const auto name = element.getProperty ("name").toString().trim();
 
         if (name.isEmpty())
-            return YuiDiagnostic { .message = "A declaration needs a name", .element = element };
+            return DataTreeDiagnostic { .message = "A declaration needs a name", .element = element };
 
         if (type == "property")
         {
@@ -291,7 +291,7 @@ std::optional<YuiDiagnostic> readDeclarations (const DataTree& parent,
         if (const auto dot = name.indexOfChar ('.'); dot >= 0)
         {
             if (dot == 0 || dot + 1 >= name.length())
-                return YuiDiagnostic { .message = "A declaration needs a name", .element = element };
+                return DataTreeDiagnostic { .message = "A declaration needs a name", .element = element };
 
             declaration.qualifier = Identifier (name.substring (0, dot));
             declaration.name = Identifier (name.substring (dot + 1));
@@ -306,7 +306,7 @@ std::optional<YuiDiagnostic> readDeclarations (const DataTree& parent,
         declaration.value = element.getProperty ("value").toString().trim();
 
         if (declaration.value.isEmpty())
-            return YuiDiagnostic { .message = "The declaration '" + name + "' needs a value", .element = element };
+            return DataTreeDiagnostic { .message = "The declaration '" + name + "' needs a value", .element = element };
 
         if ((! isKeyframe || declaration.name == Identifier ("filter")) && type == "declaration" && ! declaration.qualifier.isValid())
             parseRuleDeclarationValue (declaration);
@@ -317,13 +317,13 @@ std::optional<YuiDiagnostic> readDeclarations (const DataTree& parent,
     return std::nullopt;
 }
 
-std::optional<YuiDiagnostic> readPalette (const DataTree& element, StyleSheet::Palettes& palettes)
+std::optional<DataTreeDiagnostic> readPalette (const DataTree& element, StyleSheet::Palettes& palettes)
 {
     const auto name = element.getProperty ("name").toString().trim();
     const auto colors = element.getProperty ("colors").toString().trim();
 
     if (colors.isEmpty())
-        return YuiDiagnostic { .message = "The palette '" + name + "' needs colors", .element = element };
+        return DataTreeDiagnostic { .message = "The palette '" + name + "' needs colors", .element = element };
 
     const auto mode = element.getProperty ("mode").toString().trim() == "light"
                         ? ThemePalette::Mode::light
@@ -332,7 +332,7 @@ std::optional<YuiDiagnostic> readPalette (const DataTree& element, StyleSheet::P
     auto palette = ThemePalette::fromString (colors, mode);
 
     if (palette.failed())
-        return YuiDiagnostic { .message = "The palette '" + name + "' is invalid: " + palette.getErrorMessage(), .element = element, .property = "colors" };
+        return DataTreeDiagnostic { .message = "The palette '" + name + "' is invalid: " + palette.getErrorMessage(), .element = element, .property = "colors" };
 
     auto result = palette.getReference();
 
@@ -354,7 +354,7 @@ std::optional<YuiDiagnostic> readPalette (const DataTree& element, StyleSheet::P
             const auto named = std::find_if (namedColors.begin(), namedColors.end(), [&] (const auto& c) { return colorName == c.name; });
 
             if (named == namedColors.end())
-                return YuiDiagnostic { .message = "The palette '" + name + "' reads an unknown color '" + valueText + "'", .element = element, .property = propertyName };
+                return DataTreeDiagnostic { .message = "The palette '" + name + "' reads an unknown color '" + valueText + "'", .element = element, .property = propertyName };
 
             color = named->color;
         }
@@ -364,16 +364,52 @@ std::optional<YuiDiagnostic> readPalette (const DataTree& element, StyleSheet::P
         else if (ThemePalette::isValidCustomColorName (propertyText))
             result.setCustomColor (propertyText, color);
         else
-            return YuiDiagnostic { .message = "The palette '" + name + "' can't name a color '" + propertyText + "'", .element = element, .property = propertyName };
+            return DataTreeDiagnostic { .message = "The palette '" + name + "' can't name a color '" + propertyText + "'", .element = element, .property = propertyName };
     }
 
     auto& versions = palettes[name];
     auto& version = mode == ThemePalette::Mode::light ? versions.light : versions.dark;
 
     if (version.has_value())
-        return YuiDiagnostic { .message = "The palette '" + name + "' already has a " + (mode == ThemePalette::Mode::light ? "light" : "dark") + " version", .element = element };
+        return DataTreeDiagnostic { .message = "The palette '" + name + "' already has a " + (mode == ThemePalette::Mode::light ? "light" : "dark") + " version", .element = element };
 
     version = std::move (result);
+    return std::nullopt;
+}
+
+std::optional<DataTreeDiagnostic> readShader (const DataTree& element, std::map<String, DataTree>& shaders)
+{
+    const auto name = element.getProperty ("name").toString().trim();
+
+    if (name.isEmpty())
+        return DataTreeDiagnostic { .message = "A shader block needs a name", .element = element };
+
+    for (int i = 0; i < element.getNumProperties(); ++i)
+    {
+        const auto propertyName = element.getPropertyName (i);
+        const auto propertyText = propertyName.toString();
+
+        if (propertyText != "name" && propertyText != "fragment" && propertyText != "material")
+            return DataTreeDiagnostic { .message = "The shader '" + name + "' has an unknown property '" + propertyText + "', expected 'fragment' or 'material'", .element = element, .property = propertyName };
+    }
+
+    const auto hasFragment = element.hasProperty ("fragment");
+    const auto hasMaterial = element.hasProperty ("material");
+
+    if (hasFragment && hasMaterial)
+        return DataTreeDiagnostic { .message = "The shader '" + name + "' can't have both a 'fragment' and a 'material'", .element = element, .property = "material" };
+
+    if (! hasFragment && ! hasMaterial)
+        return DataTreeDiagnostic { .message = "The shader '" + name + "' needs a 'fragment' or a 'material'", .element = element };
+
+    const auto* source = hasFragment ? "fragment" : "material";
+
+    if (element.getProperty (source).toString().trim().isEmpty())
+        return DataTreeDiagnostic { .message = "The shader '" + name + "' needs the path of its '" + source + "'", .element = element, .property = source };
+
+    if (! shaders.try_emplace (name, element).second)
+        return DataTreeDiagnostic { .message = "The shader '" + name + "' is already declared", .element = element };
+
     return std::nullopt;
 }
 
@@ -381,7 +417,7 @@ std::optional<YuiDiagnostic> readPalette (const DataTree& element, StyleSheet::P
 
 //==============================================================================
 
-ResultValue<StyleSheet::Ptr> StyleSheet::fromTree (const DataTree& tree, YuiDiagnostic* failure)
+ResultValue<StyleSheet::Ptr> StyleSheet::fromTree (const DataTree& tree, DataTreeDiagnostic* failure)
 {
     const auto rootType = tree.getType().toString();
 
@@ -390,7 +426,10 @@ ResultValue<StyleSheet::Ptr> StyleSheet::fromTree (const DataTree& tree, YuiDiag
 
     auto problem = tree.isValid() && (rootType == "yui" || rootType == "style")
                      ? sheet->addElements (tree)
-                     : YuiDiagnostic { .message = "Expected a 'yui' document or a 'style' element" };
+                     : DataTreeDiagnostic { .message = "Expected a 'yui' document or a 'style' element" };
+
+    if (! problem.has_value())
+        problem = sheet->findSharedName();
 
     if (! problem.has_value())
         return makeResultValueOk (std::move (sheet));
@@ -401,30 +440,13 @@ ResultValue<StyleSheet::Ptr> StyleSheet::fromTree (const DataTree& tree, YuiDiag
     return makeResultValueFail (problem->message);
 }
 
-std::optional<YuiDiagnostic> StyleSheet::addElements (const DataTree& parent)
+std::optional<DataTreeDiagnostic> StyleSheet::addElements (const DataTree& parent)
 {
     const auto collectDeclaredProperties = [this] (const DataTree& container)
     {
         for (const auto& child : container)
-        {
-            if (child.getType().toString() != "property")
-                continue;
-
-            const auto rawName = child.getProperty ("name").toString().trim();
-            const auto dot = rawName.indexOfChar ('.');
-            const Identifier unqualified (dot >= 0 ? rawName.substring (dot + 1) : rawName);
-            const auto propTypeName = child.getProperty ("type").toString().trim();
-
-            if (unqualified.isValid() && propTypeName.isNotEmpty())
-            {
-                declaredProperties.try_emplace (unqualified, ComponentProperty {
-                    .name = unqualified,
-                    .type = ComponentProperty::getTypeFromName (propTypeName),
-                    .elementType = ComponentProperty::getElementTypeFromName (propTypeName),
-                    .isInherited = true
-                });
-            }
-        }
+            if (const auto declared = readDeclaredProperty (child))
+                declaredProperties.try_emplace (declared->name, *declared);
     };
 
     for (const auto& element : parent)
@@ -443,7 +465,7 @@ std::optional<YuiDiagnostic> StyleSheet::addElements (const DataTree& parent)
             auto selectors = StyleSelector::parseList (element.getProperty ("selector").toString());
 
             if (selectors.failed())
-                return YuiDiagnostic { .message = selectors.getErrorMessage(), .element = element, .property = "selector" };
+                return DataTreeDiagnostic { .message = selectors.getErrorMessage(), .element = element, .property = "selector" };
 
             std::vector<Declaration> declarations;
 
@@ -459,6 +481,7 @@ std::optional<YuiDiagnostic> StyleSheet::addElements (const DataTree& parent)
                 rule.selector = std::move (selector);
                 rule.declarations = declarations;
                 rule.order = static_cast<int> (rules.size());
+                indexRule (rule);
                 rules.push_back (std::move (rule));
             }
         }
@@ -476,6 +499,13 @@ std::optional<YuiDiagnostic> StyleSheet::addElements (const DataTree& parent)
 
             collectDeclaredProperties (element);
         }
+        else if (type == "shader")
+        {
+            if (auto problem = readShader (element, shaders))
+                return problem;
+
+            collectDeclaredProperties (element);
+        }
         else if (type == "tokens" || type == "component")
         {
             collectDeclaredProperties (element);
@@ -485,7 +515,7 @@ std::optional<YuiDiagnostic> StyleSheet::addElements (const DataTree& parent)
             const auto sequenceName = element.getProperty ("name").toString().trim();
 
             if (sequenceName.isEmpty())
-                return YuiDiagnostic { .message = "A keyframes block needs a name", .element = element };
+                return DataTreeDiagnostic { .message = "A keyframes block needs a name", .element = element };
 
             KeyframeSequence sequence;
             sequence.name = Identifier (sequenceName);
@@ -516,14 +546,80 @@ std::optional<YuiDiagnostic> StyleSheet::addElements (const DataTree& parent)
     return std::nullopt;
 }
 
-ResultValue<StyleSheet::Ptr> StyleSheet::parse (const String& text)
+// Shaders and drawings are both used by name, so they share their names, in whatever order they are declared
+std::optional<DataTreeDiagnostic> StyleSheet::findSharedName() const
 {
-    const auto parsed = YuiParser::parse (text);
+    for (const auto& [name, shader] : shaders)
+        if (drawings.find (name) != drawings.end())
+            return DataTreeDiagnostic { .message = "The shader '" + name + "' has the same name as a drawing", .element = shader };
 
-    if (! parsed.wasOk())
-        return makeResultValueFail (parsed.diagnostics.front().toString());
+    return std::nullopt;
+}
 
-    return fromTree (parsed.document);
+/* Files a rule under what the last compound of its selector requires of a component, and keeps the properties it reads
+   whose change on a component reaches the descendants of that component. Called with each rule as it is added. */
+void StyleSheet::indexRule (const Rule& rule)
+{
+    const auto& selector = rule.selector;
+
+    // Under what the fewest components have: a component matching the rule has every one of them
+    if (const auto id = selector.getSubjectId(); id.isNotEmpty())
+        rulesById[id].push_back (rule.order);
+    else if (const auto classes = selector.getSubjectClasses(); ! classes.isEmpty())
+        rulesByClass[classes.getFirst()].push_back (rule.order);
+    else if (const auto type = selector.getSubjectType(); type.isValid())
+        rulesByType[type].push_back (rule.order);
+    else
+        rulesWithoutKey.push_back (rule.order);
+
+    // The descendants inherit a qualified declaration, so whatever makes its rule match changes them too
+    const bool holdsQualified = std::any_of (rule.declarations.begin(), rule.declarations.end(), [] (const Declaration& declaration)
+    {
+        return declaration.qualifier.isValid();
+    });
+
+    for (const auto& property : selector.getReferencedProperties())
+        if (holdsQualified || selector.selectsDescendantsBy (property))
+            descendantProperties.addIfNotAlreadyThere (property);
+}
+
+void StyleSheet::findCandidateRules (const Component& component, std::vector<const Rule*>& candidates) const
+{
+    candidates.clear();
+
+    const auto add = [this, &candidates] (const std::vector<int>& indices)
+    {
+        for (const auto index : indices)
+            candidates.push_back (&rules[static_cast<size_t> (index)]);
+    };
+
+    add (rulesWithoutKey);
+
+    // A type selector matches the types deriving from the one it names
+    if (! rulesByType.empty())
+    {
+        for (const auto* info = &component.getTypeInfo(); info != nullptr; info = info->getBaseTypeInfo())
+            if (const auto found = rulesByType.find (info->getTypeName()); found != rulesByType.end())
+                add (found->second);
+    }
+
+    if (! rulesByClass.empty())
+    {
+        for (const auto& styleClass : component.getStyleClasses())
+            if (const auto found = rulesByClass.find (styleClass); found != rulesByClass.end())
+                add (found->second);
+    }
+
+    if (! rulesById.empty())
+    {
+        if (const auto found = rulesById.find (component.getComponentID()); found != rulesById.end())
+            add (found->second);
+    }
+
+    // The rules are in one vector, so their addresses order them as the source does. A class the component has twice,
+    // or a type deriving from one of its own name, finds its rules twice
+    std::sort (candidates.begin(), candidates.end(), std::less<const Rule*>());
+    candidates.erase (std::unique (candidates.begin(), candidates.end()), candidates.end());
 }
 
 const StringArray& StyleSheet::getDeclarationNames()
@@ -537,18 +633,39 @@ bool StyleSheet::isStyleElement (const DataTree& element) noexcept
     static const Identifier rule ("rule");
     static const Identifier palette ("palette");
     static const Identifier drawing ("drawing");
+    static const Identifier shader ("shader");
     static const Identifier tokens ("tokens");
     static const Identifier component ("component");
     static const Identifier keyframes ("keyframes");
 
     const auto type = element.getType();
-    return type == style || type == rule || type == palette || type == drawing
+    return type == style || type == rule || type == palette || type == drawing || type == shader
         || type == tokens || type == component || type == keyframes;
 }
 
-std::optional<YuiDiagnostic> StyleSheet::readPaletteElement (const DataTree& element, Palettes& palettes)
+std::optional<DataTreeDiagnostic> StyleSheet::readPaletteElement (const DataTree& element, Palettes& palettes)
 {
     return readPalette (element, palettes);
+}
+
+std::optional<ComponentProperty> StyleSheet::readDeclaredProperty (const DataTree& element)
+{
+    if (element.getType().toString() != "property")
+        return std::nullopt;
+
+    const auto rawName = element.getProperty ("name").toString().trim();
+    const auto name = rawName.substring (rawName.indexOfChar ('.') + 1);
+    const auto typeName = element.getProperty ("type").toString().trim();
+
+    if (name.isEmpty() || typeName.isEmpty())
+        return std::nullopt;
+
+    return ComponentProperty {
+        .name = Identifier (name),
+        .type = ComponentProperty::getTypeFromName (typeName),
+        .elementType = ComponentProperty::getElementTypeFromName (typeName),
+        .isInherited = true
+    };
 }
 
 const ThemePalette* StyleSheet::PaletteVersions::find (ThemePalette::Mode mode) const noexcept
@@ -598,6 +715,12 @@ DataTree StyleSheet::findDrawing (const String& name) const
     return it != drawings.end() ? it->second : DataTree();
 }
 
+DataTree StyleSheet::findShader (const String& name) const
+{
+    const auto it = shaders.find (name);
+    return it != shaders.end() ? it->second : DataTree();
+}
+
 const ComponentProperty* StyleSheet::findDeclaredProperty (const Identifier& name) const
 {
     const auto it = declaredProperties.find (name);
@@ -619,6 +742,11 @@ StringArray StyleSheet::getPaletteNames() const
 bool StyleSheet::watchesProperty (const Identifier& name) const
 {
     return watchedProperties.contains (name);
+}
+
+bool StyleSheet::watchesPropertyForDescendants (const Identifier& name) const
+{
+    return descendantProperties.contains (name);
 }
 
 } // namespace yup

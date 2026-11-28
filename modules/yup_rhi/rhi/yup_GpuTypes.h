@@ -36,6 +36,20 @@ enum class GpuPlatform
 };
 
 //==============================================================================
+/** Selects what GpuDevice::releaseUnusedResources() releases. Values are bit flags. */
+enum class GpuUnusedResources : uint8_t
+{
+    none = 0,                   ///< Release nothing.
+    frameResources = 1 << 0,    ///< What finished frames left behind, pooled uniform buffers and pipelines whose owner is gone: nothing is rebuilt.
+    shaderCaches = 1 << 1,      ///< Shader modules and parsed shader bundles: compiled and parsed again on their next use.
+    renderBuffers = 1 << 2,     ///< The buffers 2D drawing fills each frame: allocated again by the next frame.
+    offscreenContexts = 1 << 3, ///< The idle contexts offscreen 2D frames draw with: created again on their next use.
+    all = 0xF,                  ///< Release everything.
+};
+
+YUP_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS (GpuUnusedResources)
+
+//==============================================================================
 /** Identifies the shading language of a GpuShaderSource code block. */
 enum class GpuShaderLanguage : uint8_t
 {

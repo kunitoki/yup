@@ -33,6 +33,9 @@ env:
     libglu1-mesa-dev libegl1-mesa-dev mesa-common-dev libgl1-mesa-dri mesa-utils xvfb glibc-tools
   LIBGL_ALWAYS_SOFTWARE: "1"
   GALLIUM_DRIVER: "llvmpipe"
+  CCACHE_SIZE_TESTS: '{"Debug": "600M", "Release": "150M"}'
+  CCACHE_SIZE_EXAMPLES: '{"graphics": "500M", "plugin": "200M", "console": "25M"}'
+  CCACHE_SIZE_EXAMPLE: 150M
 
 jobs:
   configure:
@@ -44,14 +47,15 @@ jobs:
     - uses: actions/checkout@v7
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - uses: hendrikmuhs/ccache-action@v1.2
+    - uses: ./.github/actions/ccache
       with:
         key: linux-configure
+        max-size: 100M
     - name: Test OpenGL Version
       run: xvfb-run glxinfo | grep "OpenGL version"
     - name: Configure
       run: |
-        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build \
+        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -C ${{ github.workspace }}/.github/ci_settings.cmake \
           -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON -DYUP_TEST_MODULES="${{ inputs.test_modules }}"
     - name: Build SDL
       run: |
@@ -79,10 +83,10 @@ jobs:
     steps:
     - uses: actions/checkout@v7
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - uses: hendrikmuhs/ccache-action@v1.2
+    - uses: ./.github/actions/ccache
       with:
         key: linux-tests-${{ matrix.config }}
-        max-size: 1G
+        max-size: ${{ fromJson(env.CCACHE_SIZE_TESTS)[matrix.config] }}
     - uses: actions/cache/restore@v5
       id: cache-restore
       with:
@@ -91,7 +95,7 @@ jobs:
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
       run: |
-        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build \
+        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -C ${{ github.workspace }}/.github/ci_settings.cmake \
           -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON -DYUP_TEST_MODULES="${{ inputs.test_modules }}"
     - run: cmake --build ${{ runner.workspace }}/build --config ${{ matrix.config }} --target yup_tests --parallel 2
     - name: Run tests
@@ -116,9 +120,10 @@ jobs:
     steps:
     - uses: actions/checkout@v7
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - uses: hendrikmuhs/ccache-action@v1.2
+    - uses: ./.github/actions/ccache
       with:
         key: linux-example-${{ matrix.example }}
+        max-size: ${{ fromJson(env.CCACHE_SIZE_EXAMPLES)[matrix.example] || env.CCACHE_SIZE_EXAMPLE }}
     - uses: actions/cache/restore@v5
       id: cache-restore
       with:
@@ -127,7 +132,7 @@ jobs:
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
       run: |
-        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build \
+        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -C ${{ github.workspace }}/.github/ci_settings.cmake \
           -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON -DYUP_TEST_MODULES="${{ inputs.test_modules }}"
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --target ${{ fromJson(inputs.example_targets)[matrix.example] }}
     - run: cmake --build ${{ runner.workspace }}/build --config Release --target ${{ fromJson(inputs.example_targets)[matrix.example] }}

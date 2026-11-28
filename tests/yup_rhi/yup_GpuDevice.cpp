@@ -341,6 +341,38 @@ TEST_F (GpuDeviceErrorTests, ClearedShaderBundleCacheKeepsHeldBundlesAndLoadsAga
     EXPECT_EQ (kept->source, "kept");
 }
 
+TEST_F (GpuDeviceErrorTests, ReleasingUnusedResourcesDropsShaderBundlesOnlyWithShaderCaches)
+{
+    ShaderBundle source;
+    ShaderInfo info;
+    info.language = ShaderLanguage::msl;
+    info.source = "kept";
+    source.addShader (std::move (info));
+
+    MemoryBlock bytes;
+    ASSERT_TRUE (source.saveToMemoryBlock (bytes).wasOk());
+
+    const auto load = [this, &bytes]
+    {
+        const auto bundle = device->loadShaderBundle (bytes.getData(), bytes.getSize());
+        EXPECT_TRUE (bundle.wasOk());
+        return bundle.wasOk() ? bundle.getValue() : nullptr;
+    };
+
+    const auto held = load();
+    ASSERT_NE (held, nullptr);
+
+    device->releaseUnusedResources (withBitValueCleared (GpuUnusedResources::all, GpuUnusedResources::shaderCaches));
+    EXPECT_EQ (load(), held);
+
+    device->releaseUnusedResources();
+    EXPECT_NE (load(), held);
+
+    const auto* kept = held->findShader (ShaderStage::vertex, ShaderLanguage::msl);
+    ASSERT_NE (kept, nullptr);
+    EXPECT_EQ (kept->source, "kept");
+}
+
 TEST_F (GpuDeviceErrorTests, LoadingAnInvalidShaderBundleFails)
 {
     const char garbage[] = "not a shader bundle";

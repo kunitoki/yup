@@ -158,10 +158,15 @@ ltc_tables:
   cmake --build build --config Release -j4
   build/yup_ltc_fitter --output "{{justfile_directory()}}/modules/yup_renderer/core/yup_LtcTables.inc"
 
-[doc("time the Scene3D demo target frames on the GPU: ACTION is run, record (the baseline) or compare (with it)")]
+[doc("time the Scene3D target benchmarks on the GPU: ACTION is run, record (the baseline) or compare (with it)")]
 [macos]
-perf_3d ACTION="run" CONFIG="Release" FILTER="SceneRendererBenchmarkTests.DISABLED_DemoTargetFrameTimes":
+perf_3d ACTION="run" CONFIG="Release" FILTER="SceneRendererBenchmarkTests.DISABLED_*TargetFrameTimes":
   uv run python tools/perf.py --just "{{just_executable()}}" {{ACTION}} {{CONFIG}} "{{FILTER}}"
+
+[doc("time the 2D painting, restyling and document benchmarks: ACTION is run, record (the baseline) or compare (with it)")]
+[macos]
+perf_2d ACTION="run" CONFIG="Release" FILTER="PaintBenchmarkTests.DISABLED_*":
+  uv run python tools/perf.py --just "{{just_executable()}}" --suite 2d {{ACTION}} {{CONFIG}} "{{FILTER}}"
 
 #==================================================================================================
 # YDSP tooling
@@ -204,8 +209,8 @@ yui_tool_test:
 
 [doc("compile yup_yui_tool for the web, as the YUI VSCode extension runs it (needs the Emscripten SDK activated)")]
 [working-directory: 'cmake/tools/yui_tool']
-yui_tool_wasm CONFIG="Release":
-  emcmake cmake -G Ninja -S . -B build_wasm -DCMAKE_BUILD_TYPE={{CONFIG}}
+yui_tool_wasm CONFIG="Release" *CMAKE_ARGS:
+  emcmake cmake -G Ninja -S . -B build_wasm -DCMAKE_BUILD_TYPE={{CONFIG}} {{CMAKE_ARGS}}
   cmake --build build_wasm
 
 [doc("compile yup_yui_tool for the web and run its tests")]
@@ -214,21 +219,22 @@ yui_tool_wasm_test:
   @just yui_tool_wasm
   node --test tests/test_web.js
 
-[doc("run the tests of the YUI VSCode extension that need no editor")]
-[working-directory: 'modules/yup_gui/tools/vscode-yui']
+[doc("check the types of the YUI VSCode extension and run its tests that need no editor")]
+[working-directory: 'modules/yup_gui_markup/tools/vscode-yui']
 vscode_yui_test:
   npm install
+  npm run check
   npm test
 
 [doc("build and install the YUI VSCode extension (needs the Emscripten SDK activated)")]
-[working-directory: 'modules/yup_gui/tools/vscode-yui']
+[working-directory: 'modules/yup_gui_markup/tools/vscode-yui']
 vscode_yui:
   @just yui_tool_wasm
   sh tools/package-tool.sh
   npm install
   npm run compile
-  npx --yes @vscode/vsce package -o vscode-yui.vsix
-  npx --yes @vscode/vsce ls --tree
+  npx --no-install vsce package -o vscode-yui.vsix
+  npx --no-install vsce ls --tree
   code --install-extension vscode-yui.vsix --force
 
 #==================================================================================================
@@ -238,6 +244,14 @@ vscode_yui:
 [doc("fetch missing coverage lines for a pull request")]
 fetch_coverage PR:
   uv run python tools/print_uncovered_lines.py --pr {{PR}}
+
+[doc("build TARGET in build/stats with Ninja and print where the time went: NAME saves the times, BASELINE compares with saved ones, FLAGS are C++ flags (-ftime-trace adds the compiler phases with clang)")]
+[unix]
+build_stats CONFIG="Debug" TARGET="yup_tests" NAME="last" BASELINE="" FLAGS="" *CMAKE_ARGS:
+  cmake -G "Ninja Multi-Config" -B build/stats -DCMAKE_CXX_FLAGS="{{FLAGS}}" -DCMAKE_OBJCXX_FLAGS="{{FLAGS}}" {{CMAKE_ARGS}}
+  touch build/stats/.build_stats_start
+  cmake --build build/stats --config {{CONFIG}} --target {{TARGET}}
+  uv run python tools/build_stats.py build/stats --name "{{NAME}}" {{ if BASELINE != "" { "--baseline " + BASELINE } else { "" } }}
 
 [doc("sample a running process (example_graphics by default) and print the call graph")]
 [macos]
@@ -313,6 +327,7 @@ update_emscripten_examples DEMOPATH="../yup-demos/demos":
   @just update_emscripten_example Themes themes {{DEMOPATH}}
   @just update_emscripten_example TreeView tree-view {{DEMOPATH}}
   @just update_emscripten_example Widgets widgets {{DEMOPATH}}
+  @just update_emscripten_example Yui3D yui-3d {{DEMOPATH}}
   @just update_emscripten_example YuiDrawing yui-drawing {{DEMOPATH}}
   @just update_emscripten_example YdspSynths ydsp-synths {{DEMOPATH}}
 

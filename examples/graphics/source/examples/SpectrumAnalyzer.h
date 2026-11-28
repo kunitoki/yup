@@ -848,7 +848,7 @@ private:
         // FFT size selector
         fftSizeCombo = std::make_unique<yup::ComboBox> ("FFTSize");
         int fftSizeId = 1;
-        for (int size = 64; size <= 16384; size *= 2)
+        for (int size = 64; size <= maxFFTSize; size *= 2)
             fftSizeCombo->addItem (yup::String (size), fftSizeId++);
         fftSizeCombo->setSelectedId (7);
         fftSizeCombo->onSelectedItemChanged = [this]
@@ -906,8 +906,8 @@ private:
         overlapSlider->setValue (0.75);
         overlapSlider->onValueChanged = [this] (double value)
         {
-            analyzerComponent.setOverlapFactor ((float) value);
-            spectrogramComponent.setOverlapFactor ((float) value);
+            analyzerState.setOverlapFactor ((float) value);
+            spectrogramState.setOverlapFactor ((float) value);
         };
         addAndMakeVisible (*overlapSlider);
 
@@ -970,7 +970,7 @@ private:
         analyzerComponent.setFrequencyRange (20.0f, 22000.0f);
         analyzerComponent.setDecibelRange (-100.0f, 10.0f);
         analyzerComponent.setSampleRate (44100.0);
-        analyzerComponent.setOverlapFactor (0.75f); // 75% overlap for better responsiveness
+        analyzerState.setOverlapFactor (0.75f); // 75% overlap for better responsiveness
         addAndMakeVisible (analyzerComponent);
 
         // Configure spectrogram
@@ -978,7 +978,7 @@ private:
         spectrogramComponent.setFrequencyRange (20.0f, 22000.0f);
         spectrogramComponent.setDecibelRange (-100.0f, 10.0f);
         spectrogramComponent.setSampleRate (44100.0);
-        spectrogramComponent.setOverlapFactor (0.75f);
+        spectrogramState.setOverlapFactor (0.75f);
         spectrogramComponent.setColorMap (yup::SpectrogramColorMap::Type::heatmap);
         spectrogramComponent.setVisible (false);
         addAndMakeVisible (spectrogramComponent);
@@ -1201,10 +1201,6 @@ private:
             analyzerState.setFftSize (currentFFTSize);
             spectrogramState.setFftSize (currentFFTSize);
         }
-
-        // Update both displays (each owns its own state)
-        analyzerComponent.setFFTSize (currentFFTSize);
-        spectrogramComponent.setFFTSize (currentFFTSize);
     }
 
     void updateWindowType()
@@ -1339,10 +1335,13 @@ private:
     std::atomic<bool> useAudioFile { false };
 
     // Spectrum displays (each with its own analysis state - sharing one FIFO
-    // between two consumers would starve the spectrogram)
-    yup::SpectrumAnalyzerState analyzerState;
+    // between two consumers would starve the spectrogram). The states are made
+    // for the largest size of the FFT size selector, which is all they hold
+    static constexpr int maxFFTSize = 16384;
+
+    yup::SpectrumAnalyzerState analyzerState { 2048, maxFFTSize };
     yup::SpectrumAnalyzerComponent analyzerComponent;
-    yup::SpectrumAnalyzerState spectrogramState;
+    yup::SpectrumAnalyzerState spectrogramState { 2048, maxFFTSize };
     yup::SpectrogramComponent spectrogramComponent;
 
     // UI components

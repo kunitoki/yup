@@ -1,0 +1,149 @@
+// Cameras: three ways to move a camera, all of them written in the stylesheet.
+//
+// - A shot is a rule: where the camera stands, the point it looks at and how wide it sees. A transition on the
+//   three flies the camera from the values it shows to those of the shot that is picked.
+// - A tour is keyframes on the position, around the set and back, while the camera keeps looking at one point.
+// - A dolly zoom is keyframes on the position and the field of view together: the camera comes closer as it sees
+//   wider, so the computer keeps its size while everything around it changes.
+//
+// Keyframes start at their first one. The tour and the dolly zoom start where the wide shot stands: picked from
+// that shot the camera leaves without a jump, from another it cuts there first. Leaving them is a transition.
+
+palette Console { colors: #14161c, #35e0c2, #e9edf3; }
+palette Display { colors: #071318, #35e0c2, #d9fff7; }
+
+// The name of the shot is a value of the whole document: the toggles set it, the rules and the screen read it
+tokens {
+    property shot: string = "wide";
+}
+
+drawing Glass {
+    rect { bounds: bounds; fill: palette.background; }
+    rect { bounds: bounds.reduced (10); cornerRadius: 8; fill: none; stroke: palette.accent.withAlpha (0.45); strokeWidth: 2; }
+}
+
+drawing Dot {
+    circle { center: bounds.center; radius: 8; fill: #ff4a3d; }
+}
+
+style {
+    :root    { palette: Console; }
+    .panel   { cornerRadius: 12; shadow: 0 0 palette.surface.withAlpha (0.9), 0 8 22 #00000070; }
+    .title   { textFillColor: palette.text; textHeightProportion: 0.8; preferredHeight: 24; }
+    .hint    { textFillColor: palette.textMuted; textHeightProportion: 0.8; preferredHeight: 16; }
+    .display { palette: Display; drawing: Glass; }
+    .rec     { textFillColor: #ff4a3d; }
+    .dot     { drawing: Dot; animation: blink 900ms easeInOut infinite alternate; }
+
+    @keyframes blink { from { opacity: 1; } to { opacity: 0.2; } }
+
+    // The wide shot, for a camera that is asked for no other. `lookAt` aims the camera again whenever it moves
+    Camera3D {
+        position: [3.3, 2.9, 5.2]; lookAt: [-0.4, 0.55, 0]; fov: 32deg;
+        transition: position 900ms easeInOut, lookAt 900ms easeInOut, fov 900ms easeInOut;
+    }
+
+    // The screen is seen from inside the arc of the lamp, and the pads from above them: the lamp is in neither
+    Scene3D[shot=top] Camera3D    { position: [0, 10, 1.7]; lookAt: [0, 0, 0.6]; fov: 36deg; }
+    Scene3D[shot=screen] Camera3D { position: [0.15, 1.6, 0.36]; lookAt: [0.24, 1.08, -1.3]; fov: 70deg; }
+    Scene3D[shot=pads] Camera3D   { position: [-1.3, 1, 2.3]; lookAt: [-0.25, 0.05, 0.55]; fov: 40deg; }
+    Scene3D[shot=back] Camera3D   { position: [3, 3.4, -4.4]; lookAt: [0, 0.75, -1.2]; fov: 38deg; }
+
+    // The easing runs between each pair of keyframes: this one slows the camera down at every stop of the tour
+    // without halting it. The dolly zoom spaces its keyframes instead, so it goes straight from one to the next
+    Scene3D[shot=tour] Camera3D  { animation: tour 42s cubicBezier (0.3, 0.15, 0.7, 0.85) infinite; }
+    Scene3D[shot=dolly] Camera3D { animation: dolly 7s linear infinite alternate; }
+
+    @keyframes tour {
+        0%   { position: [3.3, 2.9, 5.2]; }
+        17%  { position: [6.18, 1.5, -0.54]; }
+        33%  { position: [3.2, 3.6, -5.54]; }
+        50%  { position: [-3.56, 2.4, -5.08]; }
+        67%  { position: [-6.5, 1.8, 0.6]; }
+        83%  { position: [-3.45, 4.2, 5.98]; }
+        100% { position: [3.3, 2.9, 5.2]; }
+    }
+
+    // Along the line from the wide shot to the point it looks at. At every keyframe the distance to that point
+    // times the tangent of half the field of view is the same, 1.95: what stands there is seen as large
+    @keyframes dolly {
+        0%   { position: [3.3, 2.9, 5.2]; fov: 32deg; }
+        17%  { position: [3.17, 2.82, 5.02]; fov: 33.1deg; }
+        33%  { position: [2.85, 2.61, 4.56]; fov: 36.2deg; }
+        50%  { position: [2.37, 2.31, 3.9]; fov: 41.8deg; }
+        67%  { position: [1.9, 2.01, 3.24]; fov: 49.5deg; }
+        83%  { position: [1.58, 1.81, 2.78]; fov: 56.4deg; }
+        100% { position: [1.45, 1.72, 2.6]; fov: 59.7deg; }
+    }
+}
+
+Scene3D {
+    background: #101116; ambient: #2a3040; toneMapping: aces;
+
+    // The toggles name the shot, and the rules of that name place the camera
+    shot: shotTop.checked ? "top" : shotScreen.checked ? "screen" : shotPads.checked ? "pads" : shotBack.checked ? "back"
+        : shotTour.checked ? "tour" : shotDolly.checked ? "dolly" : "wide";
+
+    Camera3D { id: eye; }
+
+    Light3D { type: directional; position: [-3.5, 6, 3]; lookAt: [0, 0, 0]; intensity: 1.8; radius: 0.015; castsShadows: true; }
+    Light3D { type: point; position: [3.2, 2.2, -2.8]; color: #5c7cff; intensity: 40; range: 14; }
+
+    Model3D { source: "../gltf/stage.glb"; }
+
+    Model3D {
+        source: "../gltf/computer.glb";
+
+        // The lid is open: a time past the end of the clip is its end
+        clip: "Open"; time: 2;
+
+        // A viewfinder on the screen: the shot, and the field of view as the transitions and the keyframes move it
+        Node3D {
+            node: "Screen"; surface: emissive;
+
+            Column {
+                class: display; width: 416; height: 260; padding: "26 30"; gap: 4;
+
+                Row {
+                    preferredHeight: 30; gap: 8;
+
+                    Component { class: dot; preferredWidth: 22; }
+                    Label     { class: rec; text: "REC"; preferredWidth: 70; textHeightProportion: 0.75; }
+                    Label     { text: format ("fov %.0f", deg (eye.fov)); flexGrow: 1; justification: centerRight; textHeightProportion: 0.75; }
+                }
+
+                Label { text: shot; flexGrow: 1; justification: center; textHeightProportion: 0.5; }
+            }
+        }
+    }
+
+    // The light of the lamp is written inside its head
+    Model3D {
+        source: "../gltf/lamp.glb"; position: [-2.03, 0, -0.54]; rotation: [0, 58deg, 0];
+
+        Node3D {
+            node: "LampHead";
+
+            Light3D { type: spot; color: #ffd9a8; intensity: 32; range: 9; innerCone: 22deg; outerCone: 46deg; castsShadows: true; }
+        }
+    }
+
+    Column {
+        x: 18; y: 14; width: 300; height: 42; gap: 2;
+
+        Label { class: title; text: "Cameras"; }
+        Label { class: hint; text: "Pick a shot and the camera flies there"; }
+    }
+
+    Row {
+        class: panel; x: 12; y: parent.height - 64; width: parent.width - 24; height: 52; padding: "8 14"; gap: 8;
+
+        ToggleButton { text: "Wide"; radioGroup: 1; checked: true; flexGrow: 1; }
+        ToggleButton { id: shotTop; text: "Top"; radioGroup: 1; flexGrow: 1; }
+        ToggleButton { id: shotScreen; text: "Screen"; radioGroup: 1; flexGrow: 1; }
+        ToggleButton { id: shotPads; text: "Pads"; radioGroup: 1; flexGrow: 1; }
+        ToggleButton { id: shotBack; text: "Back"; radioGroup: 1; flexGrow: 1; }
+        ToggleButton { id: shotTour; text: "Tour"; radioGroup: 1; flexGrow: 1; margin: "0 0 0 10"; }
+        ToggleButton { id: shotDolly; text: "Dolly zoom"; radioGroup: 1; flexGrow: 1.4; }
+    }
+}

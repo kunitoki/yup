@@ -1,0 +1,278 @@
+// Drawing: the elements a drawing is written with, one component for each group of them. The
+// drawings are the ones of the documentation, scaled to their component by a viewBox: shapes,
+// paints, text, scopes (group, layer, mask, clip), filters, repeats, nested drawings, patterns
+// and markers. Nothing here reads a widget: see series.yui, parts.yui and controls.yui for that.
+
+// Every shape, each with a fill or a stroke.
+drawing Shapes {
+    viewBox: rect (0, 0, 512, 144);
+    let label: defaultFont.withHeight (12);
+
+    rect    { bounds: rect (20, 4, 88, 48); cornerRadius: 8; fill: palette.accent; }
+    ellipse { bounds: rect (148, 4, 88, 48); fill: palette.accent; }
+    circle  { center: point (320, 28); radius: 24; fill: palette.accent; }
+    arc     { center: point (448, 42); radius: 30; from: 180deg; to: 360deg; stroke: palette.accent; strokeWidth: 6; cap: round; }
+
+    line    { from: point (24, 84); to: point (104, 116); stroke: palette.accent; strokeWidth: 4; cap: round; }
+    path    { data: "M 152 120 C 173 59, 211 146, 232 85"; stroke: palette.accent; strokeWidth: 4; }
+    polygon { center: point (320, 100); sides: 6; radius: 24; fill: palette.accent; }
+    star    { center: point (448, 100); points: 5; innerRadius: 10; outerRadius: 24; fill: palette.accent; }
+
+    text { bounds: rect (0, 54, 128, 16);    text: "rect";    font: label; fill: palette.textMuted; }
+    text { bounds: rect (128, 54, 128, 16);  text: "ellipse"; font: label; fill: palette.textMuted; }
+    text { bounds: rect (256, 54, 128, 16);  text: "circle";  font: label; fill: palette.textMuted; }
+    text { bounds: rect (384, 54, 128, 16);  text: "arc";     font: label; fill: palette.textMuted; }
+    text { bounds: rect (0, 126, 128, 16);   text: "line";    font: label; fill: palette.textMuted; }
+    text { bounds: rect (128, 126, 128, 16); text: "path";    font: label; fill: palette.textMuted; }
+    text { bounds: rect (256, 126, 128, 16); text: "polygon"; font: label; fill: palette.textMuted; }
+    text { bounds: rect (384, 126, 128, 16); text: "star";    font: label; fill: palette.textMuted; }
+}
+
+// What a shape is painted with: colors, gradients, dashes, where the stroke goes, feathering.
+drawing Paint {
+    viewBox: rect (0, 0, 520, 86);
+    let label: defaultFont.withHeight (12);
+    let fade: linearGradient (palette.accent, point (0, 0), palette.accent.withAlpha (0.1), point (0, 1));
+
+    rect   { bounds: rect (8, 4, 68, 56); cornerRadius: 8; fill: palette.accent; }
+    rect   { bounds: rect (94, 4, 68, 56); cornerRadius: 8; fillGradient: fade.mappedTo (objectBounds); }
+    circle { center: point (214, 32); radius: 28;
+             fillGradient: radialGradient (palette.accent.brighter (0.9), point (204, 22), palette.accent.darker (0.4), 40); }
+    rect   { bounds: rect (268, 6, 64, 52); cornerRadius: 8; fill: none; stroke: palette.text; strokeWidth: 3; dash: dash (8, 6); cap: round; }
+    rect   { bounds: rect (356, 6, 64, 52); fill: palette.accent.withAlpha (0.35); stroke: palette.text; strokeWidth: 8; strokePosition: inside; }
+    circle { center: point (472, 32); radius: 22; fill: palette.accent; feather: 10; }
+
+    text { bounds: rect (0, 68, 84, 16);   text: "fill";           font: label; fill: palette.textMuted; }
+    text { bounds: rect (86, 68, 84, 16);  text: "fillGradient";   font: label; fill: palette.textMuted; }
+    text { bounds: rect (172, 68, 84, 16); text: "radialGradient"; font: label; fill: palette.textMuted; }
+    text { bounds: rect (258, 68, 84, 16); text: "dash, cap";      font: label; fill: palette.textMuted; }
+    text { bounds: rect (344, 68, 88, 16); text: "strokePosition"; font: label; fill: palette.textMuted; }
+    text { bounds: rect (430, 68, 84, 16); text: "feather";        font: label; fill: palette.textMuted; }
+}
+
+// Text fitted in a rectangle, justified in it, or anchored at a point.
+drawing Texts {
+    viewBox: rect (0, 0, 512, 82);
+    let big: defaultFont.withHeight (20);
+    let label: defaultFont.withHeight (12);
+
+    group {
+        fill: none; stroke: palette.outline;
+
+        rect { bounds: rect (4, 4, 150, 56); cornerRadius: 6; }
+        rect { bounds: rect (180, 4, 150, 56); cornerRadius: 6; }
+        line { from: point (356, 40); to: point (508, 40); }
+    }
+
+    text { bounds: rect (4, 4, 150, 56); text: "fitted"; font: big; fill: palette.text; }
+    text { bounds: rect (180, 4, 150, 56).reduced (8); text: "justified"; justification: bottomRight; font: big; fill: palette.text; }
+
+    circle { center: point (432, 40); radius: 3; fill: palette.accent; }
+    text { anchor: point (432, 40); textAnchor: middle; letterSpacing: 3; text: "anchored"; font: big; fill: palette.text; }
+
+    text { bounds: rect (4, 64, 150, 16);   text: "bounds";                font: label; fill: palette.textMuted; }
+    text { bounds: rect (180, 64, 150, 16); text: "justification";         font: label; fill: palette.textMuted; }
+    text { bounds: rect (356, 64, 152, 16); text: "anchor, letterSpacing"; font: label; fill: palette.textMuted; }
+}
+
+// Scopes: a group, a layer, a mask and a clip around the same nested drawing.
+drawing Scopes {
+    viewBox: rect (0, 0, 512, 86);
+    let label: defaultFont.withHeight (12);
+
+    drawing Pair {
+        viewBox: rect (0, 0, 100, 60);
+        circle { center: point (34, 30); radius: 26; fill: palette.accent; }
+        circle { center: point (66, 30); radius: 26; fill: palette.text; }
+    }
+
+    group { opacity: 0.5; use Pair { bounds: rect (14, 2, 100, 60); } }
+    layer { opacity: 0.5; use Pair { bounds: rect (142, 2, 100, 60); } }
+
+    layer {
+        mask { rect { bounds: rect (270, 2, 100, 60); fillGradient: linearGradient (#ffffff, point (270, 0), #ffffff00, point (370, 0)); } }
+        use Pair { bounds: rect (270, 2, 100, 60); }
+    }
+
+    group { opacity: 0.15; use Pair { bounds: rect (398, 2, 100, 60); } }
+    clip { bounds: rect (420, 16, 56, 32); use Pair { bounds: rect (398, 2, 100, 60); } }
+
+    text { bounds: rect (0, 68, 128, 16);   text: "group, opacity"; font: label; fill: palette.textMuted; }
+    text { bounds: rect (128, 68, 128, 16); text: "layer, opacity"; font: label; fill: palette.textMuted; }
+    text { bounds: rect (256, 68, 128, 16); text: "layer, mask";    font: label; fill: palette.textMuted; }
+    text { bounds: rect (384, 68, 128, 16); text: "clip";           font: label; fill: palette.textMuted; }
+}
+
+// Filters run on a layer.
+drawing Filters {
+    viewBox: rect (0, 0, 520, 86);
+    let label: defaultFont.withHeight (12);
+
+    drawing Mark {
+        viewBox: rect (0, 0, 40, 40);
+        star { center: point (20, 20); points: 5; innerRadius: 8; outerRadius: 18; fill: palette.accent; }
+        circle { center: point (20, 21); radius: 4; fill: #ff8800; }
+    }
+
+    use Mark { bounds: rect (22, 4, 56, 56); }
+    layer { filter { blur { deviation: 3; } } use Mark { bounds: rect (107, 4, 56, 56); } }
+    layer { filter { dropShadow { offset: point (3, 4); deviation: 2; color: #000000a0; } } use Mark { bounds: rect (192, 4, 56, 56); } }
+    layer { filter { colorMatrix { hueRotate: 120deg; } } use Mark { bounds: rect (277, 4, 56, 56); } }
+    layer { filter { morphology { radius: 2; dilate: true; } } use Mark { bounds: rect (362, 4, 56, 56); } }
+    layer { filter { blur { in: sourceAlpha; deviation: 2; }
+                     lighting { scale: 6; specular: true; exponent: 30; azimuth: 225deg; elevation: 50deg; result: light; }
+                     composite { in: light; in2: source; operator: atop; } }
+            use Mark { bounds: rect (447, 4, 56, 56); } }
+
+    text { bounds: rect (8, 68, 84, 16);   text: "none";        font: label; fill: palette.textMuted; }
+    text { bounds: rect (93, 68, 84, 16);  text: "blur";        font: label; fill: palette.textMuted; }
+    text { bounds: rect (178, 68, 84, 16); text: "dropShadow";  font: label; fill: palette.textMuted; }
+    text { bounds: rect (263, 68, 84, 16); text: "colorMatrix"; font: label; fill: palette.textMuted; }
+    text { bounds: rect (348, 68, 84, 16); text: "morphology";  font: label; fill: palette.textMuted; }
+    text { bounds: rect (433, 68, 84, 16); text: "lighting";    font: label; fill: palette.textMuted; }
+}
+
+// A repeat draws its shapes once for each turn.
+drawing Scale {
+    repeat i in 0 .. 41 {
+        line { from: point (4 + i * 5, bounds.height); to: point (4 + i * 5, bounds.height - (i % 5 == 0 ? 28 : 14));
+               stroke: i < 26 ? palette.accent : palette.outline; strokeWidth: 2; cap: round; }
+    }
+}
+
+// A repeat holding a group and a nested drawing, which takes a property for each turn.
+drawing Ring {
+    property lit: integer = 8;
+
+    drawing Led {
+        property on: boolean = false;
+        circle { center: bounds.center; radius: 5; fill: on ? palette.accent : palette.outline; feather: on ? 3 : 0; }
+    }
+
+    repeat i in 0 .. 12 {
+        group {
+            transform: transform.rotation (rad (i * 30), bounds.center.x, bounds.center.y);
+            use Led { bounds: rect (bounds.center.x - 7, 8, 14, 14); on: i < lit; }
+        }
+    }
+}
+
+// A pattern tiled as a fill, and markers along a path.
+drawing Chart {
+    viewBox: rect (0, 0, 24, 24);
+
+    pattern Dots {
+        tile: rect (0, 0, 4, 4);
+        circle { center: bounds.center; radius: 1; fill: palette.accent; }
+    }
+
+    marker Arrow {
+        size: size (6, 6); ref: point (3, 3); viewBox: rect (0, 0, 6, 6);
+        path { data: "M 0 0 L 6 3 L 0 6 Z"; fill: palette.text; }
+    }
+
+    rect { bounds: bounds.reduced (4); fillPattern: Dots; }
+    path { data: "M 4 20 L 12 8 L 20 14"; fill: none; stroke: palette.text; strokeWidth: 0.75; markerMid: Arrow; markerEnd: Arrow; }
+}
+
+// A clip to the outline of shapes.
+drawing Cut {
+    viewBox: rect (0, 0, 24, 24);
+
+    clip {
+        clipPath {
+            circle { center: point (12, 12); radius: 7; }
+            ellipse { bounds: rect (1, 9, 22, 6); transform: transform.rotation (-30deg, 12, 12); }
+        }
+
+        rect { bounds: bounds; fill: palette.accent; }
+    }
+}
+
+// A group gives its paint to the shapes it holds.
+drawing Badge {
+    viewBox: rect (0, 0, 24, 24);
+
+    group {
+        fill: palette.surface; stroke: palette.outline; strokeWidth: 2; color: palette.accent;
+
+        rect { bounds: rect (2, 2, 20, 20); }
+        circle { center: point (12, 12); radius: 5; fill: currentColor; stroke: none; }
+        path { data: "M 2 12 L 22 12"; fill: none; }
+
+        group { strokeWidth: 1; line { from: point (2, 2); to: point (22, 22); } }
+    }
+}
+
+// A nested drawing used twice, with another paint.
+drawing Toolbar {
+    viewBox: rect (0, 0, 24, 12);
+
+    drawing Leaf {
+        property tone: color = palette.accent;
+        viewBox: rect (0, 0, 10, 10);
+        path { data: "M 5 0 L 10 10 L 0 10 Z"; fill: tone; }
+        circle { center: point (5, 7); radius: 1; }
+    }
+
+    use Leaf { bounds: rect (2, 2, 8, 8); fill: palette.text; }
+    use Leaf { bounds: rect (14, 2, 8, 8); tone: palette.outline; fill: none; stroke: palette.text; opacity: 0.5; }
+}
+
+// A viewBox scales a drawing to its component, a viewport nests another one.
+drawing Icon {
+    viewBox: rect (0, 0, 24, 24);
+
+    circle { center: bounds.center; radius: 10; fill: palette.accent; }
+
+    viewport {
+        bounds: rect (14, 14, 8, 8);
+        viewBox: rect (0, 0, 100, 100);
+        fitting: scaleToFill;
+        rect { bounds: bounds; fill: palette.text; }
+    }
+}
+
+style {
+    .shapes  { drawing: Shapes; }
+    .paint   { drawing: Paint; }
+    .texts   { drawing: Texts; }
+    .scopes  { drawing: Scopes; }
+    .filters { drawing: Filters; }
+    .scale   { drawing: Scale; }
+    .ring    { drawing: Ring; lit: 8; }
+    .ring:hover { lit: 12; }
+    .chart   { drawing: Chart; }
+    .cut     { drawing: Cut; }
+    .badge   { drawing: Badge; }
+    .toolbar { drawing: Toolbar; }
+    .icon    { drawing: Icon; }
+}
+
+Column {
+    padding: 12;
+    gap: 6;
+
+    Component { class: shapes; flexGrow: 3; }
+    Component { class: paint; flexGrow: 2; }
+    Component { class: texts; flexGrow: 2; }
+    Component { class: scopes; flexGrow: 2; }
+    Component { class: filters; flexGrow: 2; }
+
+    Row {
+        gap: 16; justify: center; align: center; flexGrow: 3;
+
+        Component { class: scale; preferredWidth: 212; preferredHeight: 44; }
+        Component { class: ring; preferredWidth: 96; preferredHeight: 96; }
+    }
+
+    Row {
+        gap: 12; justify: center; align: center; flexGrow: 2;
+
+        Component { class: chart; preferredWidth: 48; preferredHeight: 48; }
+        Component { class: cut; preferredWidth: 48; preferredHeight: 48; }
+        Component { class: badge; preferredWidth: 48; preferredHeight: 48; }
+        Component { class: toolbar; preferredWidth: 96; preferredHeight: 48; }
+        Component { class: icon; preferredWidth: 48; preferredHeight: 48; }
+    }
+}

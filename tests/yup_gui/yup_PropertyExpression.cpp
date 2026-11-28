@@ -56,6 +56,47 @@ protected:
         return compiled.failed() ? compiled.getErrorMessage() : String();
     }
 
+    static String heldAs (const var& value)
+    {
+        if (value.isVoid())
+            return "void";
+
+        if (value.isBool())
+            return "bool";
+
+        if (value.isInt())
+            return "int";
+
+        if (value.isInt64())
+            return "int64";
+
+        if (value.isDouble())
+            return "double";
+
+        return value.isString() ? "string" : "other";
+    }
+
+    /** Tells all there is to know of the expression a text makes: its type, its value and what the value is
+        held as, and whether it reads anything. */
+    String describe (Component& component, const String& text, std::optional<ComponentProperty::Type> type)
+    {
+        auto compiled = PropertyExpression::compile (component, text, type);
+
+        if (compiled.failed())
+            return "fails";
+
+        auto& expression = *compiled.getReference();
+        const auto value = expression.evaluate();
+
+        String description;
+        description << "type " << static_cast<int> (expression.getType()) << ", " << heldAs (value) << " " << value.toString();
+
+        if (expression.hasInputs() || expression.readsPalette() || ! expression.getDependencies().empty())
+            description << ", reads its component";
+
+        return description;
+    }
+
     static String split (const String& text, int from = 0)
     {
         StringArray elements;
@@ -319,4 +360,97 @@ TEST_F (PropertyExpressionTests, CreatesTheContextExpressionsAreCompiledWith)
     EXPECT_TRUE (hasFunction ("rect ("));
     EXPECT_TRUE (hasFunction ("clamp ("));
     EXPECT_TRUE (hasFunction (".withAlpha ("));
+}
+
+TEST_F (PropertyExpressionTests, ALiteralIsWhatTheCompilerMakesOfIt)
+{
+    using Type = ComponentProperty::Type;
+
+    Component component;
+
+    const std::optional<Type> types[] = {
+        std::nullopt,
+        Type::any,
+        Type::number,
+        Type::integer,
+        Type::boolean,
+        Type::string,
+        Type::color,
+        Type::enumeration,
+        Type::array
+    };
+
+    const StringArray literals {
+        "0", "200", "-7", "-0", "007", "999999999", "1234567890", "2147483648", "12345678901", "16777217",
+        "0.1", "-2.75", "-0.0", "0.30000000000000004", "123456789012.5", "1e3", "1E-2", "2.5e+3", "1e999", " 42\n",
+        "true", "false", " true ",
+        "\"Reset\"", "\"\"", "\" a  b \"", "\"font\"", "\"100% of it's\"", "\"true\"", "\"12\""
+    };
+
+    for (const auto& literal : literals)
+    {
+        for (const auto& type : types)
+        {
+            // Between parentheses the same text is an expression, which only the compiler reads
+            EXPECT_EQ (describe (component, literal, type), describe (component, "(" + literal + ")", type))
+                << "'" << literal << "' for the type " << (type.has_value() ? static_cast<int> (*type) : -1);
+        }
+    }
+
+    // What is told of them is what is told of an expression giving the same value
+    EXPECT_EQ (describe (component, "200", std::nullopt), describe (component, "100 + 100", std::nullopt));
+    EXPECT_EQ (describe (component, "200", Type::number), describe (component, "100 + 100", Type::number));
+    EXPECT_EQ (describe (component, "200", Type::integer), describe (component, "100 + 100", Type::integer));
+    EXPECT_EQ (describe (component, "true", Type::boolean), describe (component, "! false", Type::boolean));
+    EXPECT_EQ (describe (component, "\"Reset\"", Type::string), describe (component, "\"Re\" + \"set\"", Type::string));
+
+    // A number is a number, an integer of a property that is one, and nothing reads the component
+    EXPECT_EQ (describe (component, "200", std::nullopt), "type " + String (static_cast<int> (Type::number)) + ", double 200.0");
+    EXPECT_TRUE (evaluate (component, "200", Type::integer).isInt());
+    EXPECT_TRUE (evaluate (component, "true").isBool());
+    EXPECT_EQ (evaluate (component, "\"Reset\"").toString(), "Reset");
+    EXPECT_EQ (PropertyExpression::compile (component, " 200 ", std::nullopt).getReference()->getSource(), " 200 ");
+}
+
+TEST_F (PropertyExpressionTests, WhatOnlyLooksLikeALiteralIsLeftToTheCompiler)
+{
+    using Type = ComponentProperty::Type;
+
+    Slider slider { Slider::LinearHorizontal };
+    slider.setBounds (0, 0, 40, 20);
+
+    // Units, suffixes, signs, other bases and comments
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (slider, "50%")), 0.5);
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (slider, "250ms")), 0.25);
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (slider, "10px")), 10.0);
+    EXPECT_NEAR (static_cast<double> (evaluate (slider, "180deg")), MathConstants<double>::pi, 1.0e-9);
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (slider, "1.5f")), 1.5);
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (slider, "0x10")), 16.0);
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (slider, ".5")), 0.5);
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (slider, "+3")), 3.0);
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (slider, "- 3")), -3.0);
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (slider, "2 // two")), 2.0);
+    EXPECT_TRUE (error (slider, "10em").contains ("em"));
+    EXPECT_FALSE (error (slider, "1.").isEmpty());
+    EXPECT_FALSE (error (slider, "1e").isEmpty());
+
+    // A string with an escape, and what only starts and ends with a quote
+    EXPECT_EQ (evaluate (slider, "\"a\\\"b\"").toString(), "a\"b");
+    EXPECT_EQ (evaluate (slider, "\"a\\nb\"").toString(), "a\nb");
+    EXPECT_EQ (evaluate (slider, "\"a\" + \"b\"").toString(), "ab");
+    EXPECT_FALSE (error (slider, "\"a\nb\"").isEmpty());
+
+    // A name: a property in scope, a constant, the value of an enumeration, and what only starts as a boolean does
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (slider, "width")), 40.0);
+    EXPECT_TRUE (PropertyExpression::compile (slider, "width", std::nullopt).getReference()->hasInputs());
+    EXPECT_NEAR (static_cast<double> (evaluate (slider, "pi")), MathConstants<double>::pi, 1.0e-6);
+    EXPECT_TRUE (error (slider, "round").contains ("ambiguous"));
+    EXPECT_FALSE (error (slider, "none").isEmpty());
+    EXPECT_TRUE (VariantConverter<AffineTransform>::fromVar (evaluate (slider, "none", Type::transform)).isIdentity());
+    EXPECT_TRUE (error (slider, "truthy").contains ("truthy"));
+
+    // A literal of another type than the property is converted, or refused, by the compiler
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (slider, "true", Type::number)), 1.0);
+    EXPECT_FALSE (error (slider, "\"12\"", Type::number).isEmpty());
+    EXPECT_FALSE (error (slider, "12", Type::array).isEmpty());
 }

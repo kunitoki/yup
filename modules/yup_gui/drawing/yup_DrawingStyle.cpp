@@ -22,103 +22,165 @@
 namespace yup
 {
 
+namespace detail
+{
+
+/* Decodes the image a source is: a `data:image/...;base64,...` URI, or else the file it names, read through the document
+   of a component. */
+inline ResultValue<Image> loadSourceImage (const Component* component, const String& source)
+{
+    if (! source.startsWithIgnoreCase ("data:image/"))
+    {
+        const auto bytes = ComponentDocument::readAssetFor (component, source);
+        if (! bytes.has_value())
+            return makeResultValueFail ("the file '" + source + "' can't be read");
+
+        return Image::loadFromData (bytes->asBytes());
+    }
+
+    MemoryOutputStream decoded;
+    const auto marker = source.indexOfIgnoreCase ("base64,");
+
+    if (marker < 0 || ! Base64::convertFromBase64 (decoded, source.substring (marker + 7).trim()))
+        return makeResultValueFail ("the data URI is not base64");
+
+    return Image::loadFromData ({ static_cast<const uint8*> (decoded.getData()), decoded.getDataSize() });
+}
+
+/* Parses the SVG a source is: its text, or else the file it names, read through the document of a component. The images
+   such a file names are looked for in its folder, when it has one. */
+inline ResultValue<std::shared_ptr<Drawable>> loadSourceSvg (const Component* component, const String& source, bool isText)
+{
+    auto text = source;
+    Drawable::ParseOptions options;
+
+    if (! isText)
+    {
+        const auto bytes = ComponentDocument::readAssetFor (component, source);
+        if (! bytes.has_value())
+            return makeResultValueFail ("the file '" + source + "' can't be read");
+
+        text = String::createStringFromData (bytes->getData(), static_cast<int> (bytes->getSize()));
+        options.baseDirectory = ComponentDocument::getAssetFileFor (component, source).getParentDirectory();
+    }
+
+    auto drawable = std::make_shared<Drawable>();
+    if (! drawable->parseSVG (text, options))
+        return makeResultValueFail ("the SVG can't be parsed");
+
+    return makeResultValueOk (std::move (drawable));
+}
+
+/* Draws an image fitted in an area and clipped to it, or tiled over it from its corner: one fill, however many tiles
+   the area holds. The paint and the clip of the Graphics are left as the image needed them. */
+inline void drawFittedImage (Graphics& g, const Image& image, const Rectangle<float>& area, Fitting fitting, Justification justification)
+{
+    if (fitting == Fitting::tile)
+    {
+        g.setFillImage (image, AffineTransform::translation (area.getX(), area.getY()), { ImageWrap::Repeat, ImageWrap::Repeat, ImageFilter::Linear });
+        g.setFeather (0.0f);
+        g.fillRect (area);
+        return;
+    }
+
+    const Rectangle<float> sourceBounds { 0.0f, 0.0f, static_cast<float> (image.getWidth()), static_cast<float> (image.getHeight()) };
+    const auto destBounds = sourceBounds.transformed (sourceBounds.getTransformToFit (area, fitting, justification));
+    if (destBounds.isEmpty())
+        return;
+
+    if (! area.contains (destBounds))
+        g.setClipPath (area);
+
+    g.drawImage (image, destBounds);
+}
+
+/* Orders the sources of pictures. The source a paint reads is most often the string the paint before read: String::compare()
+   tells that without reading it, which a data URI or an inline SVG makes long. */
+struct SourceOrder
+{
+    bool operator() (const String& first, const String& second) const noexcept { return first.compare (second) < 0; }
+};
+
+} // namespace detail
+
 namespace
 {
 
-File resolveDrawingSourceFile (const String& path, const File& baseDirectory)
+const Image& resolveDrawingImage (std::map<String, Image, detail::SourceOrder>& cache, const String& source, const Component* component, const DrawingStyle::ImageResolver& resolver)
 {
-    if (path.isEmpty())
-        return {};
-
-    if (File::isAbsolutePath (path))
-        return File (path);
-
-    if (baseDirectory != File())
-    {
-        if (const auto candidate = baseDirectory.getChildFile (path); candidate.existsAsFile())
-            return candidate;
-    }
-
-    return File::getCurrentWorkingDirectory().getChildFile (path);
-}
-
-const Image& resolveDrawingImage (std::map<String, Image>& cache, const String& source, const File& baseDirectory, const DrawingStyle::ImageResolver& resolver)
-{
-    const auto cacheKey = baseDirectory != File() ? (baseDirectory.getFullPathName() + "\n" + source) : source;
-
-    if (const auto found = cache.find (cacheKey); found != cache.end())
+    if (const auto found = cache.find (source); found != cache.end())
         return found->second;
 
     Image image;
     const auto trimmed = source.trim();
 
     if (auto resolved = resolver != nullptr ? resolver (trimmed) : std::nullopt; resolved.has_value() && resolved->isValid())
-    {
         image = std::move (*resolved);
-    }
-    else if (trimmed.startsWithIgnoreCase ("data:image/"))
-    {
-        if (const auto marker = trimmed.indexOfIgnoreCase ("base64,"); marker >= 0)
-        {
-            MemoryOutputStream decoded;
-            if (Base64::convertFromBase64 (decoded, trimmed.substring (marker + 7).trim()) && decoded.getDataSize() > 0)
-            {
-                auto loaded = Image::loadFromData ({ static_cast<const uint8*> (decoded.getData()), decoded.getDataSize() });
-                if (loaded.wasOk())
-                    image = std::move (loaded.getReference());
-            }
-        }
-    }
-    else
-    {
-        const auto file = resolveDrawingSourceFile (trimmed, baseDirectory);
-        if (file.existsAsFile())
-        {
-            MemoryBlock block;
-            if (file.loadFileAsData (block) && block.getSize() > 0)
-            {
-                auto loaded = Image::loadFromData ({ static_cast<const uint8*> (block.getData()), block.getSize() });
-                if (loaded.wasOk())
-                    image = std::move (loaded.getReference());
-            }
-        }
-    }
+    else if (auto loaded = detail::loadSourceImage (component, trimmed); loaded.wasOk())
+        image = std::move (loaded.getReference());
 
-    return cache.emplace (cacheKey, std::move (image)).first->second;
+    return cache.emplace (source, std::move (image)).first->second;
 }
 
-std::shared_ptr<Drawable> resolveDrawingSvg (std::map<String, std::shared_ptr<Drawable>>& cache,
+std::shared_ptr<Drawable> resolveDrawingSvg (std::map<String, std::shared_ptr<Drawable>, detail::SourceOrder>& cache,
                                              const String& source,
                                              bool inlineOnly,
-                                             const File& baseDirectory)
+                                             const Component* component)
 {
-    const auto cacheKey = baseDirectory != File() ? (baseDirectory.getFullPathName() + "\n" + source) : source;
-
-    if (const auto found = cache.find (cacheKey); found != cache.end())
+    if (const auto found = cache.find (source); found != cache.end())
         return found->second;
 
     std::shared_ptr<Drawable> drawable;
     const auto trimmed = source.trim();
 
     if (trimmed.isNotEmpty())
-    {
-        auto parsed = std::make_shared<Drawable>();
+        drawable = detail::loadSourceSvg (component, trimmed, inlineOnly || trimmed.startsWithChar ('<')).valueOr (nullptr);
 
-        if (inlineOnly || trimmed.startsWithChar ('<'))
-        {
-            if (parsed->parseSVG (trimmed))
-                drawable = std::move (parsed);
-        }
-        else
-        {
-            const auto file = resolveDrawingSourceFile (trimmed, baseDirectory);
-            if (file.existsAsFile() && parsed->parseSVG (file))
-                drawable = std::move (parsed);
-        }
-    }
-
-    cache.emplace (cacheKey, drawable);
+    cache.emplace (source, drawable);
     return drawable;
+}
+
+/* The pixels a unit takes along x and along y under a transform, for a Graphics of a scale. */
+Size<float> getPixelsPerUnit (const AffineTransform& transform, float contextScale) noexcept
+{
+    return { std::hypot (transform.getScaleX(), transform.getShearY()) * contextScale,
+             std::hypot (transform.getShearX(), transform.getScaleY()) * contextScale };
+}
+
+/* The pixels a unit takes as a shader is told, which is given one number for both directions. */
+float getShaderScale (Size<float> pixelsPerUnit) noexcept
+{
+    return std::sqrt (pixelsPerUnit.getWidth() * pixelsPerUnit.getHeight());
+}
+
+/* The pixels a length takes: one at least, and no more than a texture holds. */
+int getNumPixels (float length, float pixelsPerUnit, int maxSize) noexcept
+{
+    const auto pixels = std::ceil (length * pixelsPerUnit);
+
+    return pixels >= 1.0f ? static_cast<int> (jmin (static_cast<double> (pixels), static_cast<double> (maxSize))) : 1;
+}
+
+/* Returns an output of a state as the var a property of its type holds. */
+var getOutputValue (const ExpressionState& state, int output, ComponentProperty::Type type)
+{
+    var value;
+
+    DrawingScope::withExpressionType (type, [&] (auto tag)
+    {
+        using T = typename decltype (tag)::type;
+        value = VariantConverter<T>::toVar (state.get (ExpressionOutput<T> { output }));
+    });
+
+    return value;
+}
+
+/* Returns the numbers an output of a state holds as an array, where they are. */
+Span<const float> getOutputNumbers (const ExpressionState& state, int output)
+{
+    const auto numbers = state.get (ExpressionOutput<ExpressionArrayView<float>> { output });
+
+    return { numbers.data, static_cast<size_t> (jmax (0, numbers.size)) };
 }
 
 } // namespace
@@ -140,7 +202,9 @@ struct DrawingStyle::Node
         pattern,
         marker,
         filter,
-        filterPrimitive
+        filterPrimitive,
+        shader,
+        part
     };
 
     /* A primitive of a filter: what it always does, and the outputs of its program setting the rest. */
@@ -154,6 +218,19 @@ struct DrawingStyle::Node
         ExpressionOutput<BlendMode> mode;
     };
 
+    /* A shader a `use` runs: where the style keeps the one it found, and what its block declares with the output of the
+       program holding the value of each, none for a property nothing sets. */
+    struct ShaderUse
+    {
+        String name;
+        int index = -1;
+        std::vector<ShaderProperty> properties;
+        std::vector<int> outputs;
+
+        // The uniform block has the time and no property takes its name: the shader is drawn again at every frame
+        bool isGivenTime = false;
+    };
+
     const CompiledExpression& getProgram() const noexcept
     {
         return kind == Kind::shape ? drawing.getProgram() : program;
@@ -162,6 +239,19 @@ struct DrawingStyle::Node
     bool hasMarkers() const noexcept
     {
         return std::any_of (markers.begin(), markers.end(), [] (int marker) { return marker >= 0; });
+    }
+
+    /* Whether what the node paints is not told by its program alone: a part is painted by the component, an image
+       is looked for while painting, the markers of a shape are evaluated for every shape having them, and the time
+       a shader is given goes by. A tile or a filtered layer that is not static is drawn again at every paint when
+       it holds one. */
+    bool paintsMoreThanItReads() const noexcept
+    {
+        return kind == Kind::part
+            || kind == Kind::image
+            || (kind == Kind::svg && ! svgInlineOnly)
+            || hasMarkers()
+            || (shader != nullptr && shader->isGivenTime);
     }
 
     Kind kind = Kind::shape;
@@ -180,18 +270,30 @@ struct DrawingStyle::Node
     // Repeats holding containers: they are drawn turn after turn, and this is where the index of the turn is kept
     int loopLevel = -1;
 
-    // Groups drawing their children in a rectangle of their own: the level of its bounds, and how it is mapped
+    // Groups drawing their children in a rectangle of their own: the level of its bounds, and how it is mapped.
+    // A pattern has one for its tile, and a filtered layer is given the level its first group would take: the
+    // levels below it are the bounds their elements read from around them
     int boundsLevel = -1;
     bool mapsToArea = false;
     bool clipsToArea = false;
 
-    // Patterns and filtered layers: what they draw is only drawn again when it changes
+    // Patterns and filtered layers: what they draw never changes, as their elements only read what they set
+    // themselves. The others are drawn again when what their elements read changes
     bool isStatic = true;
 
-    // Layers: the filter they are drawn through. Filters: their primitives are their children
+    // Layers: the filter they are drawn through, and where the style keeps what it draws of them.
+    // Filters: their primitives are their children
     std::unique_ptr<Node> filter;
+    int filterIndex = -1;
     std::unique_ptr<FilterPrimitive> filterPrimitive;
     bool linearColors = false;
+
+    // Uses painting a shader, and the primitives of a filter running one
+    std::unique_ptr<ShaderUse> shader;
+
+    // Parts: the part of the component that is painted, and whether the element tells where
+    Identifier part;
+    bool placesPart = false;
 
     // Markers: how they follow the shape they are drawn on
     bool reversesStart = false;
@@ -204,7 +306,7 @@ struct DrawingStyle::Node
     ExpressionOutput<bool> visible;
     ExpressionOutput<float> opacity, strokeWidth, angle;
     ExpressionOutput<BlendMode> blend;
-    ExpressionOutput<Color> tint;
+    ExpressionOutput<Color> tint, fill, stroke;
     ExpressionOutput<AffineTransform> transform;
     ExpressionOutput<Rectangle<float>> area, clip, viewBox;
     ExpressionOutput<Size<float>> size;
@@ -250,8 +352,31 @@ struct DrawingStyle::Compiled
     std::vector<ComponentProperty> properties;
     String name;
 
+    /* The parts of the component the drawing places, with whether each could be given bounds when compiling. */
+    std::map<String, bool> parts;
+
     /* The drawings found by name through the resolver, as they were when compiling. */
     std::vector<std::pair<String, DataTree>> dependencies;
+
+    /* A shader found by name through the resolver, with what compiling read of it: its block and, when it was loaded,
+       the textures it reads, which tell its pictures from its series, and whether its uniform block has the time.
+       The shader itself is kept by each style, which finds its own. */
+    struct ShaderDependency
+    {
+        String name;
+        DataTree block;
+        bool isLoaded = false;
+        StringArray textureNames;
+        bool hasTime = false;
+    };
+
+    std::vector<ShaderDependency> shaderDependencies;
+
+    /* The nodes running a shader, in the order a style keeps what it found for each. */
+    std::vector<const Node*> shaders;
+
+    /* The layers drawn through a filter, in the order a style keeps what it draws of each. */
+    std::vector<const Node*> filtered;
 
     /* The rectangles `bounds` can be: the one of the component, then one per group with bounds of its own. */
     int numLevels = 1;
@@ -266,8 +391,34 @@ struct DrawingStyle::Slot
     std::unique_ptr<ExpressionState> state;
     DrawingScope::BoundInputs inputs;
     ExpressionDrawing::Cache cache;
-    std::map<String, Image> imageCache;
-    std::map<String, std::shared_ptr<Drawable>> svgCache;
+    std::map<String, Image, detail::SourceOrder> imageCache;
+    std::map<String, std::shared_ptr<Drawable>, detail::SourceOrder> svgCache;
+
+    // The revisions of the patterns the node paints with, added up, as they were when it was last prepared
+    uint32 patternRevisions = 0;
+};
+
+/* What a style keeps for a shader it runs: the shader its resolver found and, for one it paints, the texture it was drawn
+   into last with the uniforms it was given. And why the device could not draw it, where it is painted or in the filter
+   running it, empty while it is drawn. */
+struct DrawingStyle::ShaderState
+{
+    GpuImageShader::Ptr shader;
+    GpuDevice::Ptr device;
+    GpuTarget::Ptr target;
+    ShaderUniforms drawn;
+    String error;
+
+    // The textures holding the series the shader samples, one for each texture it declares
+    std::vector<detail::ShaderSeriesTexture> series;
+};
+
+/* The picture a shader is painted as: its size in pixels, and the uniforms it is given. */
+struct DrawingStyle::ShaderPicture
+{
+    int width = 0;
+    int height = 0;
+    ShaderUniforms uniforms;
 };
 
 /* What the elements being painted share: the default font, and the area layers cover with the transform they are composited with. */
@@ -297,11 +448,25 @@ struct DrawingStyle::PatternSource final : PaintSource
     AffineTransform contentTransform;
     PatternPaint paint;
     uint32 preparedSerial = 0;
+
+    // The font the tile was last asked to be drawn with, and how many times it was asked to be drawn again
+    Font font;
+    uint32 revision = 0;
 };
 
 /* Draws the elements of a layer for its filter. */
 struct DrawingStyle::FilterSource final : PaintSource
 {
+    /* What the elements take from the Graphics the layer is drawn in when they set no paint of their own. */
+    struct Paint
+    {
+        Color fill, stroke;
+        StrokeType strokeType;
+        float feather = 0.0f;
+
+        bool operator== (const Paint&) const = default;
+    };
+
     FilterSource (DrawingStyle& ownerToUse, const Node& nodeToDraw)
         : owner (ownerToUse)
         , node (nodeToDraw)
@@ -317,6 +482,30 @@ struct DrawingStyle::FilterSource final : PaintSource
     Rectangle<float> region;
     const Graphics* parent = nullptr;
     int numRows = 1;
+
+    // What the elements were last asked to be drawn with, beside what their programs read
+    Font font;
+    Paint paint;
+    int numLoopTurns = 1;
+
+    // The filter of the last paint, whose primitives are written again in place
+    FilterGraph graph;
+};
+
+/* Tells a style that a file read through the document of its component changed. */
+struct DrawingStyle::DocumentLink final : ComponentDocument::Listener
+{
+    explicit DocumentLink (DrawingStyle& ownerToUse)
+        : owner (ownerToUse)
+    {
+    }
+
+    void documentAssetChanged (ComponentDocument&, const String& path) override
+    {
+        owner.forgetPictures (path);
+    }
+
+    DrawingStyle& owner;
 };
 
 //==============================================================================
@@ -324,15 +513,20 @@ struct DrawingStyle::FilterSource final : PaintSource
 class DrawingStyle::Compiler
 {
 public:
-    Compiler (ExpressionContext& contextToUse, const DrawingScope& drawingScopeToUse, const DrawingResolver& drawingResolverToUse, Compiled& resultToBuild)
+    Compiler (ExpressionContext& contextToUse,
+              const DrawingScope& drawingScopeToUse,
+              const DrawingResolver& drawingResolverToUse,
+              const ShaderResolver& shaderResolverToUse,
+              Compiled& resultToBuild)
         : context (contextToUse)
         , drawingScope (drawingScopeToUse)
         , drawingResolver (drawingResolverToUse)
+        , shaderResolver (shaderResolverToUse)
         , result (resultToBuild)
     {
     }
 
-    Result compile (const DataTree& drawing, YuiDiagnostic* failure = nullptr)
+    Result compile (const DataTree& drawing, DataTreeDiagnostic* failure = nullptr)
     {
         context.setSymbolResolver ([this] (const String& name)
         {
@@ -362,7 +556,7 @@ public:
         {
             if (failure != nullptr)
             {
-                *failure = YuiDiagnostic {
+                *failure = DataTreeDiagnostic {
                     .message = error.message,
                     .element = error.element.isValid() ? error.element : drawing,
                     .property = error.property
@@ -381,7 +575,7 @@ public:
     {
         std::vector<ElementDescription> elements;
 
-        for (const auto* type : { "rect", "ellipse", "circle", "arc", "line", "path", "polygon", "star", "text" })
+        for (const auto* type : { "rect", "ellipse", "circle", "arc", "line", "path", "polygon", "star", "vertex", "text" })
         {
             const auto* shape = findShape (type);
             elements.push_back ({ type, "shape", shape->geometry, getShapeProperties (*shape) });
@@ -402,12 +596,17 @@ public:
             elements.push_back ({ kind.type, kind.role, {}, properties });
         }
 
+        // A use paints a shader as it paints a drawing, and runs one as a primitive of a filter
+        elements.push_back ({ "use", "media", {}, getShaderUseProperties() });
+
         for (const auto& [type, primitive] : getFilterPrimitives())
         {
             auto properties = getFilterPrimitiveProperties();
             properties.addArray (primitive.second);
             elements.push_back ({ type, "filterPrimitive", {}, properties });
         }
+
+        elements.push_back ({ "use", "filterPrimitive", {}, getShaderPrimitiveProperties (2) });
 
         return elements;
     }
@@ -673,6 +872,7 @@ private:
     static constexpr const char* levelPrefix = "_bounds";
     static constexpr const char* patternPrefix = "_pattern";
     static constexpr const char* loopPrefix = "_loop";
+    static constexpr const char* uniformPrefix = "_uniform_";
     static constexpr int maxUseDepth = 32;
 
     //==============================================================================
@@ -695,6 +895,7 @@ private:
             { "path", { "data" }, {}, "path (_data)", {}, {}, true },
             { "polygon", { "center", "sides", "radius", "angle=0" }, {}, "path().addPolygon (_center, _sides, _radius, _angle)", {}, {} },
             { "star", { "center", "points", "innerRadius", "outerRadius", "angle=0" }, {}, "path().addStar (_center, _points, _innerRadius, _outerRadius, _angle)", {}, {} },
+            { "vertex", { "at" }, "vertex = _at;", {}, { "series", "base:vertexBase", "smooth:vertexSmooth" }, {} },
             { "text", { "bounds", "text" }, "labelRect = _bounds; label = _text;", {}, fittedTextPaint, "_bounds" }
         };
 
@@ -817,6 +1018,7 @@ private:
             { "pattern", "definition", { "id", "name", "tile", "viewBox", "fitting", "justification", "transform" } },
             { "marker", "definition", { "id", "name", "size", "ref", "viewBox", "orient", "units" } },
             { "filter", "filter", { "id", "bounds", "linearColors" } },
+            { "part", "media", { "id", "name", "bounds", "fill", "stroke", "strokeWidth", "opacity", "blend", "tint", "transform", "clip", "clipPath", "visible" } },
             { "image", "media", media },
             { "svg", "media", [] { auto properties = media; properties.add ("data"); return properties; }() }
         };
@@ -861,6 +1063,26 @@ private:
     static StringArray getFilterPrimitiveProperties()
     {
         return { "id", "in", "result" };
+    }
+
+    /* What a `use` takes to paint a shader, on top of the properties the shader declares: where it is painted, and how. */
+    static const StringArray& getShaderUseProperties()
+    {
+        static const StringArray properties { "id", "drawing", "bounds", "transform", "visible", "opacity", "blend", "clip", "clipPath" };
+        return properties;
+    }
+
+    /* What a `use` takes to run a shader in a filter, on top of the properties the shader declares: a second picture
+       for a shader reading two. None of them is an expression. */
+    static StringArray getShaderPrimitiveProperties (int numTextures)
+    {
+        auto properties = getFilterPrimitiveProperties();
+        properties.add ("drawing");
+
+        if (numTextures > 1)
+            properties.add ("in2");
+
+        return properties;
     }
 
     /* The properties a shape takes on top of its geometry and of the paint every shape takes. */
@@ -914,7 +1136,7 @@ private:
         if (property == "bounds")
             return "rect";
 
-        if (property == "center" || property == "anchor")
+        if (property == "center" || property == "anchor" || property == "at")
             return "point";
 
         return std::strcmp (shapeType, "line") == 0 && (property == "from" || property == "to") ? "point" : nullptr;
@@ -1558,6 +1780,8 @@ private:
                 node = compileMedia (element, path, scope, placement == Placement::repeat, Node::Kind::image);
             else if (type == "svg")
                 node = compileMedia (element, path, scope, placement == Placement::repeat, Node::Kind::svg);
+            else if (type == "part")
+                node = compilePart (element, path, scope);
             else
                 node = compileShape (element, path, scope, placement == Placement::repeat);
 
@@ -1700,8 +1924,18 @@ private:
     /* Compiles properties of an element into the program of its node, after the statements it always needs. */
     void compileProperties (Node& node, const DataTree& element, const String& path, const Scope& scope, const std::vector<PropertyEntry>& properties, Statements assignments = {})
     {
-        Uses uses;
+        compileProperties (node, element, path, scope, properties, std::move (assignments), Uses());
+    }
 
+    /* Compiles properties of an element after statements that read the lets `uses` tells. */
+    void compileProperties (Node& node,
+                            const DataTree& element,
+                            const String& path,
+                            const Scope& scope,
+                            const std::vector<PropertyEntry>& properties,
+                            Statements assignments,
+                            Uses uses)
+    {
         for (const auto& entry : properties)
         {
             if (! element.hasProperty (entry.property))
@@ -1795,6 +2029,13 @@ private:
             drawing = drawingResolver (name);
         }
 
+        // A shader is painted when no drawing has the name
+        if (! drawing.isValid())
+        {
+            if (const auto shader = findShader (name, element, path); shader.block.isValid())
+                return compileShader (element, path, outerScope, name, shader);
+        }
+
         if (! drawing.isValid() || drawing.getType().toString() != "drawing")
             fail (path + ": unknown drawing '" + name + "'", element, "drawing");
 
@@ -1844,6 +2085,170 @@ private:
         expansions.push_back (drawing);
         compileDrawing (drawing, path + "/" + name, std::move (body), &site, node->children);
         expansions.pop_back();
+
+        return node;
+    }
+
+    //==============================================================================
+    /* Finds the shader a `use` names, failing for one that can't be drawn. The block is invalid for a name that is no shader,
+       and the shader null for one that is not loaded: its `use` is compiled against the block alone, for a style running
+       nothing there until it is made again with the shader. */
+    Shader findShader (const String& name, const DataTree& element, const String& path)
+    {
+        auto found = shaderResolver != nullptr ? shaderResolver (name) : Shader();
+
+        if (! found.block.isValid())
+            return found;
+
+        if (found.block.hasProperty ("material"))
+            fail (path + ": the shader '" + name + "' is a material, a drawing takes a shader with a 'fragment'", element, "drawing");
+
+        // What compiling reads of the shader tells which styles can share the compilation
+        if (std::none_of (result.shaderDependencies.begin(), result.shaderDependencies.end(), [&name] (const auto& dependency) { return dependency.name == name; }))
+        {
+            const bool isLoaded = found.shader != nullptr;
+
+            result.shaderDependencies.push_back ({ name,
+                                                   found.block.clone(),
+                                                   isLoaded,
+                                                   isLoaded ? found.shader->getInputTextureNames() : StringArray(),
+                                                   isLoaded && found.shader->getUniformLayout().hasMember ("time") });
+        }
+
+        return found;
+    }
+
+    /* Returns the textures of a shader that are no pictures: the ones a `number[]` property of its block has the name of,
+       which are filled with its numbers. None for a shader that is not loaded. */
+    static StringArray listSeriesTextures (const Shader& found)
+    {
+        StringArray series;
+
+        if (found.shader == nullptr)
+            return series;
+
+        std::vector<ShaderProperty> properties;
+
+        for (const auto& property : ShaderProperty::readBlock (found.block, {}))
+            if (property.problem.isEmpty())
+                properties.push_back ({ property.name, property.type });
+
+        for (const auto& textureName : found.shader->getInputTextureNames())
+            if (detail::findShaderSeriesProperty (properties, textureName) >= 0)
+                series.add (textureName);
+
+        return series;
+    }
+
+    /* Reads what a `use` gives the shader it runs: each property the block of the shader declares is an output of the program
+       of the element, set where the `use` is or else by its default. `allowed` holds what the element takes itself, and
+       `reserved` those of them that are not expressions, which a property of their name is not set by. */
+    void compileUniforms (Node& node,
+                          const String& name,
+                          const Shader& found,
+                          const DataTree& element,
+                          const String& path,
+                          const Scope& scope,
+                          StringArray allowed,
+                          const StringArray& reserved,
+                          Statements& assignments,
+                          Uses& uses)
+    {
+        const auto declared = ShaderProperty::readBlock (found.block, name);
+
+        for (const auto& property : declared)
+            allowed.add (property.name.toString());
+
+        checkElement (element, path, allowed, false);
+
+        auto use = std::make_unique<Node::ShaderUse>();
+        use->name = name;
+        use->index = (int) result.shaders.size();
+
+        int index = 0;
+
+        for (const auto& input : declared)
+        {
+            const auto& property = input.element;
+            const auto& propId = input.name;
+            const auto& propertyName = propId.toString();
+            const auto type = input.type;
+            const auto propertyPath = path + "/" + name + "/property[" + String (index++) + "]";
+            const auto typeName = property.getProperty ("type").toString().trim();
+            const auto* expressionType = input.problem.isEmpty() ? drawingScope.getExpressionType (type, ComponentProperty::getElementTypeFromName (typeName)) : nullptr;
+
+            if (expressionType == nullptr)
+            {
+                fail (path + ": the property '" + propertyName + "' of the shader '" + name + "' can't be of type '" + typeName
+                          + "', a shader takes a number, an integer, a boolean, a color, a point, a rectangle or a number[]",
+                      element,
+                      "drawing");
+            }
+
+            use->properties.push_back ({ propId, type });
+
+            const bool isSet = element.hasProperty (propId) && ! reserved.contains (propertyName);
+
+            if (! isSet && ! property.hasProperty ("value"))
+                continue;
+
+            // The output is declared with the type of the property, so that the value is converted to it as it is assigned
+            const auto output = uniformPrefix + propertyName;
+            const auto value = isSet ? parseValue (element, propId, path, scope) : parseValue (property, "value", propertyPath, Scope());
+
+            context.declareOutput (output, *expressionType);
+
+            if (isSet)
+                assignments.push_back ({ Expression::output (output, value.expression), path + "." + propertyName, element, propId });
+            else
+                assignments.push_back ({ Expression::output (output, value.expression), propertyPath + ".value", property, "value" });
+
+            uses.add (value.uses);
+        }
+
+        use->isGivenTime = found.shader != nullptr && detail::isShaderGivenTime (*found.shader, use->properties);
+
+        node.shader = std::move (use);
+        result.shaders.push_back (std::addressof (node));
+    }
+
+    /* Finds the outputs of the program of a node holding the values of the properties of the shader it runs. */
+    static void bindUniforms (Node& node)
+    {
+        for (const auto& property : node.shader->properties)
+            node.shader->outputs.push_back (node.program.findOutput (uniformPrefix + property.name.toString()));
+    }
+
+    /* Paints a shader found by name in the bounds of where it is used: what its block declares is set as the properties
+       of a drawing are, and it is placed as an image is. */
+    std::unique_ptr<Node> compileShader (const DataTree& element, const String& path, const Scope& scope, const String& name, const Shader& found)
+    {
+        // The textures a series fills are no pictures
+        if (found.shader != nullptr && found.shader->getNumInputTextures() > listSeriesTextures (found).size())
+            fail (path + ": the shader '" + name + "' reads a picture, run it in the 'filter' of a layer or as an 'effect:'", element, "drawing");
+
+        // Its picture is drawn once and kept, so it has no place where it would be drawn for each turn
+        if (repeatDepth > 0)
+            fail (path + ": the shader '" + name + "' can't be painted inside a repeat", element, "drawing");
+
+        auto node = std::make_unique<Node>();
+        node->kind = Node::Kind::shader;
+
+        Statements assignments;
+        Uses uses;
+
+        if (! element.hasProperty ("bounds"))
+            assignments.push_back (areaOfLevel (scope.boundsLevel, path, element));
+
+        static const auto properties = makePropertyEntries ({ "bounds:_area", "transform", "visible", "opacity", "blend", "clip", "clipPath" });
+
+        compileUniforms (*node, name, found, element, path, scope, getShaderUseProperties(), { "id", "drawing" }, assignments, uses);
+        compileProperties (*node, element, path, scope, properties, std::move (assignments), std::move (uses));
+        bindUniforms (*node);
+
+        // What is given the time changes at every frame, and so does the tile or the filtered layer it is drawn in
+        if (node->shader->isGivenTime && pattern != nullptr)
+            pattern->isStatic = false;
 
         return node;
     }
@@ -1946,7 +2351,11 @@ private:
         auto* const outerPattern = pattern;
 
         if (isFiltered)
+        {
             node->boundsLevel = numLevels;
+            node->filterIndex = (int) result.filtered.size();
+            result.filtered.push_back (node.get());
+        }
 
         {
             const ScopedValueSetter<Node*> compiling (pattern, isFiltered ? node.get() : pattern);
@@ -1993,14 +2402,24 @@ private:
         return node;
     }
 
+    /* What a primitive reads is named: the source of the layer, its alpha, or the result of a primitive before it. */
+    static String getFilterInput (const DataTree& element, const Identifier& property)
+    {
+        const auto name = element.getProperty (property).toString().trim();
+        return name == "source" ? String (FilterGraph::sourceGraphic) : (name == "sourceAlpha" ? String (FilterGraph::sourceAlpha) : name);
+    }
+
     std::unique_ptr<Node> compileFilterPrimitive (const DataTree& element, const String& path, const Scope& scope)
     {
         using Type = FilterGraph::Type;
 
+        if (element.getType().toString() == "use")
+            return compileShaderPrimitive (element, path, scope);
+
         const auto& kinds = getFilterPrimitives();
         const auto kind = kinds.find (element.getType().toString());
         if (kind == kinds.end())
-            fail (path + ": a 'filter' is made of blur, offset, flood, colorMatrix, composite, blend, morphology, lighting, displacement and dropShadow", element);
+            fail (path + ": a 'filter' is made of blur, offset, flood, colorMatrix, composite, blend, morphology, lighting, displacement, dropShadow and use", element);
 
         auto allowed = getFilterPrimitiveProperties();
         allowed.addArray (kind->second.second);
@@ -2012,13 +2431,6 @@ private:
 
         auto& primitive = *node->filterPrimitive;
         auto& base = primitive.base;
-
-        // What a primitive reads is named: the source of the layer, its alpha, or the result of a primitive before it
-        const auto getName = [&element] (const Identifier& property)
-        {
-            const auto name = element.getProperty (property).toString().trim();
-            return name == "source" ? String (FilterGraph::sourceGraphic) : (name == "sourceAlpha" ? String (FilterGraph::sourceAlpha) : name);
-        };
 
         const auto getChoice = [&] (const Identifier& property, const StringArray& choices, int fallback)
         {
@@ -2033,9 +2445,9 @@ private:
         };
 
         base.type = kind->second.first;
-        base.in = getName ("in");
-        base.in2 = getName ("in2");
-        base.result = getName ("result");
+        base.in = getFilterInput (element, "in");
+        base.in2 = getFilterInput (element, "in2");
+        base.result = getFilterInput (element, "result");
         base.dilate = parseFlag (element, "dilate", path);
         base.specular = parseFlag (element, "specular", path);
         base.compositeOperator = static_cast<FilterGraph::CompositeOperator> (getChoice ("operator", { "over", "in", "out", "atop", "xor", "lighter", "arithmetic" }, 0));
@@ -2126,6 +2538,56 @@ private:
         expect ("mode", primitive.mode.isValid(), "blend mode");
 
         addSlot (*node, false);
+        return node;
+    }
+
+    /* Compiles a shader run as a primitive of a filter: on the picture `in` names, and on the one `in2` names when it reads two. */
+    std::unique_ptr<Node> compileShaderPrimitive (const DataTree& element, const String& path, const Scope& scope)
+    {
+        const auto name = getRequired (element, "drawing", path).trim();
+        const auto found = findShader (name, element, path);
+
+        if (! found.block.isValid())
+            fail (path + ": unknown shader '" + name + "'", element, "drawing");
+
+        // A filter gives its shaders the pictures they read, and nothing else
+        if (const auto series = listSeriesTextures (found); ! series.isEmpty())
+            fail (path + ": the shader '" + name + "' samples the series '" + series[0] + "' as a texture, which a 'filter' doesn't fill: paint it with a 'use', or set it as an 'effect:'", element, "drawing");
+
+        auto node = std::make_unique<Node>();
+        node->kind = Node::Kind::filterPrimitive;
+        node->filterPrimitive = std::make_unique<Node::FilterPrimitive>();
+        node->path = path;
+        node->type = element.getType().toString();
+        node->id = element.getProperty ("id").toString();
+
+        auto& base = node->filterPrimitive->base;
+        base.type = FilterGraph::Type::shader;
+        base.in = getFilterInput (element, "in");
+        base.in2 = getFilterInput (element, "in2");
+        base.result = getFilterInput (element, "result");
+
+        // A shader that is not loaded may read two pictures
+        const auto allowed = getShaderPrimitiveProperties (found.shader != nullptr ? found.shader->getNumInputTextures() : 2);
+        Statements assignments;
+        Uses uses;
+
+        compileUniforms (*node, name, found, element, path, scope, allowed, allowed, assignments, uses);
+
+        // The time goes by for what keeps a component repainting while its shader is drawn, which a filter can't tell
+        if (node->shader->isGivenTime)
+            fail (path + ": the shader '" + name + "' has a 'time', which a 'filter' doesn't fill: declare 'property time: number;' in its block to set it here", element, "drawing");
+
+        if (! assignments.empty())
+        {
+            auto statements = selectLets (uses);
+            statements.insert (statements.end(), assignments.begin(), assignments.end());
+
+            node->program = compileStatements (statements, path, element);
+            addSlot (*node, false);
+        }
+
+        bindUniforms (*node);
         return node;
     }
 
@@ -2258,6 +2720,87 @@ private:
         return node;
     }
 
+    /* Compiles a part: what the theme paints of the component where the drawing tells, with the paint the drawing gives it.
+       The component the drawing is compiled for has to declare it, and what it answers is recorded: another component
+       shares the compilation when it answers alike. */
+    std::unique_ptr<Node> compilePart (const DataTree& element, const String& path, const Scope& scope)
+    {
+        checkElement (element, path, getElementProperties ("part"), false);
+
+        if (collectsOutlines)
+            fail (path + ": a 'part' has no outline to clip to", element);
+
+        const auto name = getRequired (element, "name", path).trim();
+        const auto* part = Identifier::isValidIdentifier (name) ? drawingScope.findPart (Identifier (name)) : nullptr;
+
+        if (part == nullptr)
+        {
+            const auto known = drawingScope.getPartNames();
+
+            fail (path + ": the component has no part '" + name + "'"
+                      + (known.isEmpty() ? String (", it declares none") : ", it has " + known.joinIntoString (", ")),
+                  element,
+                  "name");
+        }
+
+        if (element.hasProperty ("bounds") && ! part->isPlaceable)
+            fail (path + ".bounds: the part '" + name + "' is laid out by the component, move it with a 'transform' instead", element, "bounds");
+
+        result.parts.emplace (name, part->isPlaceable);
+
+        // What a part paints changes with the component, whatever the drawing reads of it: nothing holding one is kept
+        if (pattern != nullptr)
+            pattern->isStatic = false;
+
+        Statements own;
+        Uses uses;
+
+        if (element.hasProperty ("bounds"))
+        {
+            const auto value = parseValue (element, "bounds", path, scope);
+            own.push_back ({ Expression::output ("_area", value.expression), path + ".bounds", element, "bounds" });
+            uses.add (value.uses);
+        }
+        else
+        {
+            own.push_back (areaOfLevel (scope.boundsLevel, path, element));
+        }
+
+        for (const auto* property : { "fill", "stroke", "strokeWidth", "opacity", "blend", "tint", "transform", "clip", "clipPath", "visible" })
+        {
+            const Identifier propId (property);
+
+            if (! element.hasProperty (propId))
+                continue;
+
+            const auto value = parseValue (element, propId, path, scope);
+            own.push_back ({ Expression::output (property, value.expression), path + "." + property, element, propId });
+            uses.add (value.uses);
+        }
+
+        auto statements = selectLets (uses);
+        statements.insert (statements.end(), own.begin(), own.end());
+
+        auto node = std::make_unique<Node>();
+        node->kind = Node::Kind::part;
+        node->part = Identifier (name);
+        node->placesPart = element.hasProperty ("bounds");
+        node->program = compileStatements (statements, path, element);
+        node->area = findOutput<Rectangle<float>> (node->program, "_area");
+        node->fill = findOutput<Color> (node->program, "fill");
+        node->stroke = findOutput<Color> (node->program, "stroke");
+        node->strokeWidth = findOutput<float> (node->program, "strokeWidth");
+        node->opacity = findOutput<float> (node->program, "opacity");
+        node->blend = findOutput<BlendMode> (node->program, "blend");
+        node->tint = findOutput<Color> (node->program, "tint");
+        node->transform = findOutput<AffineTransform> (node->program, "transform");
+        node->clip = findOutput<Rectangle<float>> (node->program, "clip");
+        node->clipPath = findOutput<Path> (node->program, "clipPath");
+        node->visible = findOutput<bool> (node->program, "visible");
+        addSlot (*node, false);
+        return node;
+    }
+
     std::unique_ptr<Node> compileRepeat (const DataTree& element, const String& path, const Scope& scope)
     {
         static const auto allowed = getElementProperties ("repeat");
@@ -2299,9 +2842,9 @@ private:
                 fail (path + ": repeat count (" + String (count) + ") exceeds the maximum of " + String (maxRepeatCount), element, "to");
         }
 
-        // A repeat of shapes runs them as the rows of their programs. One holding containers is drawn turn
-        // after turn instead, its index fed to the programs reading it
-        static const StringArray drawnByTurns { "group", "use", "viewport", "clip", "repeat" };
+        // A repeat of shapes runs them as the rows of their programs. One holding containers or parts is drawn
+        // turn after turn instead, its index fed to the programs reading it
+        static const StringArray drawnByTurns { "group", "use", "viewport", "clip", "repeat", "part" };
         bool isLoop = false;
 
         for (const auto& child : element)
@@ -2334,6 +2877,12 @@ private:
 
         if (isText && element.hasProperty ("anchor") && element.hasProperty ("bounds"))
             fail (path + ": specify either 'bounds' or 'anchor', not both", element, "anchor");
+
+        // A vertex is one point of the line the turns of a repeat make together
+        const bool isVertex = type == "vertex";
+
+        if (isVertex && ! repeated)
+            fail (path + ": a 'vertex' is one point of a line, it can only be among the shapes of a 'repeat' giving the others", element);
 
         checkElement (element, path, shape->allowed, false);
 
@@ -2458,7 +3007,11 @@ private:
         }
 
         if (uses.objectBounds && ! shape->objectBounds.has_value() && ! shape->shapePath.has_value())
-            fail (path + ": 'objectBounds' is not available to a text placed from an 'anchor'", element);
+        {
+            fail (path + (isVertex ? ": 'objectBounds' is not available to a 'vertex', which is one point of its line"
+                                   : ": 'objectBounds' is not available to a text placed from an 'anchor'"),
+                  element);
+        }
 
         if (! shape->shapePath.has_value())
         {
@@ -2510,6 +3063,7 @@ private:
     ExpressionContext& context;
     const DrawingScope& drawingScope;
     const DrawingResolver& drawingResolver;
+    const ShaderResolver& shaderResolver;
     Compiled& result;
     std::map<String, PropertyInput> propertyInputs;
     std::vector<DataTree> expansions;
@@ -2584,26 +3138,54 @@ public:
     }
 
     /* Returns a compilation whose symbols resolve in the scope to the types they had when compiled, and
-       whose drawings found by name are still the same, if any. */
-    std::shared_ptr<const Compiled> find (const DataTree& drawing, const DrawingScope& scope, const DrawingResolver& drawingResolver)
+       whose drawings and shaders found by name are still the same, if any. */
+    std::shared_ptr<const Compiled> find (const DataTree& drawing,
+                                          const DrawingScope& scope,
+                                          const DrawingResolver& drawingResolver,
+                                          const ShaderResolver& shaderResolver)
     {
+        const auto shape = getShape (drawing);
+
         for (auto it = entries.begin(); it != entries.end();)
         {
-            auto candidate = it->compiled.lock();
-            if (candidate == nullptr)
+            if (it->compiled.expired())
             {
                 it = entries.erase (it);
                 continue;
             }
 
-            if (it->drawing.isEquivalentTo (drawing)
+            // Most entries are told apart by their shape alone, without comparing their trees
+            auto candidate = it->shape == shape ? it->compiled.lock() : nullptr;
+
+            if (candidate != nullptr
+                && it->drawing.isEquivalentTo (drawing)
                 && std::all_of (candidate->symbols.begin(), candidate->symbols.end(), [&] (const auto& symbol)
                 {
                     return scope.resolveSymbol (symbol.first) == symbol.second;
                 })
+                && std::all_of (candidate->parts.begin(), candidate->parts.end(), [&] (const auto& part)
+                {
+                    const auto* found = scope.findPart (Identifier (part.first));
+                    return found != nullptr && found->isPlaceable == part.second;
+                })
                 && std::all_of (candidate->dependencies.begin(), candidate->dependencies.end(), [&] (const auto& dependency)
                 {
                     return drawingResolver != nullptr && drawingResolver (dependency.first).isEquivalentTo (dependency.second);
+                })
+                && std::all_of (candidate->shaderDependencies.begin(), candidate->shaderDependencies.end(), [&] (const auto& dependency)
+                {
+                    // A drawing of that name would be painted in place of the shader
+                    if (shaderResolver == nullptr || (drawingResolver != nullptr && drawingResolver (dependency.name).isValid()))
+                        return false;
+
+                    const auto found = shaderResolver (dependency.name);
+
+                    if (! found.block.isEquivalentTo (dependency.block) || (found.shader != nullptr) != dependency.isLoaded)
+                        return false;
+
+                    return found.shader == nullptr
+                        || (found.shader->getInputTextureNames() == dependency.textureNames
+                            && found.shader->getUniformLayout().hasMember ("time") == dependency.hasTime);
                 }))
             {
                 return candidate;
@@ -2623,26 +3205,49 @@ public:
         }),
                        entries.end());
 
-        entries.push_back ({ drawing.clone(), compiled });
+        entries.push_back ({ drawing.clone(), getShape (drawing), compiled });
     }
 
 private:
     struct Entry
     {
         DataTree drawing;
+        size_t shape = 0;
         std::weak_ptr<const Compiled> compiled;
     };
+
+    /* A number that trees which are equivalent share: the type of the root with how many properties and children
+       it has, then the same of each of its children. Those are compared exactly, when the value of a property can
+       be equal to another in more than one form. */
+    static size_t getShape (const DataTree& tree)
+    {
+        const auto add = [] (size_t shape, const DataTree& element)
+        {
+            for (const auto part : { std::hash<Identifier>() (element.getType()), (size_t) element.getNumProperties(), (size_t) element.getNumChildren() })
+                shape = shape * 1000003 + part;
+
+            return shape;
+        };
+
+        auto shape = add (0, tree);
+
+        for (const auto& child : tree)
+            shape = add (shape, child);
+
+        return shape;
+    }
 
     std::vector<Entry> entries;
 };
 
 //==============================================================================
-DrawingStyle::DrawingStyle (Component& target, DrawingScope::ComponentResolver componentResolver)
+DrawingStyle::DrawingStyle (Component& target, DrawingScope::ComponentResolver resolverToUse)
     : targetComponent (&target)
+    , componentResolver (std::move (resolverToUse))
     , context (getDrawingBaseContext().context)
     , scope (target, context)
 {
-    scope.setComponentResolver (std::move (componentResolver));
+    scope.setComponentResolver (componentResolver);
 }
 
 DrawingStyle::~DrawingStyle() = default;
@@ -2650,40 +3255,63 @@ DrawingStyle::~DrawingStyle() = default;
 ResultValue<DrawingStyle::Ptr> DrawingStyle::create (Component& target,
                                                      const DataTree& drawing,
                                                      DrawingScope::ComponentResolver componentResolver,
-                                                     YuiDiagnostic* failure,
-                                                     const DrawingResolver& drawingResolver)
+                                                     DataTreeDiagnostic* failure,
+                                                     const DrawingResolver& drawingResolver,
+                                                     const ShaderResolver& shaderResolver)
 {
     DrawingStyle::Ptr style (new DrawingStyle (target, std::move (componentResolver)));
+    style->drawingTree = drawing;
 
     auto& cache = CompiledCache::getInstance();
-    auto compiled = cache.find (drawing, style->scope, drawingResolver);
+    auto compiled = cache.find (drawing, style->scope, drawingResolver, shaderResolver);
 
     if (compiled == nullptr)
     {
         auto result = std::make_shared<Compiled>();
 
-        if (const auto compiledResult = Compiler (style->context, style->scope, drawingResolver, *result).compile (drawing, failure); compiledResult.failed())
+        if (const auto compiledResult = Compiler (style->context, style->scope, drawingResolver, shaderResolver, *result).compile (drawing, failure); compiledResult.failed())
             return makeResultValueFail (compiledResult.getErrorMessage());
 
         cache.add (drawing, result);
         compiled = std::move (result);
     }
 
-    style->instantiate (std::move (compiled));
+    style->instantiate (std::move (compiled), shaderResolver);
     return makeResultValueOk (std::move (style));
 }
 
-void DrawingStyle::instantiate (std::shared_ptr<const Compiled> compiledToUse)
+void DrawingStyle::instantiate (std::shared_ptr<const Compiled> compiledToUse, const ShaderResolver& shaderResolver)
 {
     compiled = std::move (compiledToUse);
     slots = std::make_unique<Slot[]> (compiled->evaluated.size());
+    shaderStates = std::make_unique<ShaderState[]> (compiled->shaders.size());
     propertyValues.resize (compiled->properties.size());
     propertyArrays.resize (compiled->properties.size());
+    propertySeries.resize (compiled->properties.size());
     levelBounds.resize ((size_t) compiled->numLevels);
     loopIndices.resize ((size_t) compiled->numLoops);
 
     for (const auto& pattern : compiled->patterns)
         patternSources.push_back (std::make_unique<PatternSource> (*this, *pattern));
+
+    for (const auto* layer : compiled->filtered)
+        filterSources.push_back (std::make_unique<FilterSource> (*this, *layer));
+
+    // The compilation is shared with styles finding other shaders under the same names, so each keeps the ones it found
+    bool isGivenTime = false;
+
+    for (size_t i = 0; i < compiled->shaders.size(); ++i)
+    {
+        const auto& use = *compiled->shaders[i]->shader;
+
+        if (shaderResolver != nullptr)
+            shaderStates[i].shader = shaderResolver (use.name).shader;
+
+        isGivenTime = isGivenTime || use.isGivenTime;
+    }
+
+    if (auto* target = targetComponent.get(); target != nullptr && isGivenTime)
+        frameAttachment.emplace (*target, bindFront (&DrawingStyle::advance, this));
 
     for (size_t i = 0; i < compiled->evaluated.size(); ++i)
     {
@@ -2738,6 +3366,19 @@ void DrawingStyle::instantiate (std::shared_ptr<const Compiled> compiledToUse)
     }
 }
 
+void DrawingStyle::advance (double elapsedSeconds)
+{
+    auto* target = targetComponent.get();
+
+    // The time stands still while the component is hidden or has another style, and while its last paint drew no shader that
+    // is given the time: one that is not visible, or that the device can't draw
+    if (target == nullptr || ! target->isShowing() || target->getStyle().get() != this || ! paintedShaderTime)
+        return;
+
+    shaderTime = detail::advanceShaderTime (shaderTime, elapsedSeconds);
+    target->repaint();
+}
+
 std::vector<DrawingStyle::ElementDescription> DrawingStyle::getElementDescriptions()
 {
     return Compiler::describeElements();
@@ -2758,6 +3399,98 @@ const std::vector<ComponentProperty>& DrawingStyle::getProperties() const noexce
     return compiled->properties;
 }
 
+std::vector<DrawingStyle::Shader> DrawingStyle::getShaders() const
+{
+    std::vector<Shader> used;
+
+    for (const auto& dependency : compiled->shaderDependencies)
+    {
+        // Every use of a name has the shader the resolver gave for it
+        for (size_t i = 0; i < compiled->shaders.size(); ++i)
+        {
+            if (compiled->shaders[i]->shader->name == dependency.name)
+            {
+                used.push_back ({ dependency.block, shaderStates[i].shader });
+                break;
+            }
+        }
+    }
+
+    return used;
+}
+
+std::vector<DrawingStyle::ShaderFailure> DrawingStyle::getShaderFailures() const
+{
+    std::vector<ShaderFailure> failures;
+
+    for (size_t i = 0; i < compiled->shaders.size(); ++i)
+    {
+        const auto& kept = shaderStates[i];
+
+        if (kept.error.isEmpty())
+            continue;
+
+        ShaderFailure failure;
+        failure.shader.shader = kept.shader;
+        failure.message = kept.error;
+
+        for (const auto& dependency : compiled->shaderDependencies)
+        {
+            if (dependency.name == compiled->shaders[i]->shader->name)
+                failure.shader.block = dependency.block;
+        }
+
+        failures.push_back (std::move (failure));
+    }
+
+    return failures;
+}
+
+void DrawingStyle::releaseResources()
+{
+    // With the device goes what it refused: the shaders are asked of the device of the next window
+    for (size_t i = 0; i < compiled->shaders.size(); ++i)
+    {
+        auto& kept = shaderStates[i];
+
+        kept.target = nullptr;
+        kept.series.clear();
+        kept.device = nullptr;
+        kept.error.clear();
+    }
+
+    for (auto& source : patternSources)
+        source->releaseResources();
+
+    for (auto& source : filterSources)
+        source->releaseResources();
+}
+
+ResultValue<DrawingStyle::Ptr> DrawingStyle::createWithShaders (const ShaderResolver& shaderResolver, DataTreeDiagnostic* failure) const
+{
+    auto* target = targetComponent.get();
+    if (target == nullptr)
+        return makeResultValueFail ("The component the drawing was created for is gone");
+
+    // The drawings it paints are the ones it found: what gave them may be gone
+    const auto findUsedDrawing = [this] (const String& name)
+    {
+        const auto used = std::find_if (compiled->dependencies.begin(), compiled->dependencies.end(), [&name] (const auto& dependency)
+        {
+            return dependency.first == name;
+        });
+
+        return used != compiled->dependencies.end() ? used->second : DataTree();
+    };
+
+    auto created = create (*target, drawingTree, componentResolver, failure, findUsedDrawing, shaderResolver);
+
+    if (created.wasOk() && imageResolver != nullptr)
+        created.getReference()->setImageResolver (imageResolver);
+
+    return created;
+}
+
 void DrawingStyle::setImageResolver (ImageResolver newResolver)
 {
     imageResolver = std::move (newResolver);
@@ -2766,21 +3499,84 @@ void DrawingStyle::setImageResolver (ImageResolver newResolver)
     for (size_t i = 0; i < compiled->evaluated.size(); ++i)
         slots[i].imageCache.clear();
 
+    redrawPictures();
+}
+
+void DrawingStyle::redrawPictures()
+{
     for (auto& source : patternSources)
         source->markDirty();
 
-    for (auto& [node, source] : filterSources)
+    for (auto& source : filterSources)
         source->markDirty();
 
     if (auto* target = targetComponent.get())
         target->repaint();
 }
 
-/* Reads what the programs take from the component for a paint, and returns the bounds it is painted in. */
+/* Follows the document the files of the images and of the SVG are read through, which tells when one of them changes.
+   Another document has other files: what was read through the one before is read again by the paint going on. */
+void DrawingStyle::followDocument (ComponentDocument* document)
+{
+    if (documentLink == nullptr && document != nullptr)
+        documentLink = std::make_unique<DocumentLink> (*this);
+
+    if (documentLink == nullptr || ! documentLink->follow (document))
+        return;
+
+    for (size_t i = 0; i < compiled->evaluated.size(); ++i)
+    {
+        slots[i].imageCache.clear();
+        slots[i].svgCache.clear();
+    }
+}
+
+/* Forgets the images and the SVG read from a file that changed, and has what was drawn with them drawn again. */
+void DrawingStyle::forgetPictures (const String& path)
+{
+    const auto isRead = [&path] (const auto& kept)
+    {
+        return kept.first.trim() == path;
+    };
+
+    size_t numForgotten = 0;
+
+    for (size_t i = 0; i < compiled->evaluated.size(); ++i)
+        numForgotten += std::erase_if (slots[i].imageCache, isRead) + std::erase_if (slots[i].svgCache, isRead);
+
+    if (numForgotten > 0)
+        redrawPictures();
+}
+
+/* Reads what the programs take from the component for a paint, and returns the bounds it is painted in. An array is
+   read once for all the programs: where the component keeps it when it is a series of the type the drawing declares,
+   else converted from the var it is given as. */
 Rectangle<float> DrawingStyle::readComponent (const Component& component)
 {
+    scope.beginUpdates();
+
     for (size_t i = 0; i < propertyValues.size(); ++i)
-        propertyValues[i] = component.findProperty (compiled->properties[i].name);
+    {
+        const auto& property = compiled->properties[i];
+
+        propertySeries[i].reset();
+
+        if (property.type == ComponentProperty::Type::array)
+        {
+            const auto* reflected = component.getTypeInfo().findProperty (property.name);
+
+            if (reflected != nullptr && reflected->isSeries() && reflected->elementType == property.elementType)
+            {
+                propertySeries[i] = reflected->arrayGetter (component);
+                continue;
+            }
+        }
+
+        propertyValues[i] = component.findProperty (property.name);
+
+        if (property.type == ComponentProperty::Type::array)
+            propertyArrays[i].assign (property.elementType, propertyValues[i]);
+    }
 
     const auto bounds = component.getLocalBounds();
 
@@ -2795,7 +3591,10 @@ void DrawingStyle::paint (Graphics& g, const ApplicationTheme& theme, const Comp
     const auto font = theme.getDefaultFont();
     const auto bounds = readComponent (component);
 
+    paintedShaderTime = false;
+
     const ScopedValueSetter<const Font*> painting (paintFont, std::addressof (font));
+    const ScopedValueSetter<const Component*> painted (paintedComponent, std::addressof (component));
     drawNodes (g, compiled->nodes, { font, bounds, g.getTransform() }, 1);
 }
 
@@ -2808,7 +3607,13 @@ std::vector<DrawingStyle::ElementBounds> DrawingStyle::measureElements (const Co
     std::vector<ElementBounds> measured;
 
     const ScopedValueSetter<const Font*> painting (paintFont, std::addressof (font));
+    const ScopedValueSetter<const Component*> painted (paintedComponent, std::addressof (component));
     measureNodes (compiled->nodes, { font, bounds, {} }, {}, 1, measured);
+
+    // The elements of the filtered layers were evaluated here, where nothing is drawn: what is kept of them
+    // can't be told from their states any more
+    for (auto& source : filterSources)
+        source->markDirty();
 
     return measured;
 }
@@ -2871,7 +3676,7 @@ Rectangle<float> DrawingStyle::measureNode (const Node& node,
 
     // An element is told before what it holds, as it is painted
     const auto index = measured.size();
-    measured.push_back ({ node.path, node.type, node.id, {}, {}, numRows });
+    measured.push_back ({ node.path, node.type, node.id, {}, {}, numRows, {} });
 
     if (node.kind == Node::Kind::shape)
     {
@@ -3008,7 +3813,34 @@ Rectangle<float> DrawingStyle::measureNode (const Node& node,
         case Node::Kind::clip:
         case Node::Kind::layer:
             bounds = measureNodes (node.children, context, transform, numRows, measured);
+
+            if (node.filter != nullptr)
+                measureFilterShaders (*node.filter, context, transform, numRows, measured);
+
             break;
+
+        case Node::Kind::shader:
+        {
+            const auto area = slot->state->get (node.area);
+            const auto placed = node.transform.isValid() ? slot->state->get (node.transform).followedBy (transform) : transform;
+
+            bounds = area.transformed (placed);
+            measured[index].uniforms = prepareShader (node, slot, area, placed, 1.0f, std::numeric_limits<int>::max()).uniforms;
+            break;
+        }
+
+        case Node::Kind::part:
+        {
+            const auto* painted = getPaintedComponent();
+            const auto* part = painted != nullptr ? painted->getTypeInfo().findPart (node.part) : nullptr;
+            if (part == nullptr)
+                return skip();
+
+            const auto area = node.placesPart && part->isPlaceable ? slot->state->get (node.area) : part->getArea (*painted);
+
+            bounds = area.transformed (node.transform.isValid() ? slot->state->get (node.transform).followedBy (transform) : transform);
+            break;
+        }
 
         case Node::Kind::shape:
         case Node::Kind::image:
@@ -3026,26 +3858,51 @@ Rectangle<float> DrawingStyle::measureNode (const Node& node,
     return bounds;
 }
 
-DrawingStyle::Slot* DrawingStyle::prepare (const Node& node, const PaintContext& context)
+/* Tells the shaders a filter runs, each with the bounds of the filter and the uniforms it is given. */
+void DrawingStyle::measureFilterShaders (const Node& filterNode,
+                                         const PaintContext& context,
+                                         const AffineTransform& transform,
+                                         int numRows,
+                                         std::vector<ElementBounds>& measured)
 {
-    if (node.slot < 0)
-        return nullptr;
+    auto* filterSlot = prepare (filterNode, context);
+    if (filterSlot == nullptr)
+        return;
 
-    auto& slot = slots[(size_t) node.slot];
+    filterSlot->state->evaluate();
+
+    const auto region = filterSlot->state->get (filterNode.area);
+
+    for (const auto& child : filterNode.children)
+        if (child->shader != nullptr)
+            measured.push_back ({ child->path, child->type, child->id, region.transformed (transform), {}, numRows, readFilterUniforms (*child, context, region, transform, 1.0f) });
+}
+
+/* Gives the state of a node what its program reads, but the turns of the repeats around it: the component, the font,
+   the properties of the drawing, the bounds of the levels below a given one and the patterns defined below it.
+   Returns the revisions of the patterns the node paints with, added up. */
+uint32 DrawingStyle::feedInputs (const Node& node, Slot& slot, const PaintContext& context, int numLevels)
+{
     const auto& base = getDrawingBaseContext();
+    uint32 patternRevisions = 0;
 
     slot.state->set (base.bounds, levelBounds.front());
     slot.state->set (base.font, context.font);
     scope.updateInputs (slot.inputs, *slot.state);
 
     for (const auto& input : node.levels)
-        slot.state->set (ExpressionInput<Rectangle<float>> { input.input }, levelBounds[(size_t) input.index]);
-
-    for (const auto& input : node.loops)
-        slot.state->set (ExpressionInput<int> { input.input }, loopIndices[(size_t) input.index]);
+        if (input.index < numLevels)
+            slot.state->set (ExpressionInput<Rectangle<float>> { input.input }, levelBounds[(size_t) input.index]);
 
     for (const auto& input : node.patterns)
-        slot.state->set (ExpressionInput<PatternPaint> { input.input }, preparePattern (input.index, context).paint);
+    {
+        auto& pattern = *patternSources[(size_t) input.index];
+
+        if (pattern.node.boundsLevel < numLevels)
+            slot.state->set (ExpressionInput<PatternPaint> { input.input }, preparePattern (input.index, context).paint);
+
+        patternRevisions += pattern.revision;
+    }
 
     for (const auto& input : node.properties)
     {
@@ -3054,11 +3911,91 @@ DrawingStyle::Slot* DrawingStyle::prepare (const Node& node, const PaintContext&
 
         if (input.isSet)
             slot.state->set (ExpressionInput<bool> { input.input }, ! value.isVoid());
-        else if (! value.isVoid() || property.type == ComponentProperty::Type::array)
+        else if (const auto& series = propertySeries[(size_t) input.property])
+            DrawingScope::bindArrayView (*slot.state, input.input, property.elementType, *series);
+        else if (property.type == ComponentProperty::Type::array)
+            propertyArrays[(size_t) input.property].attach (*slot.state, input.input);
+        else if (! value.isVoid())
             DrawingScope::setInputValue (*slot.state, input.input, property.type, property.elementType, value, propertyArrays[(size_t) input.property]);
     }
 
+    return patternRevisions;
+}
+
+DrawingStyle::Slot* DrawingStyle::prepare (const Node& node, const PaintContext& context)
+{
+    if (node.slot < 0)
+        return nullptr;
+
+    auto& slot = slots[(size_t) node.slot];
+
+    slot.patternRevisions = feedInputs (node, slot, context, compiled->numLevels);
+
+    for (const auto& input : node.loops)
+        slot.state->set (ExpressionInput<int> { input.input }, loopIndices[(size_t) input.index]);
+
     return &slot;
+}
+
+/* Tells whether the elements of a tile or of a filtered layer may draw something else than they did the last time
+   they were drawn, without evaluating them: they can't while each of their programs still reads what it was last
+   evaluated with, which was when they were drawn. Whatever evaluates them elsewhere, as measuring or drawing a
+   layer without its filter do, has to mark what is kept of them. Only what comes from around them is given to
+   their programs: the levels from the given one on, the patterns defined there and the turns of the repeats, none
+   of which is around a tile or a filtered layer, are made of what the elements before them read. What a repeat
+   draws turn after turn is told for all its turns. */
+bool DrawingStyle::hasContentChanged (const std::vector<std::unique_ptr<Node>>& nodes, const PaintContext& context, int numLevels, bool isDrawnByTurns)
+{
+    // The ones that always may are found before anything is given to the programs of the others
+    const bool holdsMoreThanIsRead = std::any_of (nodes.begin(), nodes.end(), [] (const auto& node)
+    {
+        return node->paintsMoreThanItReads();
+    });
+
+    return holdsMoreThanIsRead || std::any_of (nodes.begin(), nodes.end(), [&] (const auto& node)
+    {
+        return hasContentChanged (*node, context, numLevels, isDrawnByTurns);
+    });
+}
+
+bool DrawingStyle::hasContentChanged (const Node& node, const PaintContext& context, int numLevels, bool isDrawnByTurns)
+{
+    if (node.paintsMoreThanItReads())
+        return true;
+
+    if (node.slot >= 0)
+    {
+        auto& slot = slots[(size_t) node.slot];
+        const auto& state = *slot.state;
+
+        // The tile of a pattern drawn again since the node was drawn changes what the node paints
+        if (feedInputs (node, slot, context, numLevels) != slot.patternRevisions || ! state.isUpToDate())
+            return true;
+
+        // What the node holds was not drawn then, and would not be now. A state evaluated turn after turn only
+        // tells it of its last turn, so what it holds is looked at whatever it tells
+        const bool isHidden = (node.visible.isValid() && ! state.get (node.visible))
+                           || (node.opacity.isValid() && state.get (node.opacity) <= 0.0f)
+                           || (node.kind == Node::Kind::repeat && state.get (node.end) <= state.get (node.start));
+
+        if (isHidden && ! isDrawnByTurns)
+            return false;
+    }
+
+    for (const auto& input : node.patterns)
+    {
+        const auto& pattern = *compiled->patterns[(size_t) input.index];
+
+        if (pattern.boundsLevel >= numLevels && hasContentChanged (pattern, context, numLevels, false))
+            return true;
+    }
+
+    const bool holdsTurns = isDrawnByTurns || node.loopLevel >= 0;
+
+    return hasContentChanged (node.children, context, numLevels, holdsTurns)
+        || hasContentChanged (node.masks, context, numLevels, holdsTurns)
+        || hasContentChanged (node.clipShapes, context, numLevels, holdsTurns)
+        || (node.filter != nullptr && hasContentChanged (*node.filter, context, numLevels, holdsTurns));
 }
 
 /* Evaluates a pattern once per paint: where its tiles are, and whether the tile has to be drawn again. */
@@ -3086,8 +4023,19 @@ DrawingStyle::PatternSource& DrawingStyle::preparePattern (int index, const Pain
                                                            Justification (node.justification.isValid() ? state.get (node.justification) : Justification::center));
     }
 
-    if (! node.isStatic || tile != source.tile || contentBounds != source.contentBounds || contentTransform != source.contentTransform)
+    // A static tile only changes with where it is drawn, any other one with what its elements read too
+    const bool isKept = tile == source.tile
+                     && contentBounds == source.contentBounds
+                     && contentTransform == source.contentTransform
+                     && context.font == source.font
+                     && (node.isStatic || ! hasContentChanged (node.children, context, node.boundsLevel, false));
+
+    if (! isKept)
+    {
         source.markDirty();
+        source.font = context.font;
+        ++source.revision;
+    }
 
     source.tile = tile;
     source.contentBounds = contentBounds;
@@ -3099,10 +4047,14 @@ DrawingStyle::PatternSource& DrawingStyle::preparePattern (int index, const Pain
     return source;
 }
 
-void DrawingStyle::drawPattern (Graphics& g, const PatternSource& source)
+void DrawingStyle::drawPattern (Graphics& g, PatternSource& source)
 {
+    // A tile asked for outside of a paint is not drawn, and is not kept as if it were
     if (paintFont == nullptr)
+    {
+        source.markDirty();
         return;
+    }
 
     const auto savedState = g.saveState();
     const PaintContext context { *paintFont, source.tile.withZeroPosition(), g.getTransform() };
@@ -3245,9 +4197,8 @@ void DrawingStyle::drawNode (Graphics& g, const Node& node, const PaintContext& 
 
     if (node.kind == Node::Kind::image || node.kind == Node::Kind::svg)
     {
-        File baseDirectory;
-        if (const auto* document = YuiDocument::findDocumentFor (targetComponent.get()))
-            baseDirectory = document->getBaseDirectory();
+        const auto* target = targetComponent.get();
+        followDocument (ComponentDocument::findFor (target));
 
         for (int startRow = 0; startRow < numRows;)
         {
@@ -3306,35 +4257,12 @@ void DrawingStyle::drawNode (Graphics& g, const Node& node, const PaintContext& 
 
                 if (node.kind == Node::Kind::svg)
                 {
-                    if (const auto drawable = resolveDrawingSvg (slot->svgCache, src, node.svgInlineOnly, baseDirectory))
+                    if (const auto drawable = resolveDrawingSvg (slot->svgCache, src, node.svgInlineOnly, target))
                         drawable->paint (g, targetArea, fitting, justification);
                 }
-                else
+                else if (const auto& image = resolveDrawingImage (slot->imageCache, src, target, imageResolver); image.isValid())
                 {
-                    const auto& image = resolveDrawingImage (slot->imageCache, src, baseDirectory, imageResolver);
-                    if (! image.isValid())
-                        continue;
-
-                    const Rectangle<float> sourceBounds { 0.0f, 0.0f, static_cast<float> (image.getWidth()), static_cast<float> (image.getHeight()) };
-
-                    if (fitting == Fitting::tile)
-                    {
-                        // One fill, however many tiles the area holds
-                        g.setFillImage (image, AffineTransform::translation (targetArea.getX(), targetArea.getY()), { ImageWrap::Repeat, ImageWrap::Repeat, ImageFilter::Linear });
-                        g.setFeather (0.0f);
-                        g.fillRect (targetArea);
-                    }
-                    else
-                    {
-                        const auto destBounds = sourceBounds.transformed (sourceBounds.getTransformToFit (targetArea, fitting, justification));
-                        if (destBounds.isEmpty())
-                            continue;
-
-                        if (! targetArea.contains (destBounds))
-                            g.setClipPath (targetArea);
-
-                        g.drawImage (image, destBounds);
-                    }
+                    detail::drawFittedImage (g, image, targetArea, fitting, justification);
                 }
             }
 
@@ -3450,6 +4378,10 @@ void DrawingStyle::drawNode (Graphics& g, const Node& node, const PaintContext& 
 
                 if (drawFilteredLayer (g, node, context, numRows))
                     break;
+
+                // Drawn as they are, the elements are evaluated where no raster is made of them: the one kept of
+                // them is no longer what their states tell
+                filterSources[(size_t) node.filterIndex]->markDirty();
             }
 
             if (opacity >= 1.0f && ! hasBlend && ! hasMasks)
@@ -3538,6 +4470,14 @@ void DrawingStyle::drawNode (Graphics& g, const Node& node, const PaintContext& 
             break;
         }
 
+        case Node::Kind::shader:
+            drawShader (g, node, *slot, context, numRows);
+            break;
+
+        case Node::Kind::part:
+            drawPart (g, node, *slot, context, numRows);
+            break;
+
         case Node::Kind::shape:
         case Node::Kind::image:
         case Node::Kind::svg:
@@ -3549,6 +4489,232 @@ void DrawingStyle::drawNode (Graphics& g, const Node& node, const PaintContext& 
         case Node::Kind::filterPrimitive:
             break;
     }
+}
+
+/* Paints a part of the component with the paint its element sets, where the element tells or where the component puts it.
+   The part is the one the component being painted declares, and the theme paints it as it does for the painter of the
+   component. */
+void DrawingStyle::drawPart (Graphics& g, const Node& node, Slot& slot, const PaintContext& context, int numRows)
+{
+    const auto* painted = getPaintedComponent();
+    const auto* part = painted != nullptr ? painted->getTypeInfo().findPart (node.part) : nullptr;
+    if (part == nullptr)
+        return;
+
+    auto& state = *slot.state;
+    const auto opacity = node.opacity.isValid() ? jlimit (0.0f, 1.0f, state.get (node.opacity)) : 1.0f;
+
+    if (opacity <= 0.0f)
+        return;
+
+    const auto savedState = g.saveState();
+
+    applyClips (g, node, std::addressof (slot), context, numRows);
+
+    if (node.transform.isValid())
+        g.setTransform (state.get (node.transform).followedBy (g.getTransform()));
+
+    if (opacity < 1.0f)
+        g.setOpacity (g.getOpacity() * opacity);
+
+    if (node.blend.isValid())
+        g.setBlendMode (state.get (node.blend));
+
+    if (node.tint.isValid())
+        g.setTint (state.get (node.tint));
+
+    if (node.fill.isValid())
+        g.setFillColor (state.get (node.fill));
+
+    if (node.stroke.isValid())
+        g.setStrokeColor (state.get (node.stroke));
+
+    if (node.strokeWidth.isValid())
+        g.setStrokeWidth (state.get (node.strokeWidth));
+
+    const auto area = node.placesPart && part->isPlaceable ? state.get (node.area) : part->getArea (*painted);
+
+    ApplicationTheme::paintComponentPart (g, *painted, node.part, area);
+}
+
+/* The component being painted: the one given to paint, or the one the style was made for when a tile or a filtered
+   layer is drawn on its own. */
+const Component* DrawingStyle::getPaintedComponent() const
+{
+    return paintedComponent != nullptr ? paintedComponent : targetComponent.get();
+}
+
+/* Returns the uniforms a `use` gives the shader it runs: the values of the properties set where it is or by their default,
+   read from the state of its program once it is evaluated, and zeros for the others. */
+ShaderUniforms DrawingStyle::readUniforms (const Node& node, const Slot* slot) const
+{
+    const auto& use = *node.shader;
+    const auto& shader = shaderStates[(size_t) use.index].shader;
+
+    if (shader == nullptr)
+        return {};
+
+    auto uniforms = shader->createUniforms();
+
+    for (size_t i = 0; slot != nullptr && i < use.properties.size(); ++i)
+    {
+        const auto& property = use.properties[i];
+
+        if (use.outputs[i] < 0)
+            continue;
+
+        // An array is given where it is. The block has no member for one that fills a texture, which takes nothing
+        if (property.type == ComponentProperty::Type::array)
+            uniforms.set (property.name.toString(), getOutputNumbers (*slot->state, use.outputs[i]));
+        else
+            ShaderProperty::setUniform (uniforms, property, getOutputValue (*slot->state, use.outputs[i], property.type));
+    }
+
+    return uniforms;
+}
+
+/* Returns the revision of the series whose numbers are at an address: one the drawing declares as a property, or one its
+   elements read from a component. Returns 0 for numbers that are no series, or whose revision is not tracked. */
+uint32 DrawingStyle::findSeriesRevision (const void* numbers) const noexcept
+{
+    if (numbers == nullptr)
+        return 0;
+
+    for (const auto& series : propertySeries)
+    {
+        if (series.has_value() && series->data == numbers)
+            return series->revision;
+    }
+
+    return scope.findSeriesRevision (numbers);
+}
+
+/* Returns the uniforms a filter gives a shader it runs, for the picture the bounds of the filter are under a transform:
+   the pixels the layer takes where it is drawn, whatever the raster the filter runs on, whose size is another matter. */
+ShaderUniforms DrawingStyle::readFilterUniforms (const Node& node,
+                                                 const PaintContext& context,
+                                                 const Rectangle<float>& region,
+                                                 const AffineTransform& transform,
+                                                 float contextScale)
+{
+    auto* slot = prepare (node, context);
+
+    if (slot != nullptr)
+        slot->state->evaluate();
+
+    return prepareShader (node, slot, region, transform, contextScale, std::numeric_limits<int>::max()).uniforms;
+}
+
+/* Returns the picture a shader is painted as in an area: the pixels the area takes under a transform, for a Graphics of a
+   scale, and the uniforms the shader is given for them. The slot is the one of the node, null when it sets nothing. */
+DrawingStyle::ShaderPicture DrawingStyle::prepareShader (const Node& node,
+                                                         const Slot* slot,
+                                                         const Rectangle<float>& area,
+                                                         const AffineTransform& transform,
+                                                         float contextScale,
+                                                         int maxSize) const
+{
+    const auto pixelsPerUnit = getPixelsPerUnit (transform, contextScale);
+
+    ShaderPicture picture;
+    picture.width = getNumPixels (area.getWidth(), pixelsPerUnit.getWidth(), maxSize);
+    picture.height = getNumPixels (area.getHeight(), pixelsPerUnit.getHeight(), maxSize);
+    picture.uniforms = readUniforms (node, slot);
+
+    detail::setShaderStandardUniforms (picture.uniforms, node.shader->properties, picture.width, picture.height, getShaderScale (pixelsPerUnit), shaderTime);
+
+    return picture;
+}
+
+/* Paints a shader in the bounds of its element: drawn into a texture of the size the bounds take in pixels, kept until
+   what the shader is given changes, then drawn there under the transform, the opacity, the blend mode and the clips of
+   the element. */
+void DrawingStyle::drawShader (Graphics& g, const Node& node, Slot& slot, const PaintContext& context, int numRows)
+{
+    auto& state = *slot.state;
+    auto& kept = shaderStates[(size_t) node.shader->index];
+
+    const auto area = state.get (node.area);
+    const auto opacity = node.opacity.isValid() ? jlimit (0.0f, 1.0f, state.get (node.opacity)) : 1.0f;
+
+    // Without a GPU there is no texture of any size, and nothing is drawn
+    const auto device = g.getGraphicsContext().getGpuDevice();
+    const auto maxSize = device != nullptr ? static_cast<int> (device->getMaximumTextureSize (GpuTextureType::texture2D)) : 0;
+
+    if (kept.shader == nullptr || area.isEmpty() || opacity <= 0.0f || maxSize <= 0)
+        return;
+
+    const auto savedState = g.saveState();
+
+    applyClips (g, node, std::addressof (slot), context, numRows);
+
+    if (node.transform.isValid())
+        g.setTransform (state.get (node.transform).followedBy (g.getTransform()));
+
+    if (opacity < 1.0f)
+        g.setOpacity (g.getOpacity() * opacity);
+
+    if (node.blend.isValid())
+        g.setBlendMode (state.get (node.blend));
+
+    auto picture = prepareShader (node, std::addressof (slot), area, g.getTransform(), g.getContextScale(), maxSize);
+
+    // The series the shader samples are in textures of their own, each written again only when its series changed.
+    // A texture no series fills is a picture, which a shader painted here is not given: it can't be drawn
+    std::array<GpuTexture::Ptr, GpuImageShader::maxInputTextures> inputs;
+    const auto& textureNames = kept.shader->getInputTextureNames();
+    bool seriesChanged = false;
+
+    kept.series.resize (static_cast<size_t> (textureNames.size()));
+
+    for (int i = 0; i < textureNames.size(); ++i)
+    {
+        const auto property = detail::findShaderSeriesProperty (node.shader->properties, textureNames[i]);
+
+        if (property < 0)
+            continue;
+
+        const auto output = node.shader->outputs[static_cast<size_t> (property)];
+        const auto numbers = output >= 0 ? getOutputNumbers (state, output) : Span<const float>();
+
+        inputs[static_cast<size_t> (i)] = detail::updateShaderSeriesTexture (kept.series[static_cast<size_t> (i)], device, numbers, findSeriesRevision (numbers.data()), seriesChanged);
+    }
+
+    // The picture drawn last is the one to draw while nothing it was made of changed
+    const bool isKept = kept.target != nullptr
+                     && kept.device == device
+                     && kept.target->getWidth() == picture.width
+                     && kept.target->getHeight() == picture.height
+                     && kept.drawn == picture.uniforms
+                     && ! seriesChanged;
+
+    // What this device refused before is not asked of it again, nor told again
+    const bool wasRefused = kept.error.isNotEmpty() && kept.device == device;
+
+    const auto texture = isKept ? kept.target->asTexture()
+                                : detail::runImageShader (g.getGraphicsContext(),
+                                                          kept.device,
+                                                          kept.target,
+                                                          kept.error,
+                                                          *kept.shader,
+                                                          picture.uniforms,
+                                                          picture.width,
+                                                          picture.height,
+                                                          Span<const GpuTexture::Ptr> (inputs.data(), static_cast<size_t> (textureNames.size())));
+
+    if (! wasRefused && kept.error.isNotEmpty())
+        detail::requestShaderFailureReport (targetComponent.get());
+
+    if (texture == nullptr)
+    {
+        kept.target = nullptr;
+        return;
+    }
+
+    kept.drawn = std::move (picture.uniforms);
+    paintedShaderTime = paintedShaderTime || node.shader->isGivenTime;
+
+    g.drawTexture (texture, area);
 }
 
 /* Draws a layer through its filter: its elements in a raster covering the bounds of the filter, kept while they
@@ -3567,15 +4733,24 @@ bool DrawingStyle::drawFilteredLayer (Graphics& g, const Node& node, const Paint
     if (region.isEmpty())
         return false;
 
-    FilterGraph filter;
+    auto* const source = filterSources[(size_t) node.filterIndex].get();
+
+    // The primitives are written again over those of the last paint, which the source is only given when they differ
+    auto& filter = source->graph;
     filter.linearColors = filterNode.linearColors;
+    filter.primitives.clear();
 
     for (const auto& child : filterNode.children)
     {
         const auto& outputs = *child->filterPrimitive;
         auto primitive = outputs.base;
 
-        if (auto* slot = prepare (*child, context))
+        if (child->shader != nullptr)
+        {
+            primitive.shader = shaderStates[(size_t) child->shader->index].shader;
+            primitive.uniforms = readFilterUniforms (*child, context, region, g.getTransform(), g.getContextScale());
+        }
+        else if (auto* slot = prepare (*child, context))
         {
             auto& state = *slot->state;
             state.evaluate();
@@ -3629,27 +4804,69 @@ bool DrawingStyle::drawFilteredLayer (Graphics& g, const Node& node, const Paint
         filter.primitives.push_back (std::move (primitive));
     }
 
-    auto& source = filterSources[std::addressof (node)];
-    if (source == nullptr)
-        source = std::make_unique<FilterSource> (*this, node);
+    // The elements are drawn again when what they are drawn with changed: the region, the paint and the font they
+    // start from, the turns their repeats are left and, unless the layer is static, what their programs read
+    const FilterSource::Paint inherited { g.getFillColor(), g.getStrokeColor(), g.getStrokeType(), g.getFeather() };
 
-    if (! node.isStatic || region != source->region)
+    const bool isKept = region == source->region
+                     && inherited == source->paint
+                     && numLoopTurns == source->numLoopTurns
+                     && context.font == source->font
+                     && (node.isStatic || ! hasContentChanged (node.children, context, node.boundsLevel, false));
+
+    if (! isKept)
+    {
         source->markDirty();
+        source->region = region;
+        source->paint = inherited;
+        source->numLoopTurns = numLoopTurns;
+        source->font = context.font;
+    }
 
-    source->region = region;
-    source->setFilter (std::move (filter));
+    if (source->getFilter() != filter)
+        source->setFilter (filter);
 
     // The source only draws while the layer is
     const ScopedValueSetter<const Graphics*> parentScope (source->parent, std::addressof (g));
     const ScopedValueSetter<int> rowsScope (source->numRows, numRows);
 
-    return g.drawSource (*source, region);
+    const bool drawn = g.drawSource (*source, region);
+
+    // What prevented the filter from running a shader it has is kept where the shader is used: a primitive for each child
+    const auto& filterState = source->getFilterState();
+    int primitive = 0;
+
+    for (const auto& child : filterNode.children)
+    {
+        const bool hasFailed = primitive++ == filterState.getFailedPrimitive();
+
+        if (child->shader == nullptr)
+            continue;
+
+        // A shader that is not loaded was told when it was not: only what a shader could not be drawn for is kept
+        auto& kept = shaderStates[(size_t) child->shader->index];
+        const auto error = hasFailed && kept.shader != nullptr ? filterState.getShaderError() : String();
+
+        if (error == kept.error)
+            continue;
+
+        kept.error = error;
+
+        if (error.isNotEmpty())
+            detail::requestShaderFailureReport (targetComponent.get());
+    }
+
+    return drawn;
 }
 
-void DrawingStyle::drawFilteredContent (Graphics& g, const FilterSource& source)
+void DrawingStyle::drawFilteredContent (Graphics& g, FilterSource& source)
 {
+    // A layer asked for outside of its paint is not drawn, and is not kept as if it were
     if (paintFont == nullptr || source.parent == nullptr)
+    {
+        source.markDirty();
         return;
+    }
 
     const auto savedState = g.saveState();
 

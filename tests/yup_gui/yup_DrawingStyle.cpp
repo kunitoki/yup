@@ -20,6 +20,7 @@
 */
 
 #include <yup_gui/yup_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 
 #include <gtest/gtest.h>
 
@@ -71,6 +72,108 @@ protected:
         Graphics g (*context, *renderer);
 
         style.paint (g, *theme, component);
+    }
+
+    /** A member of the uniform block of a shader made by hand: its name, and how many floats it holds. */
+    using ShaderMember = std::pair<const char*, int>;
+
+    /** A shader that needs no compiler: its uniform block holds the members, each 16 bytes after the one before, and
+        it reads a number of textures, named as they are given or else `picture0`, `picture1`... Its bundle has a GLSL
+        variant only, which Metal can't draw.
+    */
+    static GpuImageShader::Ptr makeShader (std::initializer_list<ShaderMember> members, int numTextures = 0, const StringArray& textureNames = {})
+    {
+        const auto created = GpuImageShader::createFromBundle (makeShaderBundle (members, numTextures, textureNames));
+        EXPECT_TRUE (created.wasOk()) << created.getErrorMessage();
+        return created.wasOk() ? created.getValue() : nullptr;
+    }
+
+    /** The bundle of a shader made by hand, see makeShader. */
+    static ShaderBundle::Ptr makeShaderBundle (std::initializer_list<ShaderMember> members, int numTextures = 0, const StringArray& textureNames = {})
+    {
+        ShaderReflection reflection;
+
+        if (members.size() > 0)
+        {
+            ShaderReflection::ResourceBinding block;
+            block.name = "Parameters";
+            block.type = ShaderReflection::ResourceType::uniformBuffer;
+
+            for (const auto& [name, numFloats] : members)
+            {
+                ShaderReflection::ResourceMember member;
+                member.name = name;
+                member.offset = block.blockSize;
+                member.size = static_cast<uint32> (numFloats) * 4;
+                member.baseType = ShaderReflection::BaseType::float32;
+                member.vecSize = static_cast<uint32> (numFloats);
+
+                block.members.push_back (member);
+                block.blockSize += 16;
+            }
+
+            reflection.uniformBuffers.push_back (block);
+        }
+
+        for (int i = 0; i < numTextures; ++i)
+        {
+            ShaderReflection::ResourceBinding texture;
+            texture.name = i < textureNames.size() ? textureNames[i] : "picture" + String (i);
+            texture.type = ShaderReflection::ResourceType::separateImage;
+            texture.binding = static_cast<uint32> (i + 1);
+            texture.baseType = ShaderReflection::BaseType::image;
+            texture.imageDim = ShaderReflection::ImageDimension::dim2D;
+
+            reflection.separateImages.push_back (texture);
+        }
+
+        // The pixel every fragment stage writes
+        ShaderReflection::ResourceBinding pixel;
+        pixel.name = "color";
+        pixel.type = ShaderReflection::ResourceType::stageOutput;
+        pixel.baseType = ShaderReflection::BaseType::float32;
+        pixel.vecSize = 4;
+
+        reflection.stageOutputs.push_back (pixel);
+
+        ShaderBundle::Ptr bundle (new ShaderBundle());
+
+        for (const auto stage : { ShaderStage::vertex, ShaderStage::fragment })
+        {
+            ShaderInfo info;
+            info.stage = stage;
+            info.source = "void main() {}";
+
+            if (stage == ShaderStage::fragment)
+                info.reflection = reflection;
+
+            bundle->addShader (std::move (info));
+        }
+
+        return bundle;
+    }
+
+    /** Finds the `shader` blocks of a text by name, each compiled as the shader given for it: one given none could
+        not be loaded.
+    */
+    static DrawingStyle::ShaderResolver findShaders (const String& text, std::map<String, GpuImageShader::Ptr> shaders)
+    {
+        const auto parsed = YuiParser::parse (text);
+        EXPECT_TRUE (parsed.wasOk()) << DataTreeDiagnostic::join (parsed.diagnostics);
+
+        return [document = parsed.document, shaders = std::move (shaders)] (const String& name)
+        {
+            DrawingStyle::Shader found;
+
+            for (const auto& block : document)
+                if (block.getType() == Identifier ("shader") && block.getProperty ("name").toString() == name)
+                    found.block = block;
+
+            if (const auto shader = shaders.find (name); shader != shaders.end())
+                found.shader = shader->second;
+
+            return found;
+        };
     }
 
     // A knob made of independent shapes: a filled well, a translucent layer holding the
@@ -138,6 +241,46 @@ TEST_F (DrawingStyleTest, SetStyleIsReturnedByComponentStyleLookup)
     slider.setStyle (style.getReference());
 
     EXPECT_EQ (ApplicationTheme::findComponentStyle (slider).get(), style.getReference().get());
+}
+
+TEST_F (DrawingStyleTest, ADrawingOnAnOpaqueComponentLetsItsParentPaintBehindIt)
+{
+    struct Backdrop : Component
+    {
+        void paint (Graphics&) override { ++numPaints; }
+
+        int numPaints = 0;
+    };
+
+    Backdrop backdrop;
+    backdrop.setBounds (0.0f, 0.0f, 48.0f, 48.0f);
+    backdrop.setVisible (true);
+
+    // Opaque, as components are by default, and covering the whole backdrop
+    Component drawn;
+    drawn.setBounds (0.0f, 0.0f, 48.0f, 48.0f);
+    backdrop.addAndMakeVisible (drawn);
+
+    // A disc leaves the corners of the component to what is behind it
+    const auto parsed = YuiParser::parse (R"yui(
+        drawing Disc {
+            circle { center: bounds.center; radius: 20; fill: #ff0000; }
+        })yui");
+    ASSERT_TRUE (parsed.wasOk()) << parsed.diagnostics.front().toString();
+
+    auto style = DrawingStyle::create (drawn, parsed.document.getChildWithName ("drawing"));
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    drawn.setStyle (style.getReference());
+    ASSERT_TRUE (drawn.isOpaque());
+
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    auto renderer = context->makeRenderer (48, 48);
+    Graphics g (*context, *renderer);
+
+    yup::ComponentTestHelper<Component>::triggerPaint (backdrop, g, backdrop.getLocalBounds());
+
+    EXPECT_EQ (backdrop.numPaints, 1);
 }
 
 TEST_F (DrawingStyleTest, PaintsThroughComponentStyleWithoutThrowing)
@@ -412,7 +555,7 @@ TEST_F (DrawingStyleTest, CompilesAndPaintsDashedStrokesClipLayerMasksImagesAndS
             }
         }
     )yui");
-    ASSERT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics);
+    ASSERT_TRUE (parsed.wasOk()) << DataTreeDiagnostic::join (parsed.diagnostics);
 
     auto style = DrawingStyle::create (slider, parsed.document.getChildWithName ("drawing"));
     ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
@@ -435,12 +578,12 @@ TEST_F (DrawingStyleTest, ReportsStructuredChildElementAndPropertyLocations)
         "        fill: unknownSymbol + 1;\n"
         "    }\n"
         "}\n");
-    ASSERT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics);
+    ASSERT_TRUE (parsed.wasOk()) << DataTreeDiagnostic::join (parsed.diagnostics);
 
     Slider slider (Slider::RotaryVerticalDrag);
     configure (slider);
 
-    YuiDiagnostic failure;
+    DataTreeDiagnostic failure;
     auto created = DrawingStyle::create (slider, parsed.document.getChildWithName ("drawing"), nullptr, &failure);
     EXPECT_TRUE (created.failed());
     EXPECT_TRUE (failure.element.isValid());
@@ -466,7 +609,7 @@ protected:
     static DataTree parseYuiDrawing (const String& text, const String& name = {})
     {
         const auto parsed = YuiParser::parse (text);
-        EXPECT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics);
+        EXPECT_TRUE (parsed.wasOk()) << DataTreeDiagnostic::join (parsed.diagnostics);
 
         for (const auto& block : parsed.document)
             if (block.getType() == Identifier ("drawing") && (name.isEmpty() || block.getProperty ("name").toString() == name))
@@ -862,12 +1005,14 @@ class DrawingStyleGpuTest : public DrawingStyleTest
 protected:
     struct DrawnComponent : Component
     {
-        explicit DrawnComponent (const DataTree& drawing, const DrawingStyle::DrawingResolver& drawingResolver = nullptr)
+        explicit DrawnComponent (const DataTree& drawing,
+                                 const DrawingStyle::DrawingResolver& drawingResolver = nullptr,
+                                 const DrawingStyle::ShaderResolver& shaderResolver = nullptr)
         {
             setOpaque (false);
             setBounds (0.0f, 0.0f, 16.0f, 16.0f);
 
-            auto created = DrawingStyle::create (*this, drawing, nullptr, nullptr, drawingResolver);
+            auto created = DrawingStyle::create (*this, drawing, nullptr, nullptr, drawingResolver, shaderResolver);
             EXPECT_TRUE (created.wasOk()) << created.getErrorMessage();
 
             if (created.wasOk())
@@ -1525,6 +1670,100 @@ TEST_F (DrawingStyleGpuTest, ImagesComeFromTheResolverBeforeTheFiles)
     EXPECT_EQ (centerColor (component).getAlpha(), 0);
 }
 
+TEST_F (DrawingStyleGpuTest, ImagesAndSvgFilesAreReadThroughTheDocumentOfTheComponentAndAgainWhenTheyChange)
+{
+    /** A document of one root, serving the bytes it is given and no file. */
+    struct Document final : ComponentDocument
+    {
+        explicit Document (Component& rootToUse)
+            : root (rootToUse)
+        {
+            attachToRoot();
+        }
+
+        ~Document() override
+        {
+            detachFromRoot();
+        }
+
+        Component* getRoot() const override { return &root; }
+
+        const File& getBaseDirectory() const override { return baseDirectory; }
+
+        std::optional<MemoryBlock> readAsset (const String& path) const override
+        {
+            read.add (path);
+
+            if (const auto found = assets.find (path); found != assets.end())
+                return found->second;
+
+            return std::nullopt;
+        }
+
+        File getAssetFile (const String&) const override { return {}; }
+
+        std::shared_ptr<const DataTreeSourceMap> getSourceMap() const override { return nullptr; }
+
+        DrawingScope::ComponentResolver getComponentResolver() const override { return nullptr; }
+
+        void reportDiagnostic (DataTreeDiagnostic, const Component* = nullptr) override {}
+
+        using ComponentDocument::notifyDocumentAssetChanged;
+
+        Component& root;
+        File baseDirectory;
+        std::map<String, MemoryBlock> assets;
+        mutable StringArray read;
+    };
+
+    const auto square = [] (const char* color)
+    {
+        const auto text = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='" + String (color) + "'/></svg>";
+        return MemoryBlock (text.toRawUTF8(), text.getNumBytesAsUTF8());
+    };
+
+    // A 1 x 1 opaque red PNG
+    MemoryOutputStream redPixel;
+    ASSERT_TRUE (Base64::convertFromBase64 (redPixel, "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP4z8DwHwAFAAH/VscvDQAAAABJRU5ErkJggg=="));
+
+    DrawnComponent component (parseYui (R"yui(
+        drawing {
+            image { bounds: rect (0, 0, 8, 16); source: "memory/pixel.png"; fitting: fill; }
+            svg { bounds: rect (8, 0, 8, 16); source: "memory/square.svg"; fitting: fill; }
+        })yui"));
+
+    // No file has these names, and the component is in no document
+    auto painted = component.snapshotToImage (*gpuContext);
+    EXPECT_EQ (painted.getPixelColor (4, 8).getAlpha(), 0);
+    EXPECT_EQ (painted.getPixelColor (12, 8).getAlpha(), 0);
+
+    Document document (component);
+    document.assets["memory/pixel.png"] = redPixel.getMemoryBlock();
+    document.assets["memory/square.svg"] = square ("#00ff00");
+
+    // What was looked for in no document is looked for again in the one the component is now in
+    painted = component.snapshotToImage (*gpuContext);
+    EXPECT_GT (painted.getPixelColor (4, 8).getRed(), 200);
+    EXPECT_LT (painted.getPixelColor (4, 8).getBlue(), 50);
+    EXPECT_GT (painted.getPixelColor (4, 8).getAlpha(), 200);
+    EXPECT_EQ (painted.getPixelColor (12, 8), Color (0xff00ff00));
+    EXPECT_EQ (document.read, StringArray ({ "memory/pixel.png", "memory/square.svg" }));
+
+    // What was read is kept, until the document tells that it changed: another file changing reads nothing again
+    document.assets["memory/square.svg"] = square ("#0000ff");
+    document.notifyDocumentAssetChanged ("memory/other.svg");
+
+    EXPECT_EQ (component.snapshotToImage (*gpuContext).getPixelColor (12, 8), Color (0xff00ff00));
+    EXPECT_EQ (document.read.size(), 2);
+
+    document.notifyDocumentAssetChanged ("memory/square.svg");
+
+    painted = component.snapshotToImage (*gpuContext);
+    EXPECT_GT (painted.getPixelColor (4, 8).getRed(), 200);
+    EXPECT_EQ (painted.getPixelColor (12, 8), Color (0xff0000ff));
+    EXPECT_EQ (document.read, StringArray ({ "memory/pixel.png", "memory/square.svg", "memory/square.svg" }));
+}
+
 TEST_F (DrawingStyleGpuTest, CornerSizeRoundsRectanglesElliptically)
 {
     const auto image = render (R"yui(
@@ -1766,4 +2005,1738 @@ TEST_F (DrawingStyleGpuTest, TiledImagesRepeatFromTheCornerOfTheirBounds)
     EXPECT_EQ (painted.getPixelColor (4, 8), Color (0xff0000ff));
     EXPECT_EQ (painted.getPixelColor (7, 8), Color (0xffff0000));
     EXPECT_EQ (painted.getPixelColor (9, 8), Color (0xff0000ff));
+}
+
+//==============================================================================
+/** Drawings reading the series of a component and placing its parts. */
+class DrawingStyleDataTest : public DrawingStyleLanguageTest
+{
+protected:
+    /** A component keeping levels in a block of its own, giving names as a var, and declaring three parts. */
+    class DataWidget : public Component
+    {
+    public:
+        const ComponentTypeInfo& getDefaultTypeInfo() const override
+        {
+            static const ComponentTypeInfo info = ComponentTypeBuilder<DataWidget> ("DataWidget")
+                .series ("levels", &DataWidget::getLevels)
+                .readOnly ("names", &DataWidget::getNames)
+                .part ("icon", &DataWidget::getIconBounds)
+                .part ("glow")
+                .fixedPart ("text", &DataWidget::getTextBounds)
+                .build();
+            return info;
+        }
+
+        Span<const float> getLevels() const noexcept { return levels; }
+
+        StringArray getNames() const
+        {
+            ++numNamesReads;
+            return names;
+        }
+
+        Rectangle<float> getIconBounds() const noexcept { return { 2.0f, 2.0f, 8.0f, 8.0f }; }
+        Rectangle<float> getTextBounds() const noexcept { return { 12.0f, 2.0f, 30.0f, 8.0f }; }
+
+        std::vector<float> levels { 1.0f, 2.0f, 4.0f };
+        StringArray names { "a", "bb" };
+        mutable int numNamesReads = 0;
+        mutable std::vector<Rectangle<float>> paintedIcons;
+        mutable Rectangle<float> paintedText;
+        mutable Color textFill;
+        mutable Point<float> textOffset;
+        mutable float iconOpacity = 0.0f;
+        mutable int numGlows = 0;
+    };
+
+    void SetUp() override
+    {
+        DrawingStyleLanguageTest::SetUp();
+        widget.setBounds (0.0f, 0.0f, 48.0f, 48.0f);
+
+        // The widget declares its parts and the theme paints them: this one records what it is asked to paint
+        const auto& type = widget.getTypeInfo();
+
+        theme->setComponentPart (type, Identifier ("icon"), [] (Graphics& g, const ApplicationTheme&, const Component& c, const Rectangle<float>& area)
+        {
+            const auto& w = static_cast<const DataWidget&> (c);
+
+            w.paintedIcons.push_back (area);
+            w.iconOpacity = g.getOpacity();
+        });
+
+        theme->setComponentPart (type, Identifier ("glow"), [] (Graphics&, const ApplicationTheme&, const Component& c, const Rectangle<float>&)
+        {
+            ++static_cast<const DataWidget&> (c).numGlows;
+        });
+
+        theme->setComponentPart (type, Identifier ("text"), [] (Graphics& g, const ApplicationTheme&, const Component& c, const Rectangle<float>& area)
+        {
+            const auto& w = static_cast<const DataWidget&> (c);
+
+            w.paintedText = area;
+            w.textFill = g.getFillColor();
+            w.textOffset = g.getTransform().getTranslation();
+        });
+    }
+
+    ResultValue<DrawingStyle::Ptr> createStyle (const String& text)
+    {
+        return DrawingStyle::create (widget, parseYuiDrawing (text));
+    }
+
+    String createDataError (const String& text)
+    {
+        const auto style = createStyle (text);
+        return style.failed() ? style.getErrorMessage() : String();
+    }
+
+    /** Returns where the element of an id lands, as a style measures it for the widget. */
+    DrawingStyle::ElementBounds measure (DrawingStyle& style, const String& id)
+    {
+        for (const auto& element : style.measureElements (widget))
+            if (element.id == id)
+                return element;
+
+        return {};
+    }
+
+    DataWidget widget;
+};
+
+TEST_F (DrawingStyleDataTest, VerticesJoinTheTurnsOfARepeatIntoALineOrAnArea)
+{
+    const auto style = createStyle (R"yui(
+        drawing Curve {
+            let step: 10;
+
+            repeat i in 0 .. len (levels) {
+                vertex { id: line; at: point (i * step, 40 - levels[i] * 10); stroke: #ffffff; strokeWidth: 2; }
+                vertex { id: area; at: [i * step, 40 - levels[i] * 10]; base: point (i * step, 44); smooth: 0.5; fill: #40ffffff; }
+                vertex { id: split; series: i % 2; at: point (i * step, i); stroke: #ff0000; }
+            }
+        })yui");
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    // The levels are read where the widget keeps them: 1, 2 and 4
+    const auto line = measure (*style.getReference(), "line");
+    EXPECT_EQ (line.type, String ("vertex"));
+    EXPECT_EQ (line.numRows, 3);
+    EXPECT_EQ (line.bounds, Rectangle<float> (0.0f, 0.0f, 20.0f, 30.0f));
+
+    // A base closes the area down to it
+    EXPECT_EQ (measure (*style.getReference(), "area").bounds.getBottom(), 44.0f);
+    EXPECT_EQ (measure (*style.getReference(), "split").bounds, Rectangle<float> (0.0f, 0.0f, 20.0f, 2.0f));
+
+    // What the widget changes where it is, or moves elsewhere, is what the next paint reads
+    widget.levels[2] = 3.0f;
+    EXPECT_EQ (measure (*style.getReference(), "line").bounds, Rectangle<float> (0.0f, 10.0f, 20.0f, 20.0f));
+
+    widget.levels = { 4.0f, 4.0f, 4.0f, 4.0f, 0.0f };
+    EXPECT_EQ (measure (*style.getReference(), "line").numRows, 5);
+    EXPECT_EQ (measure (*style.getReference(), "line").bounds, Rectangle<float> (0.0f, 0.0f, 40.0f, 40.0f));
+
+    paintHeadless (*style.getReference(), widget);
+}
+
+TEST_F (DrawingStyleDataTest, EachVertexElementDrawsLinesOfItsOwnWhateverItsSeries)
+{
+    const auto style = createStyle (R"yui(
+        drawing Curves {
+            repeat i in 0 .. len (levels) {
+                vertex { id: line; series: 1; at: point (i * 10, levels[i]); stroke: #ffffff; }
+                vertex { id: area; series: 1; at: point (i * 10, 20 + levels[i]); base: point (i * 10, 40); fill: #40ffffff; }
+            }
+        })yui");
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    // Two elements giving the same series are two lines: the one with no base is not closed down to the bases of the other
+    EXPECT_EQ (measure (*style.getReference(), "line").bounds, Rectangle<float> (0.0f, 1.0f, 20.0f, 3.0f));
+    EXPECT_EQ (measure (*style.getReference(), "area").bounds, Rectangle<float> (0.0f, 21.0f, 20.0f, 19.0f));
+
+    paintHeadless (*style.getReference(), widget);
+}
+
+TEST_F (DrawingStyleDataTest, ASeriesDenserThanItsPixelsIsMeasuredWithAllItsPoints)
+{
+    const auto style = createStyle (R"yui(
+        drawing Scope {
+            repeat i in 0 .. len (levels) {
+                vertex { id: line; at: point (i / 64.0, levels[i]); base: point (i / 64.0, 40); fill: #40ffffff; stroke: #ffffff; }
+            }
+        })yui");
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    // 64 levels for each unit of the 48 the widget is wide, one of them alone far above the others
+    widget.levels.assign (3072, 20.0f);
+    widget.levels[1000] = 2.0f;
+
+    const Rectangle<float> expected (0.0f, 2.0f, 3071.0f / 64.0f, 38.0f);
+    EXPECT_EQ (measure (*style.getReference(), "line").bounds, expected);
+
+    // A paint draws what each column of pixels shows of the line: it is still measured with all its points
+    paintHeadless (*style.getReference(), widget);
+    paintHeadless (*style.getReference(), widget);
+
+    EXPECT_EQ (measure (*style.getReference(), "line").bounds, expected);
+    EXPECT_EQ (measure (*style.getReference(), "line").numRows, 3072);
+}
+
+TEST_F (DrawingStyleDataTest, AVertexOnlyLivesAmongTheShapesOfARepeat)
+{
+    EXPECT_EQ (createDataError ("drawing { vertex { at: point (0, 0); } }"),
+               "drawing/vertex[0]: a 'vertex' is one point of a line, it can only be among the shapes of a 'repeat' giving the others");
+
+    // The turns of a repeat holding containers are drawn apart, with nothing to join them
+    EXPECT_EQ (createDataError ("drawing { repeat i in 0 .. 2 { group { vertex { at: point (i, i); } } } }"),
+               "drawing/repeat[0]/group[0]/vertex[0]: a 'vertex' is one point of a line, it can only be among the shapes of a 'repeat' giving the others");
+
+    EXPECT_EQ (createDataError ("drawing { repeat i in 0 .. 2 { vertex { at: point (i, i); fill: objectBounds.width > 1 ? #ffffff : #000000; } } }"),
+               "drawing/repeat[0]/vertex[0]: 'objectBounds' is not available to a 'vertex', which is one point of its line");
+
+    EXPECT_EQ (createDataError ("drawing { repeat i in 0 .. 2 { vertex { stroke: #ffffff; } } }"),
+               "drawing/repeat[0]/vertex[0]: missing the required property 'at'");
+
+    EXPECT_EQ (createDataError ("drawing { repeat i in 0 .. 2 { vertex { at: point (i, i); radius: 2; } } }"),
+               "drawing/repeat[0]/vertex[0]: unknown property 'radius'");
+
+    // It is a shape: a clip path takes the area of a series, and a group gives it its paint
+    EXPECT_EQ (createDataError (R"yui(
+        drawing {
+            clip {
+                clipPath { repeat i in 0 .. 3 { vertex { at: point (i * 10, i); base: point (i * 10, 20); } } }
+                group { stroke: #ffffff; repeat i in 0 .. 3 { vertex { at: point (i * 10, i); } } }
+            }
+        })yui"),
+               String());
+}
+
+TEST_F (DrawingStyleDataTest, ADeclaredArrayPropertyReadsTheSeriesOfItsName)
+{
+    const auto style = createStyle (R"yui(
+        drawing Bars {
+            property levels: number[];
+
+            repeat i in 0 .. len (levels) {
+                rect { id: bar; bounds: rect (i * 10, 0, 8, levels[i]); fill: #ffffff; }
+            }
+        })yui");
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    EXPECT_EQ (measure (*style.getReference(), "bar").numRows, 3);
+    EXPECT_EQ (measure (*style.getReference(), "bar").bounds, Rectangle<float> (0.0f, 0.0f, 28.0f, 4.0f));
+
+    widget.levels.push_back (8.0f);
+    EXPECT_EQ (measure (*style.getReference(), "bar").numRows, 4);
+    EXPECT_EQ (measure (*style.getReference(), "bar").bounds, Rectangle<float> (0.0f, 0.0f, 38.0f, 8.0f));
+}
+
+TEST_F (DrawingStyleDataTest, AnArrayGivenAsAVarIsReadOnceForAllTheElementsOfAPaint)
+{
+    const auto style = createStyle (R"yui(
+        drawing Tags {
+            rect { id: first; bounds: rect (0, 0, len (names) * 4, 4); fill: #ffffff; }
+            rect { id: second; bounds: rect (0, 8, len (names[1]) * 4, 4); fill: #ffffff; }
+
+            repeat i in 0 .. len (names) {
+                rect { id: each; bounds: rect (i * 10, 16, len (names[i]), 4); fill: #ffffff; }
+            }
+        })yui");
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    widget.numNamesReads = 0;
+
+    const auto measured = style.getReference()->measureElements (widget);
+    EXPECT_EQ (widget.numNamesReads, 1);
+
+    EXPECT_EQ (measure (*style.getReference(), "first").bounds, Rectangle<float> (0.0f, 0.0f, 8.0f, 4.0f));
+    EXPECT_EQ (measure (*style.getReference(), "second").bounds, Rectangle<float> (0.0f, 8.0f, 8.0f, 4.0f));
+    EXPECT_EQ (measure (*style.getReference(), "each").bounds, Rectangle<float> (0.0f, 16.0f, 12.0f, 4.0f));
+
+    // Each paint reads what the widget holds by then
+    widget.names = { "a", "bb", "cccc" };
+    widget.numNamesReads = 0;
+    EXPECT_EQ (measure (*style.getReference(), "first").bounds, Rectangle<float> (0.0f, 0.0f, 12.0f, 4.0f));
+    EXPECT_EQ (widget.numNamesReads, 1);
+}
+
+TEST_F (DrawingStyleDataTest, PartsArePaintedAmongTheShapesWithThePaintOfTheirElement)
+{
+    const auto style = createStyle (R"yui(
+        drawing Field {
+            rect { id: back; bounds: bounds; fill: #202020; }
+            part icon { id: icon; bounds: rect (20, 4, 16, 16); opacity: 0.5; }
+            part text { id: label; fill: #ff8040; transform: transform.translation (4, 6); }
+            part glow { id: glow; visible: false; }
+        })yui");
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    // A part is where its element puts it, or where the widget does, under the transform of the element
+    EXPECT_EQ (measure (*style.getReference(), "icon").type, String ("part"));
+    EXPECT_EQ (measure (*style.getReference(), "icon").bounds, Rectangle<float> (20.0f, 4.0f, 16.0f, 16.0f));
+    EXPECT_EQ (measure (*style.getReference(), "label").bounds, Rectangle<float> (16.0f, 8.0f, 30.0f, 8.0f));
+    EXPECT_TRUE (measure (*style.getReference(), "glow").path.isEmpty());
+
+    paintHeadless (*style.getReference(), widget);
+
+    ASSERT_EQ (widget.paintedIcons.size(), 1u);
+    EXPECT_EQ (widget.paintedIcons.front(), Rectangle<float> (20.0f, 4.0f, 16.0f, 16.0f));
+    EXPECT_FLOAT_EQ (widget.iconOpacity, 0.5f);
+
+    EXPECT_EQ (widget.paintedText, Rectangle<float> (12.0f, 2.0f, 30.0f, 8.0f));
+    EXPECT_EQ (widget.textFill, Color (0xffff8040));
+    EXPECT_EQ (widget.textOffset, Point<float> (4.0f, 6.0f));
+
+    EXPECT_EQ (widget.numGlows, 0);
+}
+
+TEST_F (DrawingStyleDataTest, APartWithoutBoundsGoesWhereTheComponentPutsItAndARepeatPaintsItTurnAfterTurn)
+{
+    const auto style = createStyle (R"yui(
+        drawing Row {
+            part icon { id: own; }
+
+            repeat i in 0 .. 3 {
+                part icon { id: copy; bounds: rect (i * 12, 30, 8, 8); }
+            }
+        })yui");
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    EXPECT_EQ (measure (*style.getReference(), "own").bounds, Rectangle<float> (2.0f, 2.0f, 8.0f, 8.0f));
+    EXPECT_EQ (measure (*style.getReference(), "copy").bounds, Rectangle<float> (0.0f, 30.0f, 32.0f, 8.0f));
+    EXPECT_EQ (measure (*style.getReference(), "copy").numRows, 3);
+
+    paintHeadless (*style.getReference(), widget);
+
+    ASSERT_EQ (widget.paintedIcons.size(), 4u);
+    EXPECT_EQ (widget.paintedIcons[0], Rectangle<float> (2.0f, 2.0f, 8.0f, 8.0f));
+    EXPECT_EQ (widget.paintedIcons[1], Rectangle<float> (0.0f, 30.0f, 8.0f, 8.0f));
+    EXPECT_EQ (widget.paintedIcons[3], Rectangle<float> (24.0f, 30.0f, 8.0f, 8.0f));
+}
+
+TEST_F (DrawingStyleDataTest, ReportsThePartsAComponentCantPaint)
+{
+    EXPECT_EQ (createDataError ("drawing { part caret { } }"),
+               "drawing/part[0]: the component has no part 'caret', it has icon, glow, text");
+
+    const auto unnamed = DrawingStyle::create (widget, parseDrawing ("<drawing><part opacity=\"0.5\"/></drawing>"));
+    ASSERT_TRUE (unnamed.failed());
+    EXPECT_EQ (unnamed.getErrorMessage(), String ("drawing/part[0]: missing the required property 'name'"));
+
+    // What the component lays out itself stays where it is
+    EXPECT_EQ (createDataError ("drawing { part text { bounds: bounds; } }"),
+               "drawing/part[0].bounds: the part 'text' is laid out by the component, move it with a 'transform' instead");
+
+    EXPECT_EQ (createDataError ("drawing { part icon { radius: 2; } }"),
+               "drawing/part[0]: unknown property 'radius'");
+
+    EXPECT_EQ (createDataError ("drawing { clip { clipPath { part icon { } } } }"),
+               "drawing/clip[0]/clipPath[0]/part[0]: a 'part' has no outline to clip to");
+
+    // A drawing compiled for a component is not shared with one that lacks its parts
+    const String text ("drawing Shared { part icon { } }");
+    const auto shared = createStyle (text);
+    ASSERT_TRUE (shared.wasOk());
+
+    Component plain;
+    const auto other = DrawingStyle::create (plain, parseYuiDrawing (text));
+    ASSERT_TRUE (other.failed());
+    EXPECT_EQ (other.getErrorMessage(), String ("Shared/part[0]: the component has no part 'icon', it declares none"));
+}
+
+//==============================================================================
+/** Drawings using shaders, with no GPU and no shader compiler: the shaders are made by hand (see makeShader). */
+class DrawingStyleShaderTest : public DrawingStyleLanguageTest
+{
+protected:
+    void SetUp() override
+    {
+        DrawingStyleLanguageTest::SetUp();
+        component.setBounds (0.0f, 0.0f, 48.0f, 24.0f);
+    }
+
+    /** Creates the style of a drawing of a text for the component, with the shaders of the text. */
+    ResultValue<DrawingStyle::Ptr> createStyle (const String& text,
+                                                std::map<String, GpuImageShader::Ptr> shaders,
+                                                const String& drawingName = {},
+                                                const DrawingStyle::DrawingResolver& drawingResolver = nullptr)
+    {
+        return DrawingStyle::create (component, parseYuiDrawing (text, drawingName), nullptr, nullptr, drawingResolver, findShaders (text, std::move (shaders)));
+    }
+
+    /** Returns what prevents the first drawing of a text from being painted, with the shaders of the text. */
+    String createShaderError (const String& text, std::map<String, GpuImageShader::Ptr> shaders)
+    {
+        const auto style = createStyle (text, std::move (shaders));
+        return style.failed() ? style.getErrorMessage() : String();
+    }
+
+    /** Returns where the element of an id lands and what it is given, as a style measures it for the component. */
+    DrawingStyle::ElementBounds measure (DrawingStyle& style, const String& id)
+    {
+        for (const auto& element : style.measureElements (component))
+            if (element.id == id)
+                return element;
+
+        ADD_FAILURE() << "No element '" << id << "' was measured";
+        return {};
+    }
+
+    Component component;
+};
+
+TEST_F (DrawingStyleShaderTest, UsePaintsTheShaderOfANameNoDrawingHas)
+{
+    const String text (R"yui(
+        shader Plasma { fragment: "fx/plasma.frag"; property speed: number = 1; }
+        drawing Screen { use Plasma { id: plasma; bounds: rect (4, 4, 16, 8); } })yui");
+
+    const auto shader = makeShader ({ { "speed", 1 } });
+    ASSERT_NE (shader, nullptr);
+
+    const auto style = createStyle (text, { { "Plasma", shader } });
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    // The shader is an element of the drawing, landing where its bounds are
+    const auto measured = style.getReference()->measureElements (component);
+    ASSERT_EQ (measured.size(), 1u);
+    EXPECT_EQ (measured.front().path, String ("Screen/use#plasma"));
+    EXPECT_EQ (measured.front().type, String ("use"));
+    EXPECT_EQ (measured.front().bounds, Rectangle<float> (4.0f, 4.0f, 16.0f, 8.0f));
+
+    // Without a resolver, or for a name it does not know, there is no drawing of that name to paint
+    EXPECT_EQ (createYuiError ("drawing Screen { use Plasma {} }"), "Screen/use[0]: unknown drawing 'Plasma'");
+    EXPECT_EQ (createShaderError ("drawing Other { use Glow {} } " + text, { { "Plasma", shader } }), "Other/use[0]: unknown drawing 'Glow'");
+
+    // A drawing of the name is painted instead: one defined inside the drawing, or one found by name
+    const String inside (R"yui(
+        shader Plasma { fragment: "fx/plasma.frag"; }
+        drawing Screen {
+            drawing Plasma { rect { id: painted; bounds: bounds; fill: #ff0000; } }
+            use Plasma { id: plasma; }
+        })yui");
+
+    const auto shadowed = createStyle (inside, { { "Plasma", shader } });
+    ASSERT_TRUE (shadowed.wasOk()) << shadowed.getErrorMessage();
+    EXPECT_EQ (measure (*shadowed.getReference(), "painted").type, String ("rect"));
+
+    const String outside (R"yui(
+        shader Plasma { fragment: "fx/plasma.frag"; }
+        drawing Screen { use Plasma { id: plasma; } }
+        drawing Plasma { rect { id: painted; bounds: bounds; fill: #ff0000; } })yui");
+
+    const auto found = createStyle (outside, { { "Plasma", shader } }, "Screen", [&outside] (const String& name)
+    {
+        return parseYuiDrawing (outside, name);
+    });
+
+    ASSERT_TRUE (found.wasOk()) << found.getErrorMessage();
+    EXPECT_EQ (measure (*found.getReference(), "painted").type, String ("rect"));
+
+    // A stylesheet has one of them only
+    const auto sheet = YuiParser::parseStyleSheet (outside);
+    ASSERT_TRUE (sheet.failed());
+    EXPECT_EQ (sheet.getErrorMessage(), String ("The shader 'Plasma' has the same name as a drawing"));
+}
+
+TEST_F (DrawingStyleShaderTest, ReportsTheShadersAUseCantPaint)
+{
+    const String blocks (R"yui(
+        shader Plasma { fragment: "fx/plasma.frag"; property speed: number = 1; property tint: color; }
+        shader Crt { fragment: "fx/crt.frag"; }
+        shader Hologram { material: "fx/hologram.glsl"; }
+        shader Missing { fragment: "fx/missing.frag"; }
+        shader Label { fragment: "fx/label.frag"; property label: string; }
+        shader Names { fragment: "fx/names.frag"; property names: string[]; }
+    )yui");
+
+    const std::map<String, GpuImageShader::Ptr> shaders { { "Plasma", makeShader ({ { "speed", 1 }, { "tint", 4 } }) },
+                                                         { "Crt", makeShader ({}, 1) },
+                                                         { "Label", makeShader ({ { "label", 1 } }) },
+                                                         { "Names", makeShader ({ { "names", 4 } }) } };
+
+    const auto errorOf = [&] (const String& drawing)
+    {
+        return createShaderError (blocks + drawing, shaders);
+    };
+
+    EXPECT_EQ (errorOf ("drawing { use Plasma { speed: 2; tint: #ff0000; opacity: 0.5; transform: transform.rotation (pi); visible: true; blend: screen; clip: bounds; } }"), String());
+
+    // A property the shader does not declare, the paint of shapes included, and elements to hold
+    EXPECT_EQ (errorOf ("drawing { use Plasma { gain: 2; } }"), "drawing/use[0]: unknown property 'gain'");
+    EXPECT_EQ (errorOf ("drawing { use Plasma { fill: #ff0000; } }"), "drawing/use[0]: unknown property 'fill'");
+    EXPECT_EQ (errorOf ("drawing { use Plasma { rect { bounds: bounds; } } }"), "drawing/use[0]: a 'use' can't have children");
+
+    // A value of another type than the property
+    const auto wrongType = errorOf ("drawing { use Plasma { speed: #ff0000; } }");
+    EXPECT_TRUE (wrongType.startsWith ("drawing/use[0].speed: ")) << wrongType;
+    EXPECT_TRUE (wrongType.contains ("Cannot convert 'color' to 'float'")) << wrongType;
+    EXPECT_TRUE (errorOf ("drawing { use Plasma { tint: 2; } }").startsWith ("drawing/use[0].tint: "));
+    EXPECT_TRUE (errorOf ("drawing { use Plasma { speed: nope; } }").startsWith ("drawing/use[0].speed: "));
+
+    // A shader a drawing can't paint: one reading a picture, and a material
+    EXPECT_EQ (errorOf ("drawing { use Crt {} }"), "drawing/use[0]: the shader 'Crt' reads a picture, run it in the 'filter' of a layer or as an 'effect:'");
+    EXPECT_EQ (errorOf ("drawing { use Hologram {} }"), "drawing/use[0]: the shader 'Hologram' is a material, a drawing takes a shader with a 'fragment'");
+
+    // One that is not loaded is no problem of the drawing, which is compiled against its block
+    EXPECT_EQ (errorOf ("drawing { use Missing {} }"), String());
+    EXPECT_EQ (errorOf ("drawing { use Missing { gain: 2; } }"), "drawing/use[0]: unknown property 'gain'");
+
+    // A property of a type no uniform takes
+    EXPECT_EQ (errorOf ("drawing { use Label {} }"),
+               "drawing/use[0]: the property 'label' of the shader 'Label' can't be of type 'string', a shader takes a number, an integer, a boolean, a color, a point, a rectangle or a number[]");
+    EXPECT_TRUE (errorOf ("drawing { use Names {} }").startsWith ("drawing/use[0]: the property 'names' of the shader 'Names' can't be of type 'string"));
+
+    // What is drawn once and kept has no place in a repeat
+    EXPECT_EQ (errorOf ("drawing { repeat i in 0 .. 2 { use Plasma {} } }"), "drawing/repeat[0]/use[0]: the shader 'Plasma' can't be painted inside a repeat");
+    EXPECT_EQ (errorOf ("drawing { repeat i in 0 .. 2 { group { use Plasma {} } } }"), "drawing/repeat[0]/group[0]/use[0]: the shader 'Plasma' can't be painted inside a repeat");
+
+    // The failure tells the element and the property it is about: the use, or the default of the block
+    DataTreeDiagnostic failure;
+    ASSERT_TRUE (DrawingStyle::create (component, parseYuiDrawing (blocks + "drawing { use Plasma { speed: #ff0000; } }"), nullptr, &failure, nullptr, findShaders (blocks, shaders)).failed());
+    EXPECT_EQ (failure.element.getType(), Identifier ("use"));
+    EXPECT_EQ (failure.property, Identifier ("speed"));
+
+    const String broken ("shader Broken { fragment: \"fx/broken.frag\"; property speed: number = nope; } drawing { use Broken {} }");
+    const auto created = DrawingStyle::create (component, parseYuiDrawing (broken), nullptr, &failure, nullptr, findShaders (broken, { { "Broken", makeShader ({ { "speed", 1 } }) } }));
+    ASSERT_TRUE (created.failed());
+    EXPECT_TRUE (created.getErrorMessage().startsWith ("drawing/use[0]/Broken/property[0].value: ")) << created.getErrorMessage();
+    EXPECT_EQ (failure.element.getType(), Identifier ("property"));
+    EXPECT_EQ (failure.property, Identifier ("value"));
+}
+
+TEST_F (DrawingStyleShaderTest, GivesAShaderTheValuesOfItsPropertiesAndTheSizeOfItsPicture)
+{
+    const String text (R"yui(
+        shader Plasma {
+            fragment: "fx/plasma.frag";
+            property speed: number = 1;
+            property tint: color = palette.accent;
+            property center: point = [0.5, 0.25];
+            property area: rectangle;
+            property steps: integer = 3;
+            property inverted: boolean = true;
+            property levels: number[];
+            property scale: number;
+        }
+
+        shader Grid { fragment: "fx/grid.frag"; }
+
+        drawing Screen {
+            property value: number = 0.5;
+            let half: bounds.width / 2;
+
+            use Plasma { id: first; bounds: rect (0, 0, half, 12); speed: value * 2; area: bounds; levels: [0.25, 0.5, value]; }
+            use Plasma { id: second; }
+        }
+
+        drawing Scaled {
+            viewBox: rect (0, 0, 24, 12);
+            use Grid { id: grid; bounds: rect (0, 0, 12, 6); transform: transform.translation (2, 1); }
+        })yui");
+
+    const auto plasma = makeShader ({ { "speed", 1 }, { "tint", 4 }, { "center", 2 }, { "area", 4 }, { "steps", 1 }, { "inverted", 1 }, { "levels", 4 }, { "scale", 1 }, { "resolution", 4 }, { "time", 1 } });
+    const auto grid = makeShader ({ { "resolution", 2 }, { "scale", 1 } });
+    ASSERT_NE (plasma, nullptr);
+    ASSERT_NE (grid, nullptr);
+
+    component.setProperty (Identifier ("value"), 0.25);
+
+    const auto style = createStyle (text, { { "Plasma", plasma }, { "Grid", grid } }, "Screen");
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    // What the use sets is evaluated where it is, as the properties of the elements of a drawing are
+    auto expected = plasma->createUniforms();
+    const float center[] = { 0.5f, 0.25f };
+    const float area[] = { 0.0f, 0.0f, 48.0f, 24.0f };
+    const float levels[] = { 0.25f, 0.5f, 0.25f };
+    const float resolution[] = { 24.0f, 12.0f, 1.0f / 24.0f, 1.0f / 12.0f };
+
+    EXPECT_TRUE (expected.set ("speed", 0.5f));
+    EXPECT_TRUE (ShaderProperty::setUniform (expected, { "tint", ComponentProperty::Type::color }, VariantConverter<Color>::toVar (theme->getPalette().getColor (ThemePalette::Role::accent))));
+    EXPECT_TRUE (expected.set ("center", center));
+    EXPECT_TRUE (expected.set ("area", area));
+    EXPECT_TRUE (expected.set ("steps", 3.0f));
+    EXPECT_TRUE (expected.set ("inverted", 1.0f));
+    EXPECT_TRUE (expected.set ("levels", levels));
+    EXPECT_TRUE (expected.set ("resolution", resolution));
+
+    const auto first = measure (*style.getReference(), "first");
+    EXPECT_EQ (first.bounds, Rectangle<float> (0.0f, 0.0f, 24.0f, 12.0f));
+    EXPECT_TRUE (first.uniforms == expected);
+
+    // What it does not set takes the default of the block, else zero. A property named as a member the shader is given
+    // takes it back: `scale` is left as the drawing sets it
+    auto defaults = plasma->createUniforms();
+    const float wholeResolution[] = { 48.0f, 24.0f, 1.0f / 48.0f, 1.0f / 24.0f };
+
+    EXPECT_TRUE (defaults.set ("speed", 1.0f));
+    EXPECT_TRUE (ShaderProperty::setUniform (defaults, { "tint", ComponentProperty::Type::color }, VariantConverter<Color>::toVar (theme->getPalette().getColor (ThemePalette::Role::accent))));
+    EXPECT_TRUE (defaults.set ("center", center));
+    EXPECT_TRUE (defaults.set ("steps", 3.0f));
+    EXPECT_TRUE (defaults.set ("inverted", 1.0f));
+    EXPECT_TRUE (defaults.set ("resolution", wholeResolution));
+
+    const auto second = measure (*style.getReference(), "second");
+    EXPECT_EQ (second.bounds, Rectangle<float> (0.0f, 0.0f, 48.0f, 24.0f));
+    EXPECT_TRUE (second.uniforms == defaults);
+
+    // The values follow what they read
+    component.setProperty (Identifier ("value"), 0.75);
+
+    const float changedLevels[] = { 0.25f, 0.5f, 0.75f };
+    EXPECT_TRUE (expected.set ("speed", 1.5f));
+    EXPECT_TRUE (expected.set ("levels", changedLevels));
+    EXPECT_TRUE (measure (*style.getReference(), "first").uniforms == expected);
+
+    // The size is the pixels the bounds take under the transforms they are painted with, and the scale the pixels of a unit
+    const auto scaled = createStyle (text, { { "Plasma", plasma }, { "Grid", grid } }, "Scaled");
+    ASSERT_TRUE (scaled.wasOk()) << scaled.getErrorMessage();
+
+    auto expectedGrid = grid->createUniforms();
+    const float gridResolution[] = { 24.0f, 12.0f };
+    EXPECT_TRUE (expectedGrid.set ("resolution", gridResolution));
+    EXPECT_TRUE (expectedGrid.set ("scale", 2.0f));
+
+    const auto measuredGrid = measure (*scaled.getReference(), "grid");
+    EXPECT_EQ (measuredGrid.bounds, Rectangle<float> (4.0f, 2.0f, 24.0f, 12.0f));
+    EXPECT_TRUE (measuredGrid.uniforms == expectedGrid);
+}
+
+TEST_F (DrawingStyleShaderTest, StylesSharingACompilationKeepTheShaderEachOfThemFound)
+{
+    const String text (R"yui(
+        shader Plasma { fragment: "fx/plasma.frag"; property speed: number = 2; }
+        drawing Screen { use Plasma { id: plasma; } })yui");
+
+    // The same block, compiled as two shaders laying their uniforms out differently
+    const auto first = makeShader ({ { "speed", 1 } });
+    const auto second = makeShader ({ { "gain", 1 }, { "speed", 1 } });
+    ASSERT_NE (first, nullptr);
+    ASSERT_NE (second, nullptr);
+
+    Component other;
+    other.setBounds (0.0f, 0.0f, 48.0f, 24.0f);
+
+    const auto firstStyle = createStyle (text, { { "Plasma", first } });
+    const auto secondStyle = DrawingStyle::create (other, parseYuiDrawing (text), nullptr, nullptr, nullptr, findShaders (text, { { "Plasma", second } }));
+    ASSERT_TRUE (firstStyle.wasOk()) << firstStyle.getErrorMessage();
+    ASSERT_TRUE (secondStyle.wasOk()) << secondStyle.getErrorMessage();
+
+    auto firstExpected = first->createUniforms();
+    auto secondExpected = second->createUniforms();
+    EXPECT_TRUE (firstExpected.set ("speed", 2.0f));
+    EXPECT_TRUE (secondExpected.set ("speed", 2.0f));
+
+    EXPECT_TRUE (measure (*firstStyle.getReference(), "plasma").uniforms == firstExpected);
+    EXPECT_TRUE (secondStyle.getReference()->measureElements (other).front().uniforms == secondExpected);
+    EXPECT_FALSE (firstExpected == secondExpected);
+
+    // A shader reading a picture is not the one the drawing was compiled for
+    const auto reading = DrawingStyle::create (other, parseYuiDrawing (text), nullptr, nullptr, nullptr, findShaders (text, { { "Plasma", makeShader ({ { "speed", 1 } }, 1) } }));
+    ASSERT_TRUE (reading.failed());
+    EXPECT_TRUE (reading.getErrorMessage().contains ("reads a picture")) << reading.getErrorMessage();
+}
+
+TEST_F (DrawingStyleShaderTest, AStyleMadeBeforeItsShadersAreLoadedIsMadeAgainWithThem)
+{
+    const String text (R"yui(
+        shader Plasma { fragment: "fx/plasma.frag"; property speed: number = 2; }
+        shader Crt { fragment: "fx/crt.frag"; property intensity: number = 0.5; }
+
+        drawing Card { rect { id: card; bounds: bounds; fill: #202020; } }
+
+        drawing Screen {
+            use Card { }
+            use Plasma { id: plasma; speed: 3; }
+            use Plasma { id: again; }
+            layer { filter { use Crt { id: crt; in2: source; } } rect { bounds: bounds; fill: #ffffff; } }
+        })yui");
+
+    const auto findDrawings = [&text] (const String& name)
+    {
+        return parseYuiDrawing (text, name);
+    };
+
+    // Only the blocks are known: what a document has before its stylesheet loads the shaders
+    const auto unloaded = createStyle (text, {}, "Screen", findDrawings);
+    ASSERT_TRUE (unloaded.wasOk()) << unloaded.getErrorMessage();
+
+    auto& style = *unloaded.getReference();
+
+    // Each shader used is told once, by its block
+    const auto blocks = style.getShaders();
+    ASSERT_EQ (blocks.size(), 2u);
+    EXPECT_EQ (blocks[0].block.getProperty ("name").toString(), String ("Plasma"));
+    EXPECT_EQ (blocks[0].shader, nullptr);
+    EXPECT_EQ (blocks[1].block.getProperty ("name").toString(), String ("Crt"));
+    EXPECT_EQ (blocks[1].shader, nullptr);
+
+    // What else the drawing paints is painted, and what uses a shader is given nothing
+    EXPECT_EQ (measure (style, "card").type, String ("rect"));
+    EXPECT_TRUE (measure (style, "plasma").uniforms.isEmpty());
+    EXPECT_NO_THROW (paintHeadless (style, component));
+
+    // The style is made again with the shaders, from the drawings it found when it was made
+    const auto plasma = makeShader ({ { "speed", 1 } });
+    const auto crt = makeShader ({ { "intensity", 1 } }, 2);
+
+    const auto loaded = style.createWithShaders (findShaders (text, { { "Plasma", plasma }, { "Crt", crt } }));
+    ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
+    EXPECT_NE (loaded.getReference().get(), std::addressof (style));
+
+    const auto shaders = loaded.getReference()->getShaders();
+    ASSERT_EQ (shaders.size(), 2u);
+    EXPECT_EQ (shaders[0].shader, plasma);
+    EXPECT_EQ (shaders[1].shader, crt);
+
+    auto expected = plasma->createUniforms();
+    EXPECT_TRUE (expected.set ("speed", 3.0f));
+    EXPECT_TRUE (measure (*loaded.getReference(), "plasma").uniforms == expected);
+    EXPECT_EQ (measure (*loaded.getReference(), "card").type, String ("rect"));
+
+    // What a shader reads decides what compiles: one reading a picture can't be painted, and a second picture is for one reading two
+    DataTreeDiagnostic failure;
+    const auto reading = style.createWithShaders (findShaders (text, { { "Plasma", makeShader ({ { "speed", 1 } }, 1) }, { "Crt", crt } }), &failure);
+    ASSERT_TRUE (reading.failed());
+    EXPECT_EQ (reading.getErrorMessage(), "Screen/use#plasma: the shader 'Plasma' reads a picture, run it in the 'filter' of a layer or as an 'effect:'");
+    EXPECT_EQ (failure.element.getProperty ("id").toString(), String ("plasma"));
+
+    const auto single = style.createWithShaders (findShaders (text, { { "Plasma", plasma }, { "Crt", makeShader ({ { "intensity", 1 } }, 1) } }));
+    ASSERT_TRUE (single.failed());
+    EXPECT_EQ (single.getErrorMessage(), "Screen/layer[0]/filter[0]/use#crt: unknown property 'in2'");
+}
+
+TEST_F (DrawingStyleShaderTest, AFilterRunsShadersAsItsPrimitives)
+{
+    const String blocks (R"yui(
+        shader Crt { fragment: "fx/crt.frag"; property intensity: number = 0.5; property tint: color = #ff0000; }
+        shader Mix { fragment: "fx/mix.frag"; property amount: number; property resolution: point = [3, 4]; }
+        shader Noise { fragment: "fx/noise.frag"; }
+        shader Clock { fragment: "fx/clock.frag"; }
+        shader Stopped { fragment: "fx/clock.frag"; property time: number; }
+        shader Hologram { material: "fx/hologram.glsl"; }
+        shader Missing { fragment: "fx/missing.frag"; }
+    )yui");
+
+    const auto crt = makeShader ({ { "intensity", 1 }, { "tint", 4 }, { "resolution", 4 }, { "scale", 1 } }, 1);
+    const auto mix = makeShader ({ { "amount", 1 }, { "resolution", 2 } }, 2);
+
+    const std::map<String, GpuImageShader::Ptr> shaders { { "Crt", crt },
+                                                         { "Mix", mix },
+                                                         { "Noise", makeShader ({}) },
+                                                         { "Clock", makeShader ({ { "time", 1 } }, 1) },
+                                                         { "Stopped", makeShader ({ { "time", 1 } }, 1) } };
+
+    const auto style = createStyle (blocks + R"yui(
+        drawing Screen {
+            property value: number = 0.5;
+
+            layer {
+                filter {
+                    bounds: rect (4, 4, 32, 16);
+
+                    blur { deviation: 2; result: soft; }
+                    use Noise { result: noise; }
+                    use Crt { id: crt; in: source; intensity: value * 2; }
+                    use Mix { id: mix; in: soft; in2: noise; amount: 1; }
+                    use Stopped { time: value; }
+                }
+
+                rect { id: content; bounds: bounds; fill: #ffffff; }
+            }
+        })yui",
+                                    shaders);
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    // The shaders a filter runs are told after what its layer holds, where the filter is
+    const auto measured = style.getReference()->measureElements (component);
+    ASSERT_EQ (measured.size(), 6u);
+    EXPECT_EQ (measured[1].id, String ("content"));
+    EXPECT_EQ (measured[2].path, String ("Screen/layer[0]/filter[0]/use[0]"));
+    EXPECT_EQ (measured[3].path, String ("Screen/layer[0]/filter[0]/use#crt"));
+    EXPECT_EQ (measured[3].type, String ("use"));
+    EXPECT_EQ (measured[3].bounds, Rectangle<float> (4.0f, 4.0f, 32.0f, 16.0f));
+
+    // Each is given the values of its properties, the pixels the bounds of the filter take and the pixels of a unit
+    auto expectedCrt = crt->createUniforms();
+    const float resolution[] = { 32.0f, 16.0f, 1.0f / 32.0f, 1.0f / 16.0f };
+    EXPECT_TRUE (expectedCrt.set ("intensity", 1.0f));
+    EXPECT_TRUE (ShaderProperty::setUniform (expectedCrt, { "tint", ComponentProperty::Type::color }, VariantConverter<Color>::toVar (Color (0xffff0000))));
+    EXPECT_TRUE (expectedCrt.set ("resolution", resolution));
+    EXPECT_TRUE (expectedCrt.set ("scale", 1.0f));
+    EXPECT_TRUE (measured[3].uniforms == expectedCrt);
+
+    // A property named as the size takes it back
+    auto expectedMix = mix->createUniforms();
+    const float size[] = { 3.0f, 4.0f };
+    EXPECT_TRUE (expectedMix.set ("amount", 1.0f));
+    EXPECT_TRUE (expectedMix.set ("resolution", size));
+    EXPECT_TRUE (measure (*style.getReference(), "mix").uniforms == expectedMix);
+
+    EXPECT_NO_THROW (paintHeadless (*style.getReference(), component));
+
+    const auto errorOf = [&] (const String& primitive)
+    {
+        return createShaderError (blocks + "drawing { layer { filter { " + primitive + " } } }", shaders);
+    };
+
+    EXPECT_EQ (errorOf ("use Glow {}"), "drawing/layer[0]/filter[0]/use[0]: unknown shader 'Glow'");
+    EXPECT_EQ (errorOf ("use Hologram {}"), "drawing/layer[0]/filter[0]/use[0]: the shader 'Hologram' is a material, a drawing takes a shader with a 'fragment'");
+    EXPECT_EQ (errorOf ("use Missing { in2: source; }"), String());
+    EXPECT_EQ (errorOf ("use Crt { rect { bounds: bounds; } }"), "drawing/layer[0]/filter[0]/use[0]: a 'use' can't have children");
+    EXPECT_EQ (errorOf ("use Crt { gain: 1; }"), "drawing/layer[0]/filter[0]/use[0]: unknown property 'gain'");
+    EXPECT_EQ (errorOf ("use Crt { bounds: bounds; }"), "drawing/layer[0]/filter[0]/use[0]: unknown property 'bounds'");
+    EXPECT_TRUE (errorOf ("use Crt { intensity: #ff0000; }").startsWith ("drawing/layer[0]/filter[0]/use[0].intensity: "));
+
+    // A second picture is for a shader reading two
+    EXPECT_EQ (errorOf ("use Crt { in2: source; }"), "drawing/layer[0]/filter[0]/use[0]: unknown property 'in2'");
+    EXPECT_EQ (errorOf ("use Noise { in2: source; }"), "drawing/layer[0]/filter[0]/use[0]: unknown property 'in2'");
+
+    // A filter does not tell the time
+    EXPECT_EQ (errorOf ("use Clock {}"),
+               "drawing/layer[0]/filter[0]/use[0]: the shader 'Clock' has a 'time', which a 'filter' doesn't fill: declare 'property time: number;' in its block to set it here");
+}
+
+TEST_F (DrawingStyleShaderTest, WithoutAGpuAShaderPaintsNothingAndNothingFails)
+{
+    const String text (R"yui(
+        shader Plasma { fragment: "fx/plasma.frag"; property speed: number = 1; }
+
+        drawing Screen {
+            rect { bounds: bounds; fill: #202020; }
+            use Plasma { bounds: bounds.reduced (4); speed: 2; opacity: 0.5; clip: bounds.reduced (8); }
+            clip { bounds: rect (0, 0, 8, 8); use Plasma {} }
+            pattern Tile { tile: rect (0, 0, 8, 8); use Plasma {} }
+            rect { bounds: bounds; fillPattern: Tile; }
+        })yui");
+
+    const auto style = createStyle (text, { { "Plasma", makeShader ({ { "speed", 1 }, { "time", 1 } }) } });
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    EXPECT_NO_THROW (paintHeadless (*style.getReference(), component));
+    EXPECT_NO_THROW (paintHeadless (*style.getReference(), component));
+}
+
+TEST_F (DrawingStyleShaderTest, AShaderGivenTheTimeAsksForFramesAndRepaintsNothingItDidNotDraw)
+{
+    const String text (R"yui(
+        shader Still { fragment: "fx/clock.frag"; property time: number; }
+        shader Moving { fragment: "fx/clock.frag"; }
+        drawing Idle { use Still { time: 2; } }
+        drawing Running { use Moving {} })yui");
+
+    const auto resolver = findShaders (text, { { "Still", makeShader ({ { "time", 1 } }) }, { "Moving", makeShader ({ { "time", 1 } }) } });
+
+    Component window ("window");
+    auto* native = new StubComponentNative (window, ComponentNative::defaultFlags);
+    yup::ComponentTestHelper<Component>::attachNative (window, native);
+    window.setBounds (0.0f, 0.0f, 64.0f, 64.0f);
+    window.setVisible (true);
+    window.addAndMakeVisible (component);
+
+    {
+        // A property named as the time takes it back: the drawing sets it, and asks for no frame
+        const auto idle = DrawingStyle::create (component, parseYuiDrawing (text, "Idle"), nullptr, nullptr, nullptr, resolver);
+        ASSERT_TRUE (idle.wasOk()) << idle.getErrorMessage();
+        EXPECT_FALSE (native->hasFrameListeners());
+    }
+
+    {
+        const auto running = DrawingStyle::create (component, parseYuiDrawing (text, "Running"), nullptr, nullptr, nullptr, resolver);
+        ASSERT_TRUE (running.wasOk()) << running.getErrorMessage();
+        EXPECT_TRUE (native->hasFrameListeners());
+
+        component.setStyle (running.getReference());
+        paintHeadless (*running.getReference(), component);
+
+        // Without a GPU the shader was not drawn, so no frame repaints the component for it
+        native->repaintAreas.clearQuick();
+        native->callFrameListeners (0.25);
+        EXPECT_EQ (native->getRepaintAreas().getNumRectangles(), 0);
+
+        component.setStyle (nullptr);
+    }
+
+    // The frames go with the style
+    EXPECT_FALSE (native->hasFrameListeners());
+
+    window.removeChildComponent (component);
+}
+
+TEST_F (DrawingStyleShaderTest, ASeriesFillsTheTextureOfItsNameAndIsNoPicture)
+{
+    const String text (R"yui(
+        shader Scope {
+            fragment: "fx/scope.frag";
+            property levels: number[];
+            property gains: number[];
+            property tint: color = #ff0000;
+        }
+
+        drawing Screen {
+            use Scope { id: scope; levels: [0.25, 0.5, 0.75]; gains: [1, 2]; }
+        }
+
+        drawing Filtered {
+            layer {
+                filter { use Scope { } }
+                rect { bounds: bounds; fill: #ffffff; }
+            }
+        })yui");
+
+    // A texture named as an array of numbers is filled with them: the shader paints, as one reading nothing does
+    const auto scope = makeShader ({ { "tint", 4 }, { "gains", 4 } }, 1, { "levels" });
+    ASSERT_NE (scope, nullptr);
+
+    const auto style = createStyle (text, { { "Scope", scope } }, "Screen");
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    // An array with a member of its name fills the member, and the one filling a texture leaves the block alone
+    auto expected = scope->createUniforms();
+    const float gains[] = { 1.0f, 2.0f };
+
+    EXPECT_TRUE (expected.set ("gains", gains));
+    EXPECT_TRUE (ShaderProperty::setUniform (expected, { "tint", ComponentProperty::Type::color }, VariantConverter<Color>::toVar (Color (0xffff0000))));
+    EXPECT_FALSE (expected.hasMember ("levels"));
+    EXPECT_TRUE (measure (*style.getReference(), "scope").uniforms == expected);
+
+    // Without a GPU there is no texture to fill, and nothing fails
+    paintHeadless (*style.getReference(), component);
+
+    // A texture no array names is still a picture, which a use painting a shader can't give
+    const auto mixed = makeShader ({ { "tint", 4 } }, 2, { "levels", "backdrop" });
+    ASSERT_NE (mixed, nullptr);
+    EXPECT_EQ (createStyle (text, { { "Scope", mixed } }, "Screen").getErrorMessage(),
+               String ("Screen/use#scope: the shader 'Scope' reads a picture, run it in the 'filter' of a layer or as an 'effect:'"));
+
+    // And a filter gives pictures only
+    EXPECT_EQ (createStyle (text, { { "Scope", scope } }, "Filtered").getErrorMessage(),
+               String ("Filtered/layer[0]/filter[0]/use[0]: the shader 'Scope' samples the series 'levels' as a texture, which a 'filter' doesn't fill: paint it with a 'use', or set it as an 'effect:'"));
+
+    // An effect counts its pictures the same way
+    EXPECT_EQ (ShaderProperty::getNumPictures (*scope, { { "levels", ComponentProperty::Type::array } }), 0);
+    EXPECT_EQ (ShaderProperty::getNumPictures (*scope, { { "levels", ComponentProperty::Type::number } }), 1);
+    EXPECT_EQ (ShaderProperty::getNumPictures (*scope, {}), 1);
+    EXPECT_EQ (ShaderProperty::getNumPictures (*mixed, { { "levels", ComponentProperty::Type::array } }), 1);
+}
+
+TEST_F (DrawingStyleShaderTest, ListsWhatAUseTakesToPaintAndToRunAShader)
+{
+    const auto elements = DrawingStyle::getElementDescriptions();
+
+    const auto findUse = [&elements] (const String& role)
+    {
+        const auto found = std::find_if (elements.begin(), elements.end(), [&role] (const DrawingStyle::ElementDescription& element)
+        {
+            return element.type == "use" && element.role == role;
+        });
+
+        return found != elements.end() ? *found : DrawingStyle::ElementDescription();
+    };
+
+    // The drawing a use paints takes the paint of shapes, the shader it paints is placed as an image is
+    EXPECT_TRUE (findUse ("container").properties.contains ("fill"));
+    EXPECT_FALSE (findUse ("container").properties.contains ("clip"));
+
+    EXPECT_EQ (findUse ("media").properties, StringArray ({ "id", "drawing", "bounds", "transform", "visible", "opacity", "blend", "clip", "clipPath" }));
+    EXPECT_EQ (findUse ("filterPrimitive").properties, StringArray ({ "id", "in", "result", "drawing", "in2" }));
+}
+
+//==============================================================================
+/** Drawings using shaders, drawn by Metal and read back from the picture of a component. */
+class DrawingStyleShaderGpuTest : public DrawingStyleGpuTest
+{
+protected:
+    /** Puts a component in a window whose frames are the ones a test sends, and which keeps its repaints. */
+    static StubComponentNative& makeWindow (Component& window, Component& shown)
+    {
+        auto* native = new StubComponentNative (window, ComponentNative::defaultFlags);
+        yup::ComponentTestHelper<Component>::attachNative (window, native);
+
+        window.setBounds (0.0f, 0.0f, 64.0f, 64.0f);
+        window.setVisible (true);
+        window.addAndMakeVisible (shown);
+
+        return *native;
+    }
+
+    /** Sends a frame to a window, and returns how many areas it was asked to repaint by it. */
+    static int countRepaintsOfAFrame (StubComponentNative& native, double elapsedSeconds)
+    {
+        native.repaintAreas.clearQuick();
+        native.callFrameListeners (elapsedSeconds);
+        return native.getRepaintAreas().getNumRectangles();
+    }
+
+    /** Paints a component, and expects a color at a pixel of its picture. */
+    static void expectPixel (Component& component, int x, int y, Color expected)
+    {
+        const auto image = component.snapshotToImage (*gpuContext);
+        ASSERT_TRUE (image.isValid());
+
+        const auto pixel = image.getPixelColor (x, y);
+        const auto where = String (x) + ", " + String (y);
+
+        EXPECT_NEAR (pixel.getRed(), expected.getRed(), 3) << "red at " << where;
+        EXPECT_NEAR (pixel.getGreen(), expected.getGreen(), 3) << "green at " << where;
+        EXPECT_NEAR (pixel.getBlue(), expected.getBlue(), 3) << "blue at " << where;
+        EXPECT_NEAR (pixel.getAlpha(), expected.getAlpha(), 3) << "alpha at " << where;
+    }
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+    static GpuImageShader::Ptr compile (const char* fragment)
+    {
+        const auto created = GpuImageShader::createFromGlsl (fragment);
+        EXPECT_TRUE (created.wasOk()) << created.getErrorMessage();
+        return created.wasOk() ? created.getValue() : nullptr;
+    }
+
+    /** Fills with its color, premultiplied as a picture is. */
+    static constexpr const char* fillFragment = R"(#version 450
+layout(set = 0, binding = 0) uniform Parameters { vec4 tint; } params;
+layout(location = 0) out vec4 color;
+void main() { color = vec4 (params.tint.rgb * params.tint.a, params.tint.a); })";
+
+    /** Red once a quarter of a second went by, green once three quarters did. */
+    static constexpr const char* clockFragment = R"(#version 450
+layout(set = 0, binding = 0) uniform Parameters { float time; } params;
+layout(location = 0) out vec4 color;
+void main() { color = vec4 (step (0.25, params.time), step (0.75, params.time), 0.0, 1.0); })";
+
+    /** The picture it reads with its red and its blue swapped, times a gain. */
+    static constexpr const char* swapFragment = R"(#version 450
+layout(set = 0, binding = 0) uniform Parameters { float gain; } params;
+layout(set = 0, binding = 1) uniform texture2D source;
+layout(set = 0, binding = 2) uniform sampler sourceSampler;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main()
+{
+    vec4 pixel = texture (sampler2D (source, sourceSampler), uv);
+    color = vec4 (pixel.b, pixel.g, pixel.r, pixel.a) * params.gain;
+})";
+
+    /** Red where the series it samples along its width is 1, green where it is 0. */
+    static constexpr const char* seriesFragment = R"(#version 450
+layout(set = 0, binding = 0) uniform texture2D levels;
+layout(set = 0, binding = 1) uniform sampler levelsSampler;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main()
+{
+    float level = texture (sampler2D (levels, levelsSampler), vec2 (uv.x, 0.5)).r;
+    color = vec4 (level, 1.0 - level, 0.0, 1.0);
+})";
+
+    /** Green for a picture of 8 by 16 pixels at 2 pixels a unit, red otherwise. */
+    static constexpr const char* sizeFragment = R"(#version 450
+layout(set = 0, binding = 0) uniform Parameters
+{
+    vec4 resolution;
+    float scale;
+} params;
+layout(location = 0) out vec4 color;
+void main()
+{
+    float sized = (1.0 - step (0.5, abs (params.resolution.x - 8.0))) * (1.0 - step (0.5, abs (params.resolution.y - 16.0)));
+    float scaled = 1.0 - step (0.01, abs (params.scale - 2.0));
+    color = vec4 (1.0 - sized * scaled, sized * scaled, 0.0, 1.0);
+})";
+#endif
+
+    /** A component keeping levels it tells the revision of, painted by the drawing it is given. */
+    struct LevelsComponent : Component
+    {
+        LevelsComponent()
+        {
+            setOpaque (false);
+            setBounds (0.0f, 0.0f, 16.0f, 16.0f);
+        }
+
+        const ComponentTypeInfo& getDefaultTypeInfo() const override
+        {
+            static const ComponentTypeInfo info = ComponentTypeBuilder<LevelsComponent> ("LevelsComponent")
+                .series ("levels", &LevelsComponent::getLevels, &LevelsComponent::getRevision)
+                .build();
+            return info;
+        }
+
+        void paint (Graphics& g) override
+        {
+            if (auto currentStyle = getStyle())
+                currentStyle->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
+        }
+
+        Span<const float> getLevels() const noexcept { return levels; }
+        uint32 getRevision() const noexcept { return revision; }
+
+        std::vector<float> levels { 0.0f, 0.0f, 1.0f, 1.0f };
+        uint32 revision = 1;
+    };
+};
+
+TEST_F (DrawingStyleShaderGpuTest, AShaderTheDeviceCantDrawPaintsNothingAndStopsRepainting)
+{
+    // A bundle with no variant for Metal: the shader is given the time, and is never drawn
+    const String text (R"yui(
+        shader Clock { fragment: "fx/clock.frag"; }
+
+        drawing Screen {
+            rect { bounds: bounds; fill: #0000ff; }
+            use Clock {}
+        })yui");
+
+    DrawnComponent component (parseYui (text), nullptr, findShaders (text, { { "Clock", makeShader ({ { "time", 1 } }) } }));
+
+    Component window ("window");
+    auto& native = makeWindow (window, component);
+
+    // What else the drawing paints is painted, and no frame repaints the component for a shader that draws nothing
+    expectPixel (component, 8, 8, Color (0xff0000ff));
+    EXPECT_EQ (countRepaintsOfAFrame (native, 0.5), 0);
+
+    expectPixel (component, 8, 8, Color (0xff0000ff));
+    EXPECT_EQ (countRepaintsOfAFrame (native, 0.5), 0);
+
+    window.removeChildComponent (component);
+}
+
+TEST_F (DrawingStyleShaderGpuTest, TellsWhatTheDeviceRefusedOfTheShadersItRuns)
+{
+    // Bundles with no variant for Metal: one painted by a use, the other run by the filter of a layer
+    const String text (R"yui(
+        shader Plasma { fragment: "fx/plasma.frag"; }
+        shader Tone { fragment: "fx/tone.frag"; }
+
+        drawing Screen {
+            rect { bounds: bounds; fill: #0000ff; }
+            use Plasma { bounds: rect (0, 0, 8, 8); }
+
+            layer {
+                filter { bounds: rect (8, 8, 8, 8); use Tone {} }
+                rect { bounds: rect (8, 8, 8, 8); fill: #ff0000; }
+            }
+        })yui");
+
+    const auto plasma = makeShader ({ { "speed", 1 } });
+    const auto tone = makeShader ({ { "gain", 1 } }, 1);
+
+    DrawnComponent component (parseYui (text), nullptr, findShaders (text, { { "Plasma", plasma }, { "Tone", tone } }));
+
+    auto* style = dynamic_cast<DrawingStyle*> (component.getStyle().get());
+    ASSERT_NE (style, nullptr);
+
+    const auto findFailure = [style] (const GpuImageShader::Ptr& shader)
+    {
+        for (const auto& failure : style->getShaderFailures())
+            if (failure.shader.shader == shader)
+                return failure;
+
+        return DrawingStyle::ShaderFailure();
+    };
+
+    // Nothing is known of a drawing that was not painted
+    EXPECT_TRUE (style->getShaderFailures().empty());
+
+    // The use paints nothing and the filter leaves its layer as it is, each keeping why
+    expectPixel (component, 4, 4, Color (0xff0000ff));
+    expectPixel (component, 12, 12, Color (0xffff0000));
+
+    EXPECT_EQ (style->getShaderFailures().size(), 2u);
+    EXPECT_TRUE (findFailure (plasma).message.contains ("variant")) << findFailure (plasma).message;
+    EXPECT_EQ (findFailure (plasma).shader.block.getProperty ("name").toString(), String ("Plasma"));
+    EXPECT_TRUE (findFailure (tone).message.contains ("variant")) << findFailure (tone).message;
+    EXPECT_EQ (findFailure (tone).shader.block.getProperty ("name").toString(), String ("Tone"));
+
+    // Painted again, the same failures stand
+    expectPixel (component, 4, 4, Color (0xff0000ff));
+    EXPECT_EQ (style->getShaderFailures().size(), 2u);
+
+    // Letting go of what it keeps of the device, the style forgets what that device refused
+    style->releaseResources();
+    EXPECT_TRUE (style->getShaderFailures().empty());
+
+    expectPixel (component, 12, 12, Color (0xffff0000));
+    EXPECT_EQ (style->getShaderFailures().size(), 2u);
+}
+
+TEST_F (DrawingStyleShaderGpuTest, AStylesheetReportsWhatTheDeviceRefusedOfAShaderWhereItIsDeclared)
+{
+    /** Painted by the drawing the stylesheet gives it. */
+    struct Styled : Component
+    {
+        Styled()
+        {
+            setOpaque (false);
+            setBounds (0.0f, 0.0f, 16.0f, 16.0f);
+        }
+
+        void paint (Graphics& g) override
+        {
+            if (auto currentStyle = getStyle())
+                currentStyle->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
+        }
+    };
+
+    // The bundles a build makes of the shaders, for other graphics APIs than Metal
+    std::map<String, MemoryBlock> bundles;
+    ASSERT_TRUE (makeShaderBundle ({ { "speed", 1 } })->saveToMemoryBlock (bundles["fx/plasma.frag.ysl"]).wasOk());
+    ASSERT_TRUE (makeShaderBundle ({ { "gain", 1 } }, 1)->saveToMemoryBlock (bundles["fx/tone.frag.ysl"]).wasOk());
+
+    YuiDocument document;
+    document.setAssetReader ([bundles] (const String& path) -> std::optional<MemoryBlock>
+    {
+        const auto found = bundles.find (path);
+        return found != bundles.end() ? std::optional<MemoryBlock> (found->second) : std::nullopt;
+    });
+
+    const auto loaded = document.loadFromString (R"yui(
+        shader Plasma { fragment: "fx/plasma.frag"; }
+        shader Tone { fragment: "fx/tone.frag"; }
+
+        drawing Screen {
+            rect { bounds: bounds; fill: #0000ff; }
+            use Plasma { bounds: rect (0, 0, 8, 8); }
+
+            layer {
+                filter { bounds: rect (8, 8, 8, 8); use Tone {} }
+                rect { bounds: rect (8, 8, 8, 8); fill: #ff0000; }
+            }
+        }
+
+        style { #screen { drawing: Screen; } }
+
+        Component { })yui");
+
+    ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
+
+    auto* root = document.getRoot();
+    auto* context = root->getStyleContext();
+
+    Styled screen;
+    screen.setComponentID ("screen");
+    root->addAndMakeVisible (screen);
+    context->restyleNow();
+
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+    ASSERT_NE (dynamic_cast<DrawingStyle*> (screen.getStyle().get()), nullptr);
+
+    // Nothing is reported while the drawing is painted: the restyle its paint asked for tells both shaders
+    expectPixel (screen, 4, 4, Color (0xff0000ff));
+    expectPixel (screen, 12, 12, Color (0xffff0000));
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+
+    context->restyleNow();
+
+    const auto diagnostics = document.getDiagnostics();
+
+    const auto lineOf = [&diagnostics] (const String& start)
+    {
+        for (const auto& diagnostic : diagnostics)
+            if (diagnostic.message.startsWith (start))
+                return diagnostic.line;
+
+        return 0;
+    };
+
+    EXPECT_EQ (diagnostics.size(), 2u) << DataTreeDiagnostic::join (diagnostics);
+    EXPECT_EQ (lineOf ("The shader 'Plasma' can't be drawn: "), 2);
+    EXPECT_EQ (lineOf ("The shader 'Tone' can't be drawn: "), 3);
+
+    // And tells them once
+    expectPixel (screen, 4, 4, Color (0xff0000ff));
+    context->markDirty (*root);
+    context->restyleNow();
+
+    EXPECT_TRUE (context->getDiagnostics().empty()) << DataTreeDiagnostic::join (context->getDiagnostics());
+}
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+
+TEST_F (DrawingStyleShaderGpuTest, PaintsAShaderInItsBoundsInsideItsClipAtItsOpacity)
+{
+    const auto shader = compile (fillFragment);
+    ASSERT_NE (shader, nullptr);
+
+    const String text (R"yui(
+        shader Fill { fragment: "fx/fill.frag"; property tint: color = #0000ff; }
+
+        drawing Screen {
+            property shade: color = #00ff00;
+
+            rect { bounds: bounds; fill: #ff0000; }
+            use Fill { bounds: rect (0, 0, 12, 16); clip: rect (4, 0, 12, 16); }
+            use Fill { bounds: rect (12, 8, 4, 8); tint: shade; opacity: 0.5; }
+        })yui");
+
+    DrawnComponent component (parseYui (text), nullptr, findShaders (text, { { "Fill", shader } }));
+
+    // The default of the block inside the clip, and what is under the shader outside of it and of its bounds
+    expectPixel (component, 8, 4, Color (0xff0000ff));
+    expectPixel (component, 2, 8, Color (0xffff0000));
+    expectPixel (component, 13, 4, Color (0xffff0000));
+
+    // The value the use sets, at half its opacity over the red
+    expectPixel (component, 14, 12, Color (0xff808000));
+
+    // The picture follows what the use reads
+    component.setProperty (Identifier ("shade"), VariantConverter<Color>::toVar (Color (0xff0000ff)));
+    expectPixel (component, 14, 12, Color (0xff800080));
+    expectPixel (component, 8, 4, Color (0xff0000ff));
+}
+
+TEST_F (DrawingStyleShaderGpuTest, GivesAShaderTheSizeOfItsPictureInPixels)
+{
+    const auto shader = compile (sizeFragment);
+    ASSERT_NE (shader, nullptr);
+
+    // The same 8 by 16 pixels: 4 by 8 units under a transform doubling them, and 8 by 16 units as they are
+    const String text (R"yui(
+        shader Size { fragment: "fx/size.frag"; }
+
+        drawing Screen {
+            group { transform: transform.scaling (2); use Size { bounds: rect (0, 0, 4, 8); } }
+            use Size { bounds: rect (8, 0, 8, 16); }
+        })yui");
+
+    DrawnComponent component (parseYui (text), nullptr, findShaders (text, { { "Size", shader } }));
+
+    expectPixel (component, 4, 8, Color (0xff00ff00));
+    expectPixel (component, 12, 8, Color (0xffff0000));
+}
+
+TEST_F (DrawingStyleShaderGpuTest, AShaderGivenTheTimeIsDrawnAgainAtEveryFrameOfItsWindow)
+{
+    const auto shader = compile (clockFragment);
+    ASSERT_NE (shader, nullptr);
+
+    const String text (R"yui(
+        shader Clock { fragment: "fx/clock.frag"; }
+        drawing Screen { use Clock {} })yui");
+
+    DrawnComponent component (parseYui (text), nullptr, findShaders (text, { { "Clock", shader } }));
+
+    Component window ("window");
+    auto& native = makeWindow (window, component);
+
+    // The time starts once the shader was drawn
+    EXPECT_EQ (countRepaintsOfAFrame (native, 0.5), 0);
+    expectPixel (component, 8, 8, Colors::black);
+
+    EXPECT_GT (countRepaintsOfAFrame (native, 0.5), 0);
+    expectPixel (component, 8, 8, Color (0xffff0000));
+
+    EXPECT_GT (countRepaintsOfAFrame (native, 0.5), 0);
+    expectPixel (component, 8, 8, Color (0xffffff00));
+
+    // It stands still while the component is hidden
+    component.setVisible (false);
+    EXPECT_EQ (countRepaintsOfAFrame (native, 0.5), 0);
+
+    component.setVisible (true);
+    expectPixel (component, 8, 8, Color (0xffffff00));
+
+    // And once the drawing is no longer the style of the component
+    const auto style = component.getStyle();
+    component.setStyle (nullptr);
+    EXPECT_EQ (countRepaintsOfAFrame (native, 0.5), 0);
+
+    window.removeChildComponent (component);
+}
+
+TEST_F (DrawingStyleShaderGpuTest, LayersAreFilteredByTheShadersOfTheirFilter)
+{
+    const auto swap = compile (swapFragment);
+    const auto fill = compile (fillFragment);
+    ASSERT_NE (swap, nullptr);
+    ASSERT_NE (fill, nullptr);
+
+    const String text (R"yui(
+        shader Swap { fragment: "fx/swap.frag"; property gain: number = 1; }
+        shader Fill { fragment: "fx/fill.frag"; property tint: color = #00ff00; }
+
+        drawing Screen {
+            property level: number = 1;
+
+            layer {
+                filter { bounds: rect (0, 0, 8, 16); use Swap { gain: level; } }
+                rect { bounds: rect (0, 4, 8, 8); fill: #ff0000; }
+            }
+
+            layer {
+                filter { bounds: rect (8, 0, 8, 16); use Fill { result: flat; } use Swap { in: flat; } }
+                rect { bounds: rect (8, 0, 8, 16); fill: #ff0000; }
+            }
+        })yui");
+
+    DrawnComponent component (parseYui (text), nullptr, findShaders (text, { { "Swap", swap }, { "Fill", fill } }));
+
+    // The red of the layer comes out blue, and what the layer left empty stays so
+    expectPixel (component, 4, 8, Color (0xff0000ff));
+    expectPixel (component, 4, 1, Colors::transparentBlack);
+
+    // A shader reading no picture makes one in place of the layer, which the shader after it reads: green stays green
+    expectPixel (component, 12, 8, Color (0xff00ff00));
+
+    // The uniforms follow the properties the use reads
+    component.setProperty (Identifier ("level"), 0.0);
+    expectPixel (component, 4, 8, Colors::transparentBlack);
+    expectPixel (component, 12, 8, Color (0xff00ff00));
+}
+
+TEST_F (DrawingStyleShaderGpuTest, AShaderSamplesASeriesAsATextureWrittenWhenTheSeriesChanges)
+{
+    const auto shader = compile (seriesFragment);
+    ASSERT_NE (shader, nullptr);
+    EXPECT_EQ (shader->getInputTextureNames(), StringArray ({ "levels" }));
+
+    const String block ("shader Scope { fragment: \"fx/scope.frag\"; property levels: number[]; }\n");
+    const String text = block + "drawing Screen { property lanes: number[]; use Scope { levels: lanes; } }";
+    const String liveText = block + "drawing Live { use Scope { levels: levels; } }";
+
+    // An array the component holds as a var: low on the left, high on the right
+    DrawnComponent component (parseYui (text), nullptr, findShaders (text, { { "Scope", shader } }));
+    component.setProperty (Identifier ("lanes"), var (Array<var> { 0.0, 0.0, 1.0, 1.0 }));
+
+    expectPixel (component, 1, 8, Color (0xff00ff00));
+    expectPixel (component, 14, 8, Color (0xffff0000));
+
+    // It tells no revision, so its numbers are compared: other numbers are another picture
+    component.setProperty (Identifier ("lanes"), var (Array<var> { 1.0, 1.0, 0.0, 0.0 }));
+    expectPixel (component, 1, 8, Color (0xffff0000));
+    expectPixel (component, 14, 8, Color (0xff00ff00));
+
+    // A series is read where the component keeps it, and written to the texture when its revision changes
+    LevelsComponent live;
+
+    const auto style = DrawingStyle::create (live, parseYui (liveText), nullptr, nullptr, nullptr, findShaders (liveText, { { "Scope", shader } }));
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+    live.setStyle (style.getReference());
+
+    expectPixel (live, 1, 8, Color (0xff00ff00));
+    expectPixel (live, 14, 8, Color (0xffff0000));
+
+    live.levels = { 1.0f, 1.0f, 0.0f, 0.0f };
+    expectPixel (live, 1, 8, Color (0xff00ff00));
+
+    live.revision = 2;
+    expectPixel (live, 1, 8, Color (0xffff0000));
+    expectPixel (live, 14, 8, Color (0xff00ff00));
+
+    // A series of another length takes a texture of its width
+    live.levels = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f };
+    live.revision = 3;
+    expectPixel (live, 1, 8, Color (0xff00ff00));
+    expectPixel (live, 14, 8, Color (0xffff0000));
+
+    live.setStyle (nullptr);
+}
+
+#endif // YUP_ENABLE_SHADER_TRANSPILER
+
+//==============================================================================
+/** The tiles of patterns and the filtered layers, kept while what they draw stays the same: drawn by Metal, as
+    there is nothing to keep of them without a GPU. */
+class DrawingStyleKeptContentTest : public DrawingStyleGpuTest
+{
+protected:
+    /** A component counting what a drawing asks of it: each read of its level, and each paint of its part. */
+    struct CountingComponent : Component
+    {
+        CountingComponent()
+        {
+            setOpaque (false);
+            setBounds (0.0f, 0.0f, 16.0f, 16.0f);
+        }
+
+        const ComponentTypeInfo& getDefaultTypeInfo() const override
+        {
+            static const ComponentTypeInfo info = ComponentTypeBuilder<CountingComponent> ("DrawingStyleCountingComponent")
+                .readOnly ("level", &CountingComponent::getLevel)
+                .part ("glow")
+                .build();
+            return info;
+        }
+
+        void paint (Graphics& g) override
+        {
+            if (auto currentStyle = getStyle())
+                currentStyle->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
+        }
+
+        float getLevel() const
+        {
+            ++numLevelReads;
+            return level;
+        }
+
+        float level = 1.0f;
+        mutable int numLevelReads = 0;
+        mutable int numGlows = 0;
+    };
+
+    /** What a paint of a component gave: the color of a pixel of its picture, and how many times its level was read. */
+    struct Painted
+    {
+        Color color;
+        int numLevelReads = 0;
+    };
+
+    void SetUp() override
+    {
+        DrawingStyleGpuTest::SetUp();
+
+        // The theme paints the part the component declares: this one counts how many times it is asked to
+        theme->setComponentPart (CountingComponent().getTypeInfo(), Identifier ("glow"), [] (Graphics&, const ApplicationTheme&, const Component& c, const Rectangle<float>&)
+        {
+            ++static_cast<const CountingComponent&> (c).numGlows;
+        });
+    }
+
+    static void setDrawing (CountingComponent& component, const String& text)
+    {
+        const auto created = DrawingStyle::create (component, parseYui (text));
+        ASSERT_TRUE (created.wasOk()) << created.getErrorMessage();
+
+        component.setStyle (created.getReference());
+    }
+
+    static void setAccent (CountingComponent& component, Color accent)
+    {
+        auto palette = ThemePalette();
+        palette.setColor (ThemePalette::Role::accent, accent);
+        component.setPalette (palette);
+    }
+
+    static Painted paintAndRead (CountingComponent& component, int x, int y)
+    {
+        component.numLevelReads = 0;
+
+        const auto image = component.snapshotToImage (*gpuContext);
+        EXPECT_TRUE (image.isValid());
+
+        return { image.isValid() ? image.getPixelColor (x, y) : Color(), component.numLevelReads };
+    }
+
+    /** Paints a component whose drawing keeps a rectangle in a raster: one 4 units wide from its corner, or 8
+        once the component is wider than 20, filled with what `fill` reads, which the pixels at (2, 2) and (6, 2)
+        show. Expects the raster to be kept while nothing changes, and drawn again for each thing the rectangle reads.
+    */
+    void expectContentIsKeptUntilWhatItReadsChanges (const String& text)
+    {
+        CountingComponent component;
+        setAccent (component, Color (0xff00ff00));
+
+        ASSERT_NO_FATAL_FAILURE (setDrawing (component, text));
+
+        // The first paint draws the rectangle, and the next one keeps what was drawn
+        EXPECT_EQ (paintAndRead (component, 2, 2).color, Color (0xffff0000));
+
+        const auto kept = paintAndRead (component, 2, 2);
+        EXPECT_EQ (kept.color, Color (0xffff0000));
+
+        // Telling that the rectangle is the same reads the component, and drawing it again reads it once more
+        const auto expectDrawnAgain = [&] (int x, int y, Color expected, const char* change)
+        {
+            const auto changed = paintAndRead (component, x, y);
+            EXPECT_EQ (changed.color, expected) << change;
+            EXPECT_GT (changed.numLevelReads, kept.numLevelReads) << change;
+
+            const auto same = paintAndRead (component, x, y);
+            EXPECT_EQ (same.color, expected) << change;
+            EXPECT_EQ (same.numLevelReads, kept.numLevelReads) << change;
+        };
+
+        component.setProperty (Identifier ("shade"), VariantConverter<Color>::toVar (Color (0xffff00ff)));
+        expectDrawnAgain (2, 2, Color (0xffff00ff), "a property of the drawing");
+
+        component.level = 0.0f;
+        expectDrawnAgain (2, 2, Color (0xff00ff00), "a property of the component");
+
+        setAccent (component, Color (0xffffff00));
+        expectDrawnAgain (2, 2, Color (0xffffff00), "a role of the palette");
+
+        component.setEnabled (false);
+        expectDrawnAgain (2, 2, Color (0xff0000ff), "a state of the component");
+
+        EXPECT_EQ (paintAndRead (component, 6, 2).color.getAlpha(), 0);
+
+        component.setBounds (0.0f, 0.0f, 32.0f, 16.0f);
+        expectDrawnAgain (6, 2, Color (0xff0000ff), "the bounds of the component");
+
+        component.setStyle (nullptr);
+    }
+
+    static constexpr const char* readingFill = "enabled ? (level > 0.5 ? shade : palette.accent) : #0000ff";
+};
+
+TEST_F (DrawingStyleKeptContentTest, ATileIsKeptUntilWhatItsElementsReadChanges)
+{
+    expectContentIsKeptUntilWhatItReadsChanges (String (R"yui(
+        drawing {
+            property shade: color = #ff0000;
+            let wide: bounds.width > 20;
+
+            pattern Tile { tile: rect (0, 0, 8, 8); rect { bounds: rect (0, 0, wide ? 8 : 4, 8); fill: )yui")
+                                                + readingFill + R"yui(; } }
+            rect { bounds: bounds; fillPattern: Tile; }
+        })yui");
+}
+
+TEST_F (DrawingStyleKeptContentTest, AFilteredLayerIsKeptUntilWhatItsElementsReadChanges)
+{
+    expectContentIsKeptUntilWhatItReadsChanges (String (R"yui(
+        drawing {
+            property shade: color = #ff0000;
+            let wide: bounds.width > 20;
+
+            layer {
+                filter { bounds: rect (0, 0, 16, 16); offset { offset: point (0, 0); } }
+                rect { bounds: rect (0, 0, wide ? 8 : 4, 8); fill: )yui")
+                                                + readingFill + R"yui(; }
+            }
+        })yui");
+}
+
+TEST_F (DrawingStyleKeptContentTest, ATileNotDrawnWhenWhatItReadsChangedIsDrawnOnceItIsPaintedWith)
+{
+    CountingComponent component;
+
+    ASSERT_NO_FATAL_FAILURE (setDrawing (component, R"yui(
+        drawing {
+            property shade: color = #ff0000;
+            property shown: boolean = true;
+
+            pattern Tile { tile: rect (0, 0, 8, 8); rect { bounds: bounds; fill: shade; } }
+            rect { bounds: bounds; fillPattern: Tile; visible: shown; }
+        })yui"));
+
+    EXPECT_EQ (paintAndRead (component, 8, 8).color, Color (0xffff0000));
+
+    // Nothing is painted with the tile while its color changes
+    component.setProperty (Identifier ("shown"), false);
+    component.setProperty (Identifier ("shade"), VariantConverter<Color>::toVar (Color (0xff0000ff)));
+    EXPECT_EQ (paintAndRead (component, 8, 8).color.getAlpha(), 0);
+
+    component.setProperty (Identifier ("shown"), true);
+    EXPECT_EQ (paintAndRead (component, 8, 8).color, Color (0xff0000ff));
+
+    component.setStyle (nullptr);
+}
+
+TEST_F (DrawingStyleKeptContentTest, AFilteredLayerDrawnAsItIsWhenWhatItReadsChangedIsDrawnAgainForItsFilter)
+{
+    CountingComponent component;
+
+    ASSERT_NO_FATAL_FAILURE (setDrawing (component, R"yui(
+        drawing {
+            property shade: color = #ff0000;
+            property span: number = 16;
+
+            layer {
+                filter { bounds: rect (0, 0, span, 16); offset { offset: point (0, 0); } }
+                rect { bounds: rect (0, 0, 8, 16); fill: shade; }
+            }
+        })yui"));
+
+    EXPECT_EQ (paintAndRead (component, 2, 8).color, Color (0xffff0000));
+
+    // A filter with nowhere to run leaves the layer to be drawn as it is, with the color it has by then
+    component.setProperty (Identifier ("span"), 0.0);
+    component.setProperty (Identifier ("shade"), VariantConverter<Color>::toVar (Color (0xff0000ff)));
+    EXPECT_EQ (paintAndRead (component, 2, 8).color, Color (0xff0000ff));
+
+    // Back where it was, the filter is not given what was drawn for it before the color changed
+    component.setProperty (Identifier ("span"), 16.0);
+    EXPECT_EQ (paintAndRead (component, 2, 8).color, Color (0xff0000ff));
+
+    component.setStyle (nullptr);
+}
+
+TEST_F (DrawingStyleKeptContentTest, WhatHoldsAPartIsDrawnAgainAtEveryPaint)
+{
+    // What a part paints is not told by what the drawing reads: nothing holding one is kept
+    for (const auto* text : { R"yui(
+        drawing {
+            pattern Tile { tile: rect (0, 0, 8, 8); part glow { bounds: bounds; } }
+            rect { bounds: bounds; fillPattern: Tile; }
+        })yui",
+                              R"yui(
+        drawing {
+            layer {
+                filter { offset { offset: point (0, 0); } }
+                part glow { bounds: bounds; }
+            }
+        })yui" })
+    {
+        CountingComponent component;
+        ASSERT_NO_FATAL_FAILURE (setDrawing (component, text));
+
+        int numGlows = 0;
+
+        for (int paint = 0; paint < 3; ++paint)
+        {
+            paintAndRead (component, 8, 8);
+            EXPECT_GT (component.numGlows, numGlows) << "paint " << paint << " of" << text;
+
+            numGlows = component.numGlows;
+        }
+
+        component.setStyle (nullptr);
+    }
+}
+
+TEST_F (DrawingStyleKeptContentTest, AFilteredLayerIsDrawnAgainWhenATileItIsPaintedWithIs)
+{
+    CountingComponent component;
+
+    ASSERT_NO_FATAL_FAILURE (setDrawing (component, R"yui(
+        drawing {
+            property shade: color = #ff0000;
+
+            pattern Tile { tile: rect (0, 0, 8, 8); rect { bounds: bounds; fill: shade; } }
+
+            layer {
+                filter { bounds: rect (0, 0, 16, 16); offset { offset: point (0, 0); } }
+                rect { bounds: rect (0, 0, 16, 16); fillPattern: Tile; }
+            }
+        })yui"));
+
+    EXPECT_EQ (paintAndRead (component, 8, 8).color, Color (0xffff0000));
+    EXPECT_EQ (paintAndRead (component, 8, 8).color, Color (0xffff0000));
+
+    // Nothing the rectangle of the layer reads changes, but what it is filled with does
+    component.setProperty (Identifier ("shade"), VariantConverter<Color>::toVar (Color (0xff0000ff)));
+    EXPECT_EQ (paintAndRead (component, 8, 8).color, Color (0xff0000ff));
+
+    component.setStyle (nullptr);
+}
+
+TEST_F (DrawingStyleKeptContentTest, WhatARepeatDrawsOnSomeOfItsTurnsIsDrawnAgainWhenItChanges)
+{
+    CountingComponent component;
+
+    ASSERT_NO_FATAL_FAILURE (setDrawing (component, R"yui(
+        drawing {
+            property shade: color = #ff0000;
+
+            layer {
+                filter { bounds: rect (0, 0, 16, 16); offset { offset: point (0, 0); } }
+
+                repeat i in 0 .. 2 {
+                    group { visible: i < 1; rect { bounds: rect (0, 0, 8, 16); fill: shade; } }
+                }
+            }
+        })yui"));
+
+    EXPECT_EQ (paintAndRead (component, 2, 8).color, Color (0xffff0000));
+    EXPECT_EQ (paintAndRead (component, 2, 8).color, Color (0xffff0000));
+
+    // The group is hidden on the last turn of the repeat: what it drew on the first one still follows what it reads
+    component.setProperty (Identifier ("shade"), VariantConverter<Color>::toVar (Color (0xff0000ff)));
+    EXPECT_EQ (paintAndRead (component, 2, 8).color, Color (0xff0000ff));
+
+    component.setStyle (nullptr);
 }

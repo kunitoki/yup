@@ -72,6 +72,14 @@ vec3 ssrViewVector(vec3 position)
     return view.projection[2][3] < -0.5 ? normalize(-position) : vec3(0.0, 0.0, 1.0);
 }
 
+// The pixels of mip 0 a length spans across the view at a distance along the view direction, for
+// perspective and orthographic projections
+float ssrPixelsPerUnit(float viewDepth)
+{
+    float scale = 0.5 * view.viewport.y * view.projection[1][1];
+    return view.projection[2][3] < -0.5 ? scale / max(viewDepth, 1.0e-6) : scale;
+}
+
 // The view-space shading normal (xyz) and the perceptual roughness (w) of a pixel
 vec4 ssrNormalRoughness(ivec2 pixel)
 {

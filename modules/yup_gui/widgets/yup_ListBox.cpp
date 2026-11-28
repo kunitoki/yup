@@ -107,6 +107,10 @@ struct ListBoxIds
 {
     static inline const Identifier items { "items" };
     static inline const Identifier selectedRow { "selectedRow" };
+    static inline const Identifier orientation { "orientation" };
+    static inline const Identifier scrollPosition { "scrollPosition" };
+    static inline const Identifier refreshing { "refreshing" };
+    static inline const Identifier refreshProgress { "refreshProgress" };
 };
 
 } // namespace
@@ -115,9 +119,9 @@ struct ListBoxIds
 
 const Identifier ListBox::Style::backgroundColorId { "listBoxBackground" };
 const Identifier ListBox::Style::outlineColorId { "listBoxOutline" };
-const Identifier ListBox::Style::rowBackgroundColorId { "rowBackground" };
-const Identifier ListBox::Style::selectedRowBackgroundColorId { "selectedRowBackground" };
-const Identifier ListBox::Style::hoveredRowBackgroundColorId { "hoveredRowBackground" };
+const Identifier ListBox::Style::rowBackgroundColorId { "listBoxRowBackground" };
+const Identifier ListBox::Style::selectedRowBackgroundColorId { "listBoxSelectedRowBackground" };
+const Identifier ListBox::Style::hoveredRowBackgroundColorId { "listBoxHoveredRowBackground" };
 const Identifier ListBox::Style::refreshIndicatorColorId { "listBoxRefreshIndicator" };
 const Identifier ListBox::Style::refreshIndicatorSizeId { "listBoxRefreshIndicatorSize" };
 
@@ -141,6 +145,10 @@ const ComponentTypeInfo& ListBox::getClassTypeInfo()
                                      else
                                          listBox.selectRow (row);
                                  }, {}, "The index of the selected row, or -1 when nothing is selected.")
+                                 .enumeration (ListBoxIds::orientation, { "vertical", "horizontal" }, &ListBox::getOrientation, &ListBox::setOrientation, "The direction the rows are laid out in.")
+                                 .readOnly (ListBoxIds::scrollPosition, &ListBox::getScrollPosition, 0.0, "How far the content is scrolled from its start, negative while it is pulled past it.")
+                                 .state (ListBoxIds::refreshing, &ListBox::isRefreshing, false, "Whether a pull to refresh is under way.")
+                                 .readOnly (ListBoxIds::refreshProgress, &ListBox::getPullToRefreshProgress, 0.0, "How far the content was pulled toward a refresh, from 0 to 1.")
                                  .signal ("onSelectionChanged", &ListBox::onSelectionChanged, "Emitted when the selected rows change")
                                  .build();
 
@@ -947,7 +955,13 @@ void ListBox::setRefreshing (bool shouldBeRefreshing)
         scroller.animateTo (0.0f);
 
     updateLayout();
+
+    const BailOutChecker checker (this);
+
     dispatchPendingNotifications();
+
+    if (! checker.shouldBailOut())
+        notifyPropertyChanged (ListBoxIds::refreshing);
 }
 
 bool ListBox::isRefreshing() const noexcept
@@ -989,6 +1003,7 @@ void ListBox::setOrientation (Orientation newOrientation)
 
     orientation = newOrientation;
     updateContent();
+    notifyPropertyChanged (ListBoxIds::orientation);
 }
 
 ListBox::Orientation ListBox::getOrientation() const noexcept
@@ -1148,12 +1163,6 @@ Rectangle<float> ListBox::getRowBounds (int rowIndex) const
 }
 
 //==============================================================================
-void ListBox::paint (Graphics& g)
-{
-    if (auto style = ApplicationTheme::findComponentStyle (*this))
-        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
-}
-
 void ListBox::resized()
 {
     auto bounds = getLocalBounds();
@@ -1163,6 +1172,16 @@ void ListBox::resized()
 
     updateLayout();
     dispatchPendingNotifications();
+}
+
+void ListBox::visibilityChanged()
+{
+    updateFrameAttachment();
+}
+
+void ListBox::parentHierarchyChanged()
+{
+    updateFrameAttachment();
 }
 
 void ListBox::refreshDisplay (double lastFrameTimeSeconds)
@@ -2025,6 +2044,9 @@ void ListBox::gestureUp (const MouseEvent& event)
 
     dispatchPendingNotifications();
 
+    if (shouldRefresh && ! checker.shouldBailOut())
+        notifyPropertyChanged (ListBoxIds::refreshing);
+
     if (shouldRefresh && ! checker.shouldBailOut() && onRefresh)
         onRefresh();
 }
@@ -2139,6 +2161,9 @@ bool ListBox::startDraggingSelectedRows (int touchIndex, Point<float> screenPosi
 //==============================================================================
 void ListBox::dispatchPendingNotifications()
 {
+    // Whatever moved the content got here: this is where the list knows whether it needs frames
+    updateFrameAttachment();
+
     const BailOutChecker checker (this);
 
     if (const auto position = scroller.getOffset(); position != lastNotifiedScrollPosition)
@@ -2197,6 +2222,14 @@ void ListBox::dispatchPendingNotifications()
         if (onEndReached)
             onEndReached();
     }
+}
+
+void ListBox::updateFrameAttachment()
+{
+    // A touch is timed by the frames, for its long press and for the speed it lets go with
+    const auto needsFrames = gesture.active || scroller.isAnimating() || refreshing;
+
+    frameAttachment.setActive (needsFrames && isShowing());
 }
 
 } // namespace yup

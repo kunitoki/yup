@@ -70,54 +70,121 @@ public:
 
     //==============================================================================
     /**
-        Resolves the style for a specific component type.
+        Returns the style a component is painted with.
 
-        This template method returns the style for the specified component type. If a style is provided as an argument,
-        it will be returned; otherwise, the global style will be used.
+        This is the style set on the component with Component::setStyle(), or else the one the
+        global theme has for its class (see setComponentStyle), for the class it is asked as, or
+        for the closest class its type derives from, as its type info tells (see
+        Component::getTypeInfo): a subclass of Slider with no style of its own is painted as a
+        Slider. Component::paint() paints a component with it.
 
-        @param instanceStyle  An optional style to use instead of the global style.
+        @param component  The component to find the style of. The class it is asked as, the one of
+                          the reference, finds the style of a class that tells no type of its own.
 
-        @returns The resolved style for the component type.
+        @returns The style, or nullptr when the component has none and there is no global theme,
+                 or that theme has none for it.
     */
     template <class ComponentType>
     static auto findComponentStyle (ComponentType& component)
         -> std::enable_if_t<std::is_base_of_v<Component, ComponentType>, ComponentStyle::Ptr>
     {
-        auto& componentStyles = getGlobalThemeInstance()->componentStyles;
-
-        if (auto style = component.getStyle())
-            return style;
-
-        {
-            auto it = componentStyles.find (std::type_index (typeid (component)));
-            if (it != componentStyles.end())
-                return it->second;
-        }
-
-        {
-            auto it = componentStyles.find (std::type_index (typeid (ComponentType)));
-            if (it != componentStyles.end())
-                return it->second;
-        }
-
-        jassertfalse;
-        return nullptr;
+        return findComponentStyle (component, typeid (ComponentType));
     }
 
     //==============================================================================
     /**
-        Sets the style for a specific component type.
+        Sets the style this theme paints the components of a class with, in place of the one it had.
 
-        This template method allows setting the style for a specific type of component. The component type must be
-        part of the `componentStyles` tuple.
+        The components of the classes deriving from it are painted with it too, unless a style is
+        set for a closer one (see findComponentStyle).
 
-        @param instanceStyle  The style to set for the component type.
+        @param style  The style, or nullptr for the class to be painted as the one it derives from.
     */
     template <class ComponentType>
     void setComponentStyle (ComponentStyle::Ptr style)
     {
-        componentStyles.try_emplace (std::type_index (typeid (ComponentType)), std::move (style));
+        setComponentStyle (typeid (ComponentType), std::move (style));
     }
+
+    //==============================================================================
+    /** Paints a part of a component: what its type declares it shows beside its shapes (see ComponentPart).
+
+        @param g           The Graphics to paint with, holding the paint the part uses.
+        @param theme       The theme painting the part.
+        @param component   The component, of the type the part was set for.
+        @param area        Where the part goes, in the coordinates of the component.
+    */
+    using ComponentPartPainter = std::function<void (Graphics& g, const ApplicationTheme& theme, const Component& component, const Rectangle<float>& area)>;
+
+    /**
+        Sets how this theme paints a part of a component type.
+
+        The type declares its parts (see ComponentTypeBuilder::part) and the theme paints them, as it
+        paints the component: the style of the type calls the painter where it wants the part, and a
+        `.yui` drawing places the same one with a `part` element. A painter set again replaces the
+        one before.
+
+        @code
+        theme->setComponentPart<Label> (Label::Style::textPartId, [] (Graphics& g, const ApplicationTheme&, const Label& label, const Rectangle<float>& area)
+        {
+            g.fillFittedText (label.getStyledText(), area);
+        });
+        @endcode
+
+        @param partName  The name of a part @p ComponentType declares in its `getClassTypeInfo()`.
+        @param painter   Paints it: `void (Graphics&, const ApplicationTheme&, const ComponentType&, const Rectangle<float>& area)`.
+
+        @see ComponentPart, paintPart
+    */
+    template <class ComponentType, class F>
+        requires std::invocable<F&, Graphics&, const ApplicationTheme&, const ComponentType&, const Rectangle<float>&>
+    void setComponentPart (const Identifier& partName, F&& painter)
+    {
+        setComponentPart (ComponentType::getClassTypeInfo(), partName, [painter = std::forward<F> (painter)] (Graphics& g, const ApplicationTheme& theme, const Component& component, const Rectangle<float>& area) mutable
+        {
+            std::invoke (painter, g, theme, static_cast<const ComponentType&> (component), area);
+        });
+    }
+
+    /**
+        Sets how this theme paints a part of the components of a type info.
+
+        As the overload naming a class, for a type that tells its type info another way than with
+        `getClassTypeInfo()`. The painter is given the components whose type info is @p type or derives from it.
+
+        @param type      The type info declaring the part.
+        @param partName  The name of the part.
+        @param painter   Paints it.
+    */
+    void setComponentPart (const ComponentTypeInfo& type, const Identifier& partName, ComponentPartPainter painter);
+
+    /**
+        Paints a part of a component as the global theme does.
+
+        @param g          The Graphics to paint with, holding the paint the part uses.
+        @param component  The component to paint the part of.
+        @param partName   The name of the part.
+        @param area       Where the part goes, in the coordinates of the component.
+
+        @returns False, having painted nothing, when the global theme paints no such part.
+
+        @see Component::paintPart
+    */
+    static bool paintComponentPart (Graphics& g, const Component& component, const Identifier& partName, const Rectangle<float>& area);
+
+    /**
+        Paints a part of a component as this theme does.
+
+        The painter is the one set for the type of the component, or else for the closest of its base types.
+
+        @param g          The Graphics to paint with, holding the paint the part uses.
+        @param component  The component to paint the part of.
+        @param partName   The name of the part.
+        @param area       Where the part goes, in the coordinates of the component.
+
+        @returns False, having painted nothing, when this theme paints no such part.
+    */
+    bool paintPart (Graphics& g, const Component& component, const Identifier& partName, const Rectangle<float>& area) const;
 
     //==============================================================================
     /** Returns a color from the global theme.
@@ -200,7 +267,7 @@ public:
     const ThemePalette& getPalette (const Component& component) const;
 
     /** Returns a number that changes every time the theme does: its palette or its mapping, its
-        colors, its properties or its fonts.
+        colors, its properties, its fonts, its styles or the painters of its parts.
 
         No two themes share a value, so it also tells when another theme became the global one.
         Stylesheets compare it between frames to restyle the components whose computed values read
@@ -210,6 +277,16 @@ public:
         @see setPalette, setPaletteMapping
     */
     uint32 getPaletteGeneration() const noexcept { return paletteGeneration; }
+
+    /** Returns a number that changes whenever a theme changes, or another one becomes the global one.
+
+        It is one number for all the themes, and can be read from any thread without a lock: a
+        window polls it to tell, without stopping the message thread, that the stylesheets of its
+        components have to look at the theme again.
+
+        @see getPaletteGeneration
+    */
+    static uint32 getLastGeneration() noexcept;
 
     /** A function that assigns theme colors from the roles of a palette, by calling setPaletteColor(). */
     using PaletteMapping = std::function<void (const ThemePalette&, ApplicationTheme&)>;
@@ -322,11 +399,15 @@ public:
 
 private:
     static ApplicationTheme::Ptr& getGlobalThemeInstance();
+    static ComponentStyle::Ptr findComponentStyle (const Component& component, std::type_index askedAs);
+    void setComponentStyle (std::type_index classType, ComponentStyle::Ptr style);
     std::optional<Color> findPaletteColor (const ThemePalette& componentPalette, const Identifier& colorId) const;
+    static std::atomic<uint32>& getGenerationCounter() noexcept;
     static uint32 makeGeneration() noexcept;
 
     //==============================================================================
     std::unordered_map<std::type_index, ComponentStyle::Ptr> componentStyles;
+    std::unordered_map<const ComponentTypeInfo*, std::unordered_map<Identifier, ComponentPartPainter>> componentParts;
     std::unordered_map<Identifier, Color> defaultColors;
     std::unordered_map<Identifier, Color> paletteColors;
     ThemePalette palette;

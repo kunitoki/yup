@@ -32,6 +32,9 @@ namespace yup
     with @ref setRadius. Stylesheets apply blurs through the CSS `filter: blur(...)` declaration
     (see @ref FilterEffect).
 
+    The components the effect is set on show a change by themselves, with nothing to call on
+    them: they are drawn through the effect again, without being painted again.
+
     Without a GPU context or when the radius is zero, the input texture is drawn unfiltered.
 
     @see ComponentEffect, FilterEffect, Component::setComponentEffect
@@ -52,7 +55,11 @@ public:
     ~BlurEffect() override;
 
     //==============================================================================
-    /** Sets the blur radius in logical points. */
+    /** Sets the blur radius in logical points.
+
+        Call it on the message thread, or with the message manager locked: a radius that is not
+        the one the effect has is shown by the components the effect is set on.
+    */
     void setRadius (float radiusPoints) noexcept;
 
     /** Returns the blur radius in logical points. */
@@ -61,6 +68,9 @@ public:
     //==============================================================================
     /** @internal */
     void apply (Graphics& g, GpuTexture::Ptr inputTexture, Rectangle<float> bounds) override;
+
+    /** @internal */
+    void releaseResources() override;
 
 private:
     std::atomic<float> radius { 4.0f };

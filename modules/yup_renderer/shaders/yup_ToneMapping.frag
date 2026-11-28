@@ -32,13 +32,15 @@
 // (and inverted), and composites it in display space over the display-referred background by the
 // coverage, like the MSAA resolve of the raster tier blends tone mapped samples. The glow of bloom
 // is added to the covered part before tone mapping, and onto the background in display space.
+// The background comes premultiplied by its alpha, which leaves the output premultiplied whatever
+// that alpha is: a translucent background shows through it what the output is drawn over.
 
 layout(set = 0, binding = 3) uniform sampler pointClamp;
 
 layout(set = 1, binding = 0) uniform ToneMappingBlock
 {
     vec4 options;             // x 1 when the scene color is reversibly tone mapped, y 1 when u_glow holds a glow
-    vec4 background;          // the display-encoded background color, composited under the scene
+    vec4 background;          // the display-encoded background color premultiplied by its alpha, composited under the scene
 } toneMapping;
 
 layout(set = 1, binding = 1) uniform texture2D u_source;

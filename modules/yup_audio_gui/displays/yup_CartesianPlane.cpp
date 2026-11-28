@@ -24,6 +24,62 @@ namespace yup
 
 //==============================================================================
 
+const ComponentTypeInfo& CartesianPlane::getClassTypeInfo()
+{
+    using C = CartesianPlane;
+
+    // The ranges come before the scales, which are logarithmic for the ranges above zero only: the builder applies
+    // values in declaration order. An end of a range written past the other one moves it out of its way, so that
+    // they can be written in any order
+    static const auto info = ComponentTypeBuilder<C> (Identifier ("CartesianPlane"))
+                                 .property ("title", &Component::getTitle, &Component::setTitle, String(), "The title drawn above the plot, which is the title of the component.")
+                                 .styleableProperty ("titleColor", &C::getTitleColor, &C::setTitleColor, Colors::white, "The color of the title.")
+                                 .styleableProperty ("backgroundColor", &C::getBackgroundColor, &C::setBackgroundColor, Color (0xFF1E1E1E), "The color behind the plot.")
+                                 .property ("xMin", [] (const C& c) { return c.getXRange().getStart(); }, [] (C& c, double v)
+                                 {
+                                     if (std::isfinite (v))
+                                         c.setXRange (v, c.getXRange().getEnd() > v ? c.getXRange().getEnd() : v + 1.0);
+                                 }, 0.0, "The value at the left of the plot.")
+                                 .property ("xMax", [] (const C& c) { return c.getXRange().getEnd(); }, [] (C& c, double v)
+                                 {
+                                     if (std::isfinite (v))
+                                         c.setXRange (c.getXRange().getStart() < v ? c.getXRange().getStart() : v - 1.0, v);
+                                 }, 1.0, "The value at the right of the plot.")
+                                 .property ("yMin", [] (const C& c) { return c.getYRange().getStart(); }, [] (C& c, double v)
+                                 {
+                                     if (std::isfinite (v))
+                                         c.setYRange (v, c.getYRange().getEnd() > v ? c.getYRange().getEnd() : v + 1.0);
+                                 }, 0.0, "The value at the bottom of the plot.")
+                                 .property ("yMax", [] (const C& c) { return c.getYRange().getEnd(); }, [] (C& c, double v)
+                                 {
+                                     if (std::isfinite (v))
+                                         c.setYRange (c.getYRange().getStart() < v ? c.getYRange().getStart() : v - 1.0, v);
+                                 }, 1.0, "The value at the top of the plot.")
+                                 .enumeration<AxisScaleType> (
+                                     "xScaleType",
+                                     { { "linear", AxisScaleType::linear },
+                                       { "logarithmic", AxisScaleType::logarithmic } },
+                                     &C::getXScaleType,
+                                     &C::setXScaleType,
+                                     "How the values are placed along the x axis. It is logarithmic for a range above zero only.")
+                                 .enumeration<AxisScaleType> (
+                                     "yScaleType",
+                                     { { "linear", AxisScaleType::linear },
+                                       { "logarithmic", AxisScaleType::logarithmic } },
+                                     &C::getYScaleType,
+                                     &C::setYScaleType,
+                                     "How the values are placed along the y axis. It is logarithmic for a range above zero only.")
+                                 .property ("legendVisible", &C::isLegendVisible, &C::setLegendVisible, true, "Whether the legend naming the signals is shown.")
+                                 .property ("legendPosition", &C::getLegendPosition, &C::setLegendPosition, Point<float> (0.8f, 0.1f), "Where the legend is, as a fraction of the plot area.")
+                                 .styleableProperty ("legendBackgroundColor", &C::getLegendBackgroundColor, &C::setLegendBackgroundColor, Color (0x80000000), "The color behind the legend.")
+                                 .styleableProperty ("legendTextColor", &C::getLegendTextColor, &C::setLegendTextColor, Colors::white, "The color of the legend text, and of its border with a lower alpha.")
+                                 .build();
+
+    return info;
+}
+
+//==============================================================================
+
 CartesianPlane::CartesianPlane()
 {
     setOpaque (true);
@@ -57,18 +113,12 @@ void CartesianPlane::setYRange (double minY, double maxY)
 
 void CartesianPlane::setXScaleType (AxisScaleType scaleType)
 {
-    if (scaleType == AxisScaleType::logarithmic && xMin <= 0.0)
-        return; // Cannot use log scale with non-positive values
-
     xScaleType = scaleType;
     repaint();
 }
 
 void CartesianPlane::setYScaleType (AxisScaleType scaleType)
 {
-    if (scaleType == AxisScaleType::logarithmic && yMin <= 0.0)
-        return; // Cannot use log scale with non-positive values
-
     yScaleType = scaleType;
     repaint();
 }
@@ -79,6 +129,7 @@ void CartesianPlane::setYScaleType (AxisScaleType scaleType)
 void CartesianPlane::setMargins (int top, int left, int bottom, int right)
 {
     margins = { jmax (0, left), jmax (0, top), jmax (0, right), jmax (0, bottom) };
+    layoutAxisLabels();
     repaint();
 }
 
@@ -88,6 +139,7 @@ void CartesianPlane::setMargins (const EdgeSpacing<int>& newMargins)
                 jmax (0, newMargins.getTop()),
                 jmax (0, newMargins.getRight()),
                 jmax (0, newMargins.getBottom()) };
+    layoutAxisLabels();
     repaint();
 }
 
@@ -96,8 +148,12 @@ void CartesianPlane::setMargins (const EdgeSpacing<int>& newMargins)
 
 void CartesianPlane::setTitle (const String& title)
 {
-    titleText = title;
-    repaint();
+    const BailOutChecker bailOutChecker (this);
+
+    Component::setTitle (title);
+
+    if (! bailOutChecker.shouldBailOut())
+        repaint();
 }
 
 void CartesianPlane::setTitleFont (const Font& font)
@@ -176,54 +232,62 @@ void CartesianPlane::setHorizontalGridLines (const std::vector<double>& values, 
 void CartesianPlane::clearXAxisLabels()
 {
     xAxisLabels.clear();
+    xAxisLabelTexts.clear();
     repaint();
 }
 
 void CartesianPlane::addXAxisLabel (double value, const String& text, const Color& color, float fontSize)
 {
     xAxisLabels.emplace_back (value, text, color, fontSize);
+    layoutAxisLabels();
     repaint();
 }
 
 void CartesianPlane::setXAxisLabels (const std::vector<double>& values, const Color& color, float fontSize)
 {
     xAxisLabels.clear();
+    xAxisLabelTexts.clear();
     if (! values.empty())
     {
-        int precision = determineAxisPrecision (values, xScaleType);
+        int precision = determineAxisPrecision (values, getXScaleType());
         for (auto value : values)
         {
-            String text = formatAxisValueWithPrecision (value, xScaleType, precision);
+            String text = formatAxisValueWithPrecision (value, getXScaleType(), precision);
             xAxisLabels.emplace_back (value, text, color, fontSize);
         }
     }
+    layoutAxisLabels();
     repaint();
 }
 
 void CartesianPlane::clearYAxisLabels()
 {
     yAxisLabels.clear();
+    yAxisLabelTexts.clear();
     repaint();
 }
 
 void CartesianPlane::addYAxisLabel (double value, const String& text, const Color& color, float fontSize)
 {
     yAxisLabels.emplace_back (value, text, color, fontSize);
+    layoutAxisLabels();
     repaint();
 }
 
 void CartesianPlane::setYAxisLabels (const std::vector<double>& values, const Color& color, float fontSize)
 {
     yAxisLabels.clear();
+    yAxisLabelTexts.clear();
     if (! values.empty())
     {
-        int precision = determineAxisPrecision (values, yScaleType);
+        int precision = determineAxisPrecision (values, getYScaleType());
         for (auto value : values)
         {
-            String text = formatAxisValueWithPrecision (value, yScaleType, precision);
+            String text = formatAxisValueWithPrecision (value, getYScaleType(), precision);
             yAxisLabels.emplace_back (value, text, color, fontSize);
         }
     }
+    layoutAxisLabels();
     repaint();
 }
 
@@ -233,6 +297,7 @@ void CartesianPlane::setYAxisLabels (const std::vector<double>& values, const Co
 void CartesianPlane::clearSignals()
 {
     signals.clear();
+    signalPaths.clear();
     repaint();
 }
 
@@ -248,6 +313,10 @@ void CartesianPlane::updateSignalData (int signalIndex, const std::vector<Point<
     if (isPositiveAndBelow (signalIndex, signals.size()))
     {
         signals[static_cast<size_t> (signalIndex)].data = data;
+
+        if (isPositiveAndBelow (signalIndex, signalPaths.size()))
+            signalPaths[static_cast<size_t> (signalIndex)].reset();
+
         repaint();
     }
 }
@@ -316,58 +385,58 @@ void CartesianPlane::setLegendTextColor (const Color& color)
 //==============================================================================
 // Coordinate transformations
 
+CartesianPlane::AxisMapping CartesianPlane::AxisMapping::create (AxisScaleType scaleType, double minValue, double maxValue, float origin, float extent) noexcept
+{
+    if (scaleType != AxisScaleType::logarithmic)
+        return { false, minValue, maxValue - minValue, origin, extent };
+
+    const auto logMin = std::log10 (minValue);
+
+    return { true, logMin, std::log10 (maxValue) - logMin, origin, extent };
+}
+
+float CartesianPlane::AxisMapping::toPosition (double value) const noexcept
+{
+    if (isLogarithmic)
+    {
+        if (value <= 0.0)
+            return origin;
+
+        value = std::log10 (value);
+    }
+
+    return origin + static_cast<float> ((value - start) / length * extent);
+}
+
+CartesianPlane::AxisMapping CartesianPlane::getXMapping (const Rectangle<float>& bounds) const
+{
+    return AxisMapping::create (getXScaleType(), xMin, xMax, bounds.getX(), bounds.getWidth());
+}
+
+CartesianPlane::AxisMapping CartesianPlane::getYMapping (const Rectangle<float>& bounds) const
+{
+    return AxisMapping::create (getYScaleType(), yMin, yMax, bounds.getBottom(), -bounds.getHeight());
+}
+
 float CartesianPlane::valueToX (double value) const
 {
-    auto bounds = getPlotBounds();
-
-    double normalised = 0.0;
-    if (xScaleType == AxisScaleType::logarithmic)
-    {
-        if (value <= 0.0 || xMin <= 0.0 || xMax <= 0.0)
-            return bounds.getX();
-
-        double logValue = std::log10 (value);
-        double logMin = std::log10 (xMin);
-        double logMax = std::log10 (xMax);
-        normalised = (logValue - logMin) / (logMax - logMin);
-    }
-    else
-    {
-        normalised = (value - xMin) / (xMax - xMin);
-    }
-
-    return bounds.getX() + static_cast<float> (normalised * bounds.getWidth());
+    return getXMapping (getPlotBounds()).toPosition (value);
 }
 
 float CartesianPlane::valueToY (double value) const
 {
-    auto bounds = getPlotBounds();
-
-    double normalised = 0.0;
-    if (yScaleType == AxisScaleType::logarithmic)
-    {
-        if (value <= 0.0 || yMin <= 0.0 || yMax <= 0.0)
-            return bounds.getBottom();
-
-        double logValue = std::log10 (value);
-        double logMin = std::log10 (yMin);
-        double logMax = std::log10 (yMax);
-        normalised = (logValue - logMin) / (logMax - logMin);
-    }
-    else
-    {
-        normalised = (value - yMin) / (yMax - yMin);
-    }
-
-    return bounds.getBottom() - static_cast<float> (normalised * bounds.getHeight());
+    return getYMapping (getPlotBounds()).toPosition (value);
 }
 
 double CartesianPlane::xToValue (float x) const
 {
     auto bounds = getPlotBounds();
+    if (bounds.getWidth() <= 0.0f)
+        return xMin;
+
     double normalised = (x - bounds.getX()) / bounds.getWidth();
 
-    if (xScaleType == AxisScaleType::logarithmic)
+    if (getXScaleType() == AxisScaleType::logarithmic)
     {
         double logMin = std::log10 (xMin);
         double logMax = std::log10 (xMax);
@@ -383,9 +452,12 @@ double CartesianPlane::xToValue (float x) const
 double CartesianPlane::yToValue (float y) const
 {
     auto bounds = getPlotBounds();
+    if (bounds.getHeight() <= 0.0f)
+        return yMin;
+
     double normalised = (bounds.getBottom() - y) / bounds.getHeight();
 
-    if (yScaleType == AxisScaleType::logarithmic)
+    if (getYScaleType() == AxisScaleType::logarithmic)
     {
         double logMin = std::log10 (yMin);
         double logMax = std::log10 (yMax);
@@ -404,8 +476,8 @@ Rectangle<float> CartesianPlane::getPlotBounds() const
     return Rectangle<float> (
         static_cast<float> (margins.getLeft()),
         static_cast<float> (margins.getTop()),
-        static_cast<float> (bounds.getWidth() - margins.getHorizontal()),
-        static_cast<float> (bounds.getHeight() - margins.getVertical()));
+        jmax (0.0f, static_cast<float> (bounds.getWidth() - margins.getHorizontal())),
+        jmax (0.0f, static_cast<float> (bounds.getHeight() - margins.getVertical())));
 }
 
 //==============================================================================
@@ -416,6 +488,8 @@ void CartesianPlane::paint (Graphics& g)
     drawBackground (g);
 
     auto plotBounds = getPlotBounds();
+    if (plotBounds.getWidth() <= 0.0f || plotBounds.getHeight() <= 0.0f)
+        return;
 
     drawGrid (g, plotBounds);
     drawSignals (g, plotBounds);
@@ -470,83 +544,138 @@ void CartesianPlane::drawGrid (Graphics& g, const Rectangle<float>& bounds)
 
 void CartesianPlane::drawSignals (Graphics& g, const Rectangle<float>& bounds)
 {
-    for (const auto& signal : signals)
+    const auto graphicsTransform = g.getTransform();
+    const SignalMapping mapping { getXMapping (bounds),
+                                  getYMapping (bounds),
+                                  bounds,
+                                  g.getContextScale() * std::hypot (graphicsTransform.getScaleX(), graphicsTransform.getShearY()) };
+
+    // A path is made for the axes, the plot and the pixels it is painted across: none outlives a change of these
+    if (! (mapping == signalMapping))
     {
+        signalPaths.clear();
+        signalMapping = mapping;
+    }
+
+    signalPaths.resize (signals.size());
+
+    for (size_t i = 0; i < signals.size(); ++i)
+    {
+        const auto& signal = signals[i];
+
         if (! signal.visible || signal.data.empty())
             continue;
 
         g.setStrokeColor (signal.color);
         g.setStrokeWidth (signal.strokeWidth);
 
-        Path path;
-        bool firstPoint = true;
-        Point<float> previousPoint;
-        bool previousPointValid = false;
+        auto& path = signalPaths[i];
 
-        for (const auto& point : signal.data)
+        if (! path.has_value())
+            path = createSignalPath (signal, mapping);
+
+        if (! path->isEmpty())
+            g.strokePath (*path);
+    }
+}
+
+Path CartesianPlane::createSignalPath (const PlotSignal& signal, const SignalMapping& mapping)
+{
+    const auto& bounds = mapping.bounds;
+
+    Path path;
+    signalRun.clear();
+
+    // The points of a line across the plot are collected up to where it leaves it, and joined once they are reduced
+    // to the pixels they are drawn across
+    const auto endRun = [this, &path, &mapping]
+    {
+        if (signalRun.empty())
+            return;
+
+        const auto numPoints = reducePolylineToPixelColumns (signalRun, mapping.pixelsPerUnit);
+
+        path.startNewSubPath (signalRun.front());
+
+        for (size_t i = 1; i < numPoints; ++i)
+            path.lineTo (signalRun[i]);
+
+        signalRun.clear();
+    };
+
+    const auto startRun = [this, &endRun] (const Point<float>& point)
+    {
+        endRun();
+        signalRun.push_back (point);
+    };
+
+    bool firstPoint = true;
+    Point<float> previousPoint;
+    bool previousPointValid = false;
+
+    for (const auto& point : signal.data)
+    {
+        const Point<float> currentPoint (mapping.x.toPosition (point.getX()), mapping.y.toPosition (point.getY()));
+        bool currentPointInBounds = bounds.contains (currentPoint);
+
+        // Handle visibility and path continuity
+        if (currentPointInBounds)
         {
-            float x = valueToX (point.getX());
-            float y = valueToY (point.getY());
-
-            Point<float> currentPoint (x, y);
-            bool currentPointInBounds = bounds.contains (currentPoint);
-
-            // Handle visibility and path continuity
-            if (currentPointInBounds)
+            if (firstPoint)
             {
-                if (firstPoint)
-                {
-                    path.startNewSubPath (x, y);
-                    firstPoint = false;
-                }
-                else if (previousPointValid && ! bounds.contains (previousPoint))
-                {
-                    // Previous point was outside, current is inside - find intersection and start new subpath
-                    auto intersection = findBoundsIntersection (previousPoint, currentPoint, bounds);
-                    if (intersection.has_value())
-                    {
-                        path.startNewSubPath (intersection->getX(), intersection->getY());
-                        path.lineTo (x, y);
-                    }
-                    else
-                    {
-                        path.startNewSubPath (x, y);
-                    }
-                }
-                else
-                {
-                    path.lineTo (x, y);
-                }
+                startRun (currentPoint);
+                firstPoint = false;
             }
-            else if (previousPointValid && bounds.contains (previousPoint))
+            else if (previousPointValid && ! bounds.contains (previousPoint))
             {
-                // Previous point was inside, current is outside - draw to intersection
+                // Previous point was outside, current is inside - find intersection and start new subpath
                 auto intersection = findBoundsIntersection (previousPoint, currentPoint, bounds);
                 if (intersection.has_value())
                 {
-                    path.lineTo (intersection->getX(), intersection->getY());
+                    startRun (*intersection);
+                    signalRun.push_back (currentPoint);
+                }
+                else
+                {
+                    startRun (currentPoint);
                 }
             }
-
-            previousPoint = currentPoint;
-            previousPointValid = true;
+            else
+            {
+                signalRun.push_back (currentPoint);
+            }
+        }
+        else if (previousPointValid && bounds.contains (previousPoint))
+        {
+            // Previous point was inside, current is outside - draw to intersection
+            auto intersection = findBoundsIntersection (previousPoint, currentPoint, bounds);
+            if (intersection.has_value())
+            {
+                signalRun.push_back (*intersection);
+            }
         }
 
-        if (! firstPoint)
-            g.strokePath (path);
+        previousPoint = currentPoint;
+        previousPointValid = true;
     }
+
+    endRun();
+    return path;
 }
 
 void CartesianPlane::drawAxisLabels (Graphics& g, const Rectangle<float>& bounds)
 {
+    // The font of the theme can change without the plane being told
+    layoutAxisLabels();
+
     // Draw X axis labels
-    for (const auto& label : xAxisLabels)
+    for (size_t i = 0; i < xAxisLabels.size(); ++i)
     {
+        const auto& label = xAxisLabels[i];
         float x = valueToX (label.value);
         if (x >= bounds.getX() && x <= bounds.getRight())
         {
             g.setFillColor (label.color);
-            auto font = ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (label.fontSize);
 
             Rectangle<int> labelBounds (
                 static_cast<int> (x - 30),
@@ -554,18 +683,18 @@ void CartesianPlane::drawAxisLabels (Graphics& g, const Rectangle<float>& bounds
                 60,
                 margins.getBottom() - 2);
 
-            g.fillFittedText (label.text, font, labelBounds, Justification::center);
+            g.fillFittedText (*xAxisLabelTexts[i], labelBounds);
         }
     }
 
     // Draw Y axis labels
-    for (const auto& label : yAxisLabels)
+    for (size_t i = 0; i < yAxisLabels.size(); ++i)
     {
+        const auto& label = yAxisLabels[i];
         float y = valueToY (label.value);
         if (y >= bounds.getY() && y <= bounds.getBottom())
         {
             g.setFillColor (label.color);
-            auto font = ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (label.fontSize);
 
             Rectangle<int> labelBounds (
                 2,
@@ -573,14 +702,51 @@ void CartesianPlane::drawAxisLabels (Graphics& g, const Rectangle<float>& bounds
                 margins.getLeft() - 4,
                 16);
 
-            g.fillFittedText (label.text, font, labelBounds, Justification::right);
+            g.fillFittedText (*yAxisLabelTexts[i], labelBounds);
         }
     }
 }
 
+void CartesianPlane::layoutAxisLabels()
+{
+    const auto font = ApplicationTheme::getGlobalTheme()->getDefaultFont();
+
+    if (axisLabelFont != font)
+    {
+        xAxisLabelTexts.clear();
+        yAxisLabelTexts.clear();
+        axisLabelFont = font;
+    }
+
+    const auto layout = [&font] (const std::vector<AxisLabel>& labels, std::vector<std::unique_ptr<StyledText>>& texts, const Size<float>& size, StyledText::HorizontalAlign align)
+    {
+        // The texts are made again for another margin, then for the labels that have none
+        if (! texts.empty() && texts.front()->getMaxSize() != size)
+            texts.clear();
+
+        while (texts.size() < labels.size())
+        {
+            const auto& label = labels[texts.size()];
+
+            auto modifier = texts.emplace_back (std::make_unique<StyledText>())->startUpdate();
+            modifier.setMaxSize (size);
+            modifier.setHorizontalAlign (align);
+            modifier.setVerticalAlign (StyledText::middle);
+
+            if (label.text.isNotEmpty())
+                modifier.appendText (label.text, font.withHeight (label.fontSize));
+        }
+    };
+
+    // In the areas drawAxisLabels() writes them in
+    layout (xAxisLabels, xAxisLabelTexts, Size<float> (60.0f, static_cast<float> (margins.getBottom() - 2)), StyledText::center);
+    layout (yAxisLabels, yAxisLabelTexts, Size<float> (static_cast<float> (margins.getLeft() - 4), 16.0f), StyledText::right);
+}
+
 void CartesianPlane::drawTitle (Graphics& g)
 {
-    if (titleText.isEmpty())
+    const auto title = getTitle();
+    if (title.isEmpty())
         return;
 
     g.setFillColor (titleColor);
@@ -591,7 +757,7 @@ void CartesianPlane::drawTitle (Graphics& g)
         getWidth() - margins.getHorizontal(),
         margins.getTop() - 4);
 
-    g.fillFittedText (titleText, titleFont, titleBounds, titleJustification);
+    g.fillFittedText (title, titleFont, titleBounds, titleJustification);
 }
 
 void CartesianPlane::drawLegend (Graphics& g, const Rectangle<float>& bounds)
@@ -617,9 +783,9 @@ void CartesianPlane::drawLegend (Graphics& g, const Rectangle<float>& bounds)
     float legendX = bounds.getX() + bounds.proportionOfWidth (legendPosition.getX()) - legendWidth;
     float legendY = bounds.getY() + bounds.proportionOfHeight (legendPosition.getY());
 
-    // Keep legend within bounds
-    legendX = jlimit (bounds.getX(), bounds.getRight() - legendWidth, legendX);
-    legendY = jlimit (bounds.getY(), bounds.getBottom() - legendHeight, legendY);
+    // Keep legend within bounds, at their start when it is larger than they are
+    legendX = jlimit (bounds.getX(), jmax (bounds.getX(), bounds.getRight() - legendWidth), legendX);
+    legendY = jlimit (bounds.getY(), jmax (bounds.getY(), bounds.getBottom() - legendHeight), legendY);
 
     Rectangle<float> legendBounds (legendX, legendY, static_cast<float> (legendWidth), static_cast<float> (legendHeight));
 

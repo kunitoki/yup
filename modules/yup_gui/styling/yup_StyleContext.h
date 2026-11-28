@@ -37,9 +37,15 @@ namespace yup
 
     Restyling is batched: class, state, property and hierarchy changes only mark components
     dirty, and the work happens once per frame in the refresh pass, top-down so that
-    descendant selectors see their ancestors' state. A change of the theme palette, or of a
-    palette scoped by a `palette:` declaration, restyles the components whose values read
-    palette roles.
+    descendant selectors see their ancestors' state. A state that only the rules matching the
+    component itself read, such as the hover of `Slider:hover`, restyles that component, and its
+    descendants only when its style changed; any other change restyles them all. A change of the
+    theme palette, or of a palette scoped by a `palette:` declaration, restyles the components
+    whose values read palette roles.
+
+    A context only asks the window of its root for frames while it has styles to apply or to
+    animate: with every style applied and nothing running, it leaves that window free to skip
+    the frames it has nothing to paint in.
 
     The context also runs the `transition:` and `animation:` declarations through its
     StyleAnimator: a restyle changing a transitioned value starts a transition from the value
@@ -47,10 +53,21 @@ namespace yup
     StyleState on every frame while something runs.
 
     The `cursor:`, `effect:` and `shadow:` declarations set the mouse cursor, a ComponentEffect
-    from the ComponentEffectRegistry and feathered shadow layers painted behind the component,
-    restoring what the component had before when no rule sets them anymore.
+    and feathered shadow layers painted behind the component, restoring what the component had
+    before when no rule sets them anymore. The effect is a ShaderEffect running the `shader`
+    block of the sheet that has the name, or else the one the ComponentEffectRegistry makes for
+    it. The context loads the shaders of the sheet when they are first used (see findShader),
+    and gives a component the defaults a shader declares for its properties as the styled
+    values of lowest priority of the rule selecting it.
 
-    @see StyleSheet, StyleState, StyleSelector, StyleAnimator, Component::setStyleSheet
+    A drawing a `drawing:` declaration installs finds the shaders its `use` elements name in the
+    sheet too (see DrawingStyle::ShaderResolver), and is made again when one of them is loaded
+    again. So is a DrawingStyle set on a component itself, by its element in a `.yui` document or
+    from C++: when it runs a shader of the sheet as another one than the sheet has loaded, none
+    included, the restyle of its component makes it again with that one (see
+    DrawingStyle::createWithShaders), whatever made it first.
+
+    @see StyleSheet, StyleState, StyleSelector, StyleAnimator, ShaderEffect, Component::setStyleSheet
 
     @tags{UI}
 */
@@ -94,6 +111,12 @@ public:
 
     /** Marks a component dirty when the sheet's selectors read the property that changed.
 
+        The descendants of the component are restyled with it, unless the property is a state of
+        the component alone, such as `hovered`, `pressed`, `focused`, `enabled` or the `checked` of
+        a ToggleButton, that the sheet only reads on the components its rules match (see
+        StyleSheet::watchesPropertyForDescendants). The restyle of the component then reaches them
+        only when it changed a value, a palette or anything else of its style, which they may read.
+
         @param component The component whose property changed.
         @param name      The property name.
     */
@@ -101,7 +124,11 @@ public:
 
     //==============================================================================
     /** Restyles whatever is dirty, follows palette changes and advances the transitions and
-        animations, called once per frame.
+        animations.
+
+        The window of the root calls this before it paints a frame, for as long as the context
+        has something to do: a component to restyle, a change of the theme to follow or a
+        transition or an animation to run.
 
         @param elapsedSeconds The time elapsed since the previous frame, in seconds.
     */
@@ -109,6 +136,19 @@ public:
 
     /** Restyles whatever is dirty immediately, without waiting for the next frame. */
     void restyleNow();
+
+    /** Has the context look at the theme again in the frame that is starting.
+
+        A context with nothing to do asks for no frame, so it is told that a theme changed: the
+        window of its root does, for the contexts of its own components, when it starts a frame.
+        The context then compares the global theme with the one it knew in its refresh, as it
+        does in every other refresh.
+
+        Call it on the message thread, or with the message manager locked.
+
+        @see ComponentNative::hasThemeChanged, ApplicationTheme::getPaletteGeneration
+    */
+    void themeChanged();
 
     //==============================================================================
     /** Removes everything the context computed from the subtree, leaving explicit values alone. */
@@ -142,12 +182,114 @@ public:
     std::function<void()> onPaletteChanged;
 
     //==============================================================================
+    /** A `shader` block of the stylesheet, loaded for the components of this context. */
+    struct Shader
+    {
+        /** The compiled shader, to draw with GpuImageShader::draw(). It is replaced when its file
+            changes (see assetChanged), and when one compiled from its source is compiled again for
+            the graphics API that turns out to draw it (see findShader), so read it each time it is
+            drawn rather than keeping it.
+        */
+        GpuImageShader::Ptr shader;
+
+        /** The inputs the block declares, in the order it declares them. Each has a type a uniform
+            takes, and fills the member of the uniform block of the shader that has its name (see
+            ShaderProperty::setUniform). An array of numbers named as a texture of the shader fills
+            that texture instead (see ShaderProperty::getNumPictures).
+        */
+        std::vector<ShaderProperty> properties;
+
+        /** The `shader` element of the stylesheet. Each of its `property` children declares one of
+            the @ref properties, by its `name`, and holds the expression of its default as its
+            `value` when it has one.
+        */
+        DataTree block;
+    };
+
+    /** Returns the shader a `shader` block of the stylesheet declares, loading it the first time
+        it is asked for.
+
+        This is where an `effect:` declaration gets the shader it runs, where the drawings of the
+        components the context styles get the ones they `use`, and where anything else drawing a
+        shader of the stylesheet gets it. A shader is loaded once for the whole context, and kept
+        until the stylesheet is replaced. One whose file changed is loaded again by the next
+        restyle (see assetChanged).
+
+        The bytes are read with ComponentDocument::readAssetFor() for the root of the context, so
+        they come from where the document of the interface does: a folder, embedded resources or
+        the unsaved texts of an editor. For a stylesheet attached to a tree made in C++ they are
+        read from the file. For `fragment: "fx/crt.frag"` the compiled bundle `fx/crt.frag.ysl` is
+        loaded when there is one, which is what a build embeds, else `fx/crt.frag` itself: a
+        bundle, or GLSL source when the shader transpiler is built in (see
+        GpuImageShader::createFromData). A path ending in `.ysl` is read as it is.
+
+        A source is compiled for one graphics API, the one that draws it: the API of the window
+        the root is in, or the one a window is given by default while the root is in none (see
+        ComponentNative::getDefaultGraphicsApi). When the window turns out to draw with another
+        API, the next restyle compiles the source again for that one, once, and gives the new
+        shader to what runs the one before as when its file changes (see assetChanged). A root
+        painted in no window, as a snapshot is, has nothing to tell its API: a source that could
+        not be drawn there is compiled once more, for every API. So what a source has wrong for
+        another API than the one in use is not told here: `yup_yui_tool`, and compiling the shader
+        ahead into a bundle, check the others. A bundle is loaded with the variants it holds.
+
+        Loading needs no GPU, and reports what prevents it as a diagnostic (see @ref onDiagnostic):
+        the file can't be read, the shader does not compile, or a property the block declares has
+        a type a uniform can't take, or no member of its name that is large enough in the uniform
+        block of the shader. So is a member named `resolution`, `scale` or `time` that no property
+        of the block fills and that is not what a shader is given there (see ShaderEffect), and a
+        bundle with no variant for the graphics API of the window the root is in, when it is in
+        one. A shader is reported when it is loaded and not each time it is asked
+        for, then again with the other problems of the stylesheet once its values are compiled
+        again (see @ref setComponentResolver), as they are each time a document is loaded. Call
+        this when the style is applied and not while painting, so that a shader is loaded on the
+        message thread.
+
+        What the device of a window refuses of a shader that loaded is only known once it draws
+        it: a pipeline it fails to compile, or a variant it lacks when no window was known at
+        the load. The effect, or the drawing, that could not draw the shader keeps why (see
+        ShaderEffect::getDrawError and DrawingStyle::getShaderFailures) and has its component
+        restyled. That restyle reports it the same way, at the `shader` block and once for as
+        long as the shader is loaded, however many components it could not be drawn for.
+
+        @param name  The name of the block, as written after `shader`.
+
+        @returns The shader, or nullptr when no block has that name, when the block declares a
+                 `material` instead of a `fragment`, and when the shader could not be loaded. The
+                 pointer stays valid until the stylesheet of the context is replaced.
+    */
+    const Shader* findShader (const String& name);
+
+    /** Tells that a file changed, for the shaders read from it to be loaded again.
+
+        Nothing is loaded here. The next restyle loads each of these shaders again, once however
+        many of its files it was told about, then gives the new shader to the effects running the
+        one before and repaints their components, and makes again the drawings using it, which
+        are then painted with the new one (see @ref refresh and @ref restyleNow).
+
+        A `.yui` document calls this for the files it is told about, which its loader does for
+        the files it watches, for the overrides of an editor, at each reload and when it loads
+        another source. Call it yourself for a stylesheet attached to a tree made in C++, whose
+        files nothing watches.
+
+        A shader that fails to load is reported as a diagnostic and the one it was to replace
+        keeps running, so that a mistake made while editing does not blank the interface. The
+        problem stands until the shader loads: it is reported again each time the problems of the
+        stylesheet are (see findShader), so it is still among those of a document loaded again
+        in the meantime.
+
+        @param path  The path of the file as the stylesheet writes it, or that path with `.ysl`
+                     added for its compiled bundle.
+    */
+    void assetChanged (const String& path);
+
+    //==============================================================================
     /** Returns the diagnostics the last restyle produced, one per declaration that failed.
 
         The element of each diagnostic is the declaration of the stylesheet it is about, when
-        known, so a YuiSourceMap of the parsed document can locate it.
+        known, so a DataTreeSourceMap of the parsed document can locate it.
     */
-    const std::vector<YuiDiagnostic>& getDiagnostics() const noexcept { return diagnostics; }
+    const std::vector<DataTreeDiagnostic>& getDiagnostics() const noexcept { return diagnostics; }
 
     /** Called with each diagnostic as soon as it is produced.
 
@@ -155,7 +297,7 @@ public:
         problems of the declarations applied later, such as a `:hover` rule matching when the
         mouse enters a component. A value that failed is reported again only once it changes.
     */
-    std::function<void (const YuiDiagnostic&)> onDiagnostic;
+    std::function<void (const DataTreeDiagnostic&)> onDiagnostic;
 
 private:
     //==============================================================================
@@ -165,6 +307,8 @@ private:
     struct ComponentCache;
     struct CacheMap;
     struct PopupMap;
+    struct ShaderEntry;
+    struct ShaderMap;
     struct ResolvedDeclaration;
     struct PendingTransition;
 
@@ -177,13 +321,22 @@ private:
 
     using DeclarationMap = std::unordered_map<Identifier, ResolvedDeclaration>;
 
+    /* A component to restyle: with its descendants, or alone when only a state of its own changed. */
+    struct DirtyComponent
+    {
+        WeakReference<Component> component;
+        bool withDescendants = true;
+    };
+
     template <class Fn>
     void forEachManaged (Component& component, Fn&& fn);
 
-    void restyleSubtree (Component& component, const DeclarationMap& inherited);
-    void applyToComponent (Component& component, const DeclarationMap& inherited, DeclarationMap& inheritedForChildren);
-    DeclarationMap collectInherited (Component& component) const;
-    void collectDeclarations (Component& component, DeclarationMap& direct, DeclarationMap& qualified) const;
+    void addDirtyComponent (Component& component, bool withDescendants);
+    bool isInsidePopup (const Component& component) const noexcept;
+    bool restyleSubtree (Component& component, const DeclarationMap& inherited, bool descendantsOnlyWhenChanged = false);
+    bool applyToComponent (Component& component, const DeclarationMap& inherited, DeclarationMap& extended);
+    DeclarationMap collectInherited (Component& component);
+    void collectDeclarations (Component& component, DeclarationMap& direct, DeclarationMap& qualified);
     static void mergeResolvedDeclaration (DeclarationMap& target, const Identifier& key, const ResolvedDeclaration& candidate);
     bool evaluate (Component& component,
                    ComponentCache& cache,
@@ -202,17 +355,27 @@ private:
     void resetCompiledValues();
     bool resetStyle (Component& component, ComponentCache* cache, bool keepAnimatedValues = false, bool* paletteCleared = nullptr);
     void release (Component& subtreeRoot, ReleaseMode mode);
-    void syncStateBacked (Component& component, ComponentCache& cache, const Identifier& storageId);
+    bool syncStateBacked (Component& component, ComponentCache& cache, const Identifier& storageId);
     void restoreStateBacked (Component& component, ComponentCache& cache, const Identifier& storageId);
     void restoreAllStateBacked (Component& component, ComponentCache& cache);
     const DrawingStyle* installDrawing (Component& component, ComponentCache& cache, const StyleSheet::Declaration& declaration);
     void restoreDrawing (Component& component, ComponentCache& cache);
+    DrawingStyle::Shader findDrawingShader (const String& name);
+    bool holdsOtherShaders (const DrawingStyle& drawing);
+    bool runsLoadedShaders (const DrawingStyle& drawing, std::optional<uint32>& generation);
+    const DrawingStyle* attachDrawingShaders (Component& component, ComponentCache& cache, const DrawingStyle& drawing);
     bool evaluateFilterDeclaration (Component& component,
                                     ComponentCache& cache,
                                     const StyleSheet::Declaration& filterDeclaration,
                                     std::vector<FilterEffect::Operation>& outOperations,
                                     bool* paletteDependent);
     bool syncStyledFilterAndMargins (Component& component, ComponentCache& cache);
+    ShaderEntry* findShaderEntry (const String& name);
+    bool loadShader (const String& name, ShaderEntry& entry);
+    void reloadShader (const String& name, ShaderEntry& entry);
+    void refreshShaders();
+    void reportShaderFailures (const Component& component);
+    ComponentEffect::Ptr createEffect (Component& component, const StyleSheet::Declaration& effectDeclaration);
     bool applyEffects (Component& component,
                        ComponentCache& cache,
                        const StyleSheet::Declaration* cursorDeclaration,
@@ -228,9 +391,10 @@ private:
     std::vector<StyleAnimator::Track> compileTracks (Component& component, ComponentCache& cache, const StyleSheet::KeyframeSequence& keyframes, const DrawingStyle* drawing);
     void showAnimatedValue (Component& component, const Identifier& storageId, const var* value);
     void markPaletteDependentDirty (Component& component);
-    void report (const YuiDiagnostic& diagnostic);
+    void report (const DataTreeDiagnostic& diagnostic);
     void rebuildObserver();
     void invalidateDependencies (const Component& sourceComponent, const Identifier& property);
+    void markReadersDirty (const std::set<Component*>& restyled);
 
     bool isManagedPopup (const Component& component) const noexcept;
     Component* findPopupOwner (const Component& component) const noexcept;
@@ -238,14 +402,17 @@ private:
     Component& root;
     StyleSheet::Ptr styleSheet;
     ComponentResolver componentResolver;
-    Array<WeakReference<Component>> dirtyComponents;
+    std::vector<DirtyComponent> dirtyComponents;
+    std::vector<const StyleSheet::Rule*> candidateRules;
     std::unique_ptr<CacheMap> caches;
     std::unique_ptr<PopupMap> popups;
+    std::unique_ptr<ShaderMap> shaders;
     DependencyObserver observer;
     StyleAnimator animator;
-    std::vector<YuiDiagnostic> diagnostics;
+    std::vector<DataTreeDiagnostic> diagnostics;
     double clock = 0.0;
     uint32 lastPaletteGeneration = 0;
+    uint32 shaderGeneration = 0;
     bool isRestyling = false;
     bool observerDirty = false;
     FrameAttachment frameAttachment { root, bindFront (&StyleContext::refresh, this) };

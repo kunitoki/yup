@@ -30,6 +30,7 @@ template <class T>
 class ComponentTestHelper;
 #endif
 
+class ComponentDocument;
 class ComponentTypeInfo;
 class FrameAttachment;
 class StyleContext;
@@ -97,6 +98,35 @@ public:
         inherit the type info of their nearest registered base.
     */
     virtual const ComponentTypeInfo& getDefaultTypeInfo() const { return getClassTypeInfo(); }
+
+    /**
+        Paints a part of what the component shows, where the component puts it.
+
+        A part is what the type of the component declares it shows beside its shapes, such as the
+        text it laid out or its caret (see ComponentPart). The global theme paints it, with the paint
+        set on the Graphics (see ApplicationTheme::setComponentPart): a style written in C++ places
+        a part with this, as a `.yui` drawing does with a `part` element.
+
+        @param g          The Graphics to paint with.
+        @param partName   The name of the part.
+
+        @returns False, having painted nothing, when the type declares no part of this name or the
+                 theme doesn't paint it.
+    */
+    bool paintPart (Graphics& g, const Identifier& partName) const;
+
+    /**
+        Paints a part of what the component shows in an area.
+
+        @param g          The Graphics to paint with.
+        @param partName   The name of the part.
+        @param area       Where to paint it, in the coordinates of the component. A part the component
+                          lays out itself is painted where the component puts it instead.
+
+        @returns False, having painted nothing, when the type declares no part of this name or the
+                 theme doesn't paint it.
+    */
+    bool paintPart (Graphics& g, const Identifier& partName, const Rectangle<float>& area) const;
 
     /** Returns the static type info describing the Component base type. */
     static const ComponentTypeInfo& getClassTypeInfo();
@@ -608,7 +638,7 @@ public:
         Maps a point from the parent's local space to this component's local space.
 
         This applies the parent's getChildPointFromLocal() and then, if this component has an
-        effect, ComponentEffect::displayToContent().
+        effect that is active, ComponentEffect::displayToContent().
 
         @param parentPoint The point in the parent's local coordinates.
 
@@ -620,8 +650,8 @@ public:
     /**
         Maps a point from this component's local space to the parent's local space.
 
-        This applies ComponentEffect::contentToDisplay() if this component has an effect,
-        then the parent's getLocalPointFromChild().
+        This applies ComponentEffect::contentToDisplay() if this component has an effect that
+        is active, then the parent's getLocalPointFromChild().
 
         @param localPoint The point in this component's local coordinates.
 
@@ -837,6 +867,9 @@ public:
         When an area is fully covered by an opaque component (and its children), rendering
         can start from that component instead of from the root.
 
+        A component with a style set on it is not painted as an opaque one, whatever this
+        returns: see setStyle().
+
         @return True if the component is opaque, false otherwise.
      */
     bool isOpaque() const;
@@ -844,7 +877,13 @@ public:
     /**
         Set the opaque state of the component.
 
+        Components are opaque by default. An opaque component has to paint all its pixels with
+        opaque colors, as what is behind it is not painted: one that does not shows what was
+        there before.
+
         @param shouldBeOpaque True if the component should be opaque, false otherwise.
+
+        @see setStyle
      */
     void setOpaque (bool shouldBeOpaque);
 
@@ -1443,6 +1482,12 @@ public:
         value is stored as a custom property keyed by @p name. On an actual change, listeners are
         notified, the style is refreshed and the component repainted.
 
+        The listeners are also notified of a state-backed property whose setter changed the
+        value its getter returns without calling notifyPropertyChanged() for it, so that what
+        reads the property, as a binding does, follows any property set here. The value is read
+        before and after the setter for that, except the one of an array property, which may be
+        long: its setter is the one to notify.
+
         @param name  The property name (descriptor name or a custom name).
         @param value The value to set.
     */
@@ -1560,6 +1605,10 @@ public:
         single change path feeds bindings, pseudo-state selectors and attribute selectors. It
         notifies ComponentListener::componentPropertyChanged() without touching the property store.
 
+        setProperty() calls it for a setter that doesn't. A change made by calling that setter
+        directly, or by the widget itself, as a level it reads or a geometry it computes, is
+        only told from here.
+
         @param name The name of the property that changed.
     */
     void notifyPropertyChanged (const Identifier& name);
@@ -1567,6 +1616,10 @@ public:
     //==============================================================================
     /**
         Paint the component.
+
+        Unless overridden, the component is painted with its style: the one set on it with
+        setStyle(), or else the one the global theme has for its type (see
+        ApplicationTheme::findComponentStyle). A component with neither paints nothing.
 
         On platforms with a render thread this is called on that thread while it holds the message
         manager lock, so it never runs at the same time as the message thread: state shared with
@@ -1647,12 +1700,18 @@ public:
     /**
         Called when the mouse button is released.
 
+        A component that was hidden or disabled while the button was held on it is still called,
+        so that what mouseDown() began can end.
+
         @param event The mouse event.
      */
     void mouseUp (const MouseEvent& event) override;
 
     /**
         Called when the mouse button is double clicked.
+
+        It is not called when a component listener takes the double click
+        (see ComponentListener::componentDoubleClicked).
 
         @param event The mouse event.
      */
@@ -1861,7 +1920,19 @@ public:
 
     /** Sets the style for this component.
 
-        @param newStyle The new style to apply to the component.
+        A style paints what it likes of the component: rounded shapes, translucent colors, or
+        nothing where it leaves a hole. So a component with a style set on it is not painted as
+        an opaque one, whatever isOpaque() returns: its parent is painted behind it, and the
+        style needs no background of its own. This holds for a style set from C++, for the
+        drawing of a `.yui` element and for the one a `drawing:` rule of a stylesheet installs.
+        The opaque state counts again once the style is removed.
+
+        A style the theme has for the type of the component is not set on it, and leaves the
+        opaque state as it is.
+
+        @param newStyle The new style to apply to the component, or nullptr to remove it.
+
+        @see setOpaque
     */
     void setStyle (ComponentStyle::Ptr newStyle);
 
@@ -2044,6 +2115,14 @@ public:
         apply() method is called to composite the result back onto the main Graphics context.
         Pass nullptr to remove the effect.
 
+        Where that texture can't be made, without a GPU or for a component larger than a texture
+        of the device can be, the component is painted directly, without its effect. So it is
+        while the effect tells it has nothing to apply, see ComponentEffect::isActive().
+
+        An effect can be set on several components. It tells them itself when what it draws
+        changed (see ComponentEffect::invalidate), so changing a parameter of an effect of the
+        library needs no repaint() of the component.
+
         @param effect The effect to apply, or nullptr to remove.
         @see ComponentEffect
      */
@@ -2216,6 +2295,7 @@ protected:
 
 private:
     struct ResolvedProperty;
+    struct PropertyWrite;
     ResolvedProperty resolveProperty (const Identifier& name) const;
     ResolvedProperty resolveColorProperty (const Identifier& colorId) const;
     const var* findStoredValue (const Identifier& storageKey, bool isInherited) const;
@@ -2230,8 +2310,10 @@ private:
     void sendEnablementChanged();
     void sendPaletteChanged();
     void updateFrameAttachments();
+    void internalThemeChanged();
     void internalRepaint();
-    void internalRepaint (const Rectangle<float>& rect);
+    void internalRepaint (const Rectangle<float>& rect, bool contentChanged = true);
+    void repaintEffect();
     void internalPaint (Graphics& g, const RectangleList<float>& repaintRegions, bool renderContinuous, const RectangleList<float>* activeClipRegion = nullptr);
     void internalMouseEnter (const MouseEvent& event);
     void internalMouseExit (const MouseEvent& event);
@@ -2324,6 +2406,7 @@ private:
     void sendChildBoundsChangedToParent();
     void setStyleTransform (const AffineTransform& newTransform);
 
+    bool isOpaqueForPainting() const noexcept;
     bool hasOpaqueChildCoveringArea (const Rectangle<float>& area);
     AffineTransform getTransformToTopLevelComponent() const;
     Point<float> getTopLevelScreenOrigin() const;
@@ -2333,11 +2416,14 @@ private:
     EdgeSpacing<float> getOffscreenMargin() const;
     Rectangle<float> getEffectBounds (float scale) const;
     void paintChildrenAndOverChildren (Graphics& g, const RectangleList<float>& clipRegion, bool renderContinuous, const RectangleList<float>* activeClipRegion = nullptr);
+    ComponentEffect* getActiveComponentEffect() const;
     bool hasActiveEffect() const noexcept;
     void applyActiveEffects (Graphics& g, GpuTexture::Ptr texture, Rectangle<float> bounds, float scale);
     void releaseUnusedEffectCanvases() noexcept;
+    void releaseGpuResources (bool withChildren);
     GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas = nullptr, const std::optional<RectangleList<float>>& dirtyRegion = std::nullopt, bool holdPaintMargin = false);
     std::optional<RectangleList<float>> takeEffectDirtyRegion (bool renderContinuous);
+    void markEffectCanvasDirty();
     void invalidateCanvasesIfThemeChanged();
     GpuCanvas::Ptr renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects, float scale, GpuCanvas::Ptr reuseCanvas = nullptr);
 
@@ -2346,6 +2432,8 @@ private:
 #endif
 
     friend class ComponentNative;
+    friend class ComponentDocument;
+    friend class ComponentEffect;
     friend class SDLComponentNative;
     friend class PointerSimulator;
     friend class StyleContext;
@@ -2374,12 +2462,15 @@ private:
     ComponentListenerList componentListeners;
     Array<FrameAttachment*> frameAttachments;
     ComponentStyle::Ptr style;
+    ComponentStyle::Ptr cachedThemeStyle;
     std::unique_ptr<ThemePalette> palette;
     std::unique_ptr<StyleState> styleState;
     std::unique_ptr<StyleContext> styleContext;
+    ComponentDocument* componentDocument = nullptr;
     Array<Identifier> styleClasses;
     const ComponentTypeInfo* instanceTypeInfo = nullptr;
     NamedValueSet properties;
+    PropertyWrite* propertyWrite = nullptr;
     MouseCursor mouseCursor;
     GestureType wantedGestures = GestureType::none;
     ComponentEffect::Ptr componentEffect;
@@ -2389,10 +2480,12 @@ private:
     GpuCanvas::Ptr filterIntermediateCanvas;
     EdgeSpacing<int> offscreenCanvasMargin;
     EdgeSpacing<float> offscreenPaintedMargin;
+    float offscreenPaintedScale = 0.0f;
     RectangleList<float> effectDirtyRegion;
     static constexpr int maximumDirtyRectangles = 8;
     GpuCanvas::Ptr presentedCanvas;
     uint32 canvasThemeGeneration = 0;
+    uint32 cachedThemeStyleGeneration = 0;
     float contentScale = 1.0f;
     uint8 opacity = 255;
     bool suppressChildBoundsChanged = false;

@@ -35,6 +35,9 @@ Subclasses can intercept presses by overriding `mouseDownOnKey()`,
 `mouseDraggedToKey()` (return `false` to suppress the note) and
 `mouseUpOnKey()`.
 
+Disabling or hiding the keyboard, itself or through one of its parents, releases
+every note held on it, so a key pressed at that moment never stays stuck.
+
 ## Available and visible range
 
 - `setAvailableRange (lo, hi)` sets the keys that can be reached, and shows all
@@ -90,3 +93,40 @@ the focus, `releaseKeyPressNotes()` lets every held note go.
 Colors come from `MidiKeyboardComponent::Style`, see
 [Component styling](component-styling.md). The scroll buttons are
 `MidiKeyboardComponent::ScrollButton` components, with a theme style of their own.
+
+A style of your own finds where each key is with `getRectangleForKey()`, and
+paints a key inside that area: a note that goes on or off repaints the area of
+its key, not the whole keyboard.
+
+## In a `.yui` document
+
+With `yup_gui_markup` linked, a [`.yui` document](yui/documents.md) creates the
+keyboard as `MidiKeyboard` and writes its ranges, its orientation and its
+colors:
+
+```yui
+MidiKeyboard { rangeStart: 36; rangeEnd: 84; lowestVisibleKey: 48; midiChannel: 1; velocity: 0.7; }
+```
+
+Unlike `setAvailableRange()`, `rangeStart` and `rangeEnd` keep the keys shown,
+so a binding that moves one end of the range later doesn't undo
+`lowestVisibleKey` and `highestVisibleKey`. The keys shown are moved inside the
+new range when it no longer holds them, and are the whole range when it has
+fewer keys than them. A new keyboard shows the keys 12 to 96: write
+`lowestVisibleKey` and `highestVisibleKey` to show more of a wider range.
+
+The state comes from the application, through an
+[initializer](yui/documents.md#setting-up-components-from-c) run each time the
+document creates the keyboard:
+
+```cpp
+document.setInitializer<yup::MidiKeyboardComponent> ([this] (yup::MidiKeyboardComponent& keyboard)
+{
+    keyboard.setState (&keyboardState);
+});
+```
+
+A keyboard with no state plays into one of its own, that nothing else hears:
+it still shows the keys held on it, so it can be tried out where no
+application gives it a state. `setState()` releases the notes held on the
+previous state, and a null state removes it.

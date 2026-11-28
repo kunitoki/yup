@@ -191,6 +191,7 @@ TEST (SyntaxDefinitionTests, BuiltInYuiLoads)
 
     EXPECT_EQ (String ("YUI"), definition.getName());
     EXPECT_TRUE (definition.isKeyword ("drawing"));
+    EXPECT_TRUE (definition.isKeyword ("shader"));
     EXPECT_TRUE (definition.isKeyword ("let"));
     EXPECT_TRUE (definition.isKeyword ("repeat"));
     EXPECT_TRUE (definition.isType ("circle"));

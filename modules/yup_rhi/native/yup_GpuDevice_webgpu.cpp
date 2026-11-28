@@ -247,7 +247,7 @@ public:
         int width = 0;
         int height = 0;
         rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
-        rive::gpu::RenderContext* renderContext = nullptr;
+        bool isRenderable = false;
         OffscreenContextSlot* contextSlot = nullptr;
 
         int getWidth() const noexcept override { return width; }
@@ -261,7 +261,7 @@ public:
 
         rive::gpu::RenderContext* getRenderContext() noexcept override
         {
-            return renderContext;
+            return contextSlot != nullptr ? contextSlot->renderContext.get() : nullptr;
         }
 
         rive::rcp<rive::gpu::RenderCanvas> getRenderCanvas() noexcept override
@@ -279,73 +279,46 @@ public:
 
     std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) override
     {
-        if (width <= 0 || height <= 0 || renderContext == nullptr)
-            return nullptr;
-
-        auto target = std::make_unique<OffscreenTargetWebGPU>();
-        target->width = width;
-        target->height = height;
-        target->renderContext = nullptr;
-        target->contextSlot = nullptr;
-        target->renderCanvas = renderContext->makeRenderCanvas (static_cast<uint32_t> (width),
-                                                                static_cast<uint32_t> (height));
-        if (target->renderCanvas == nullptr)
-            return nullptr;
-
-        return target;
+        return makeOffscreenTarget (width, height, false);
     }
 
     std::unique_ptr<RenderableTarget> createRenderableTarget (int width, int height) override
     {
-        if (width <= 0 || height <= 0)
-            return nullptr;
-
-        auto* contextSlot = acquireOffscreenContext();
-        if (contextSlot == nullptr)
-            return nullptr;
-
-        auto target = std::make_unique<OffscreenTargetWebGPU>();
-        target->width = width;
-        target->height = height;
-        target->renderContext = contextSlot->renderContext.get();
-        target->contextSlot = contextSlot;
-        target->renderCanvas = target->renderContext->makeRenderCanvas (static_cast<uint32_t> (width),
-                                                                        static_cast<uint32_t> (height));
-        if (target->renderCanvas == nullptr)
-            return nullptr;
-
-        return target;
+        return makeOffscreenTarget (width, height, true);
     }
 
     void beginOffscreen (OffscreenTarget& baseTarget, const GpuFrameDescriptor& frameDesc) override
     {
         auto& target = static_cast<OffscreenTargetWebGPU&> (baseTarget);
-        auto* renderContext = target.getRenderContext();
 
-        if (renderContext == nullptr || target.contextSlot == nullptr || target.contextSlot->frameActive)
+        if (target.isRenderable && target.contextSlot == nullptr)
+            target.contextSlot = acquireOffscreenContext();
+
+        if (target.contextSlot == nullptr || target.contextSlot->frameActive)
             return;
 
-        renderContext->beginFrame (toRiveFrameDescriptor (frameDesc));
+        target.contextSlot->renderContext->beginFrame (toRiveFrameDescriptor (frameDesc));
         target.contextSlot->frameActive = true;
     }
 
     void endOffscreen (OffscreenTarget& baseTarget) override
     {
         auto& target = static_cast<OffscreenTargetWebGPU&> (baseTarget);
-        auto* renderContext = target.getRenderContext();
+        auto* slot = std::exchange (target.contextSlot, nullptr);
 
-        if (renderContext == nullptr || target.contextSlot == nullptr || ! target.contextSlot->frameActive)
+        if (slot == nullptr || ! slot->frameActive)
             return;
 
         wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
 
-        renderContext->flush ({ .renderTarget = target.getRenderTarget(),
-                                .externalCommandBuffer = encoder.Get() });
+        slot->renderContext->flush ({ .renderTarget = target.getRenderTarget(),
+                                      .externalCommandBuffer = encoder.Get() });
 
         wgpu::CommandBuffer commands = encoder.Finish();
         queue.Submit (1, &commands);
 
-        target.contextSlot->frameActive = false;
+        slot->frameActive = false;
+        slot->leased = false;
     }
 
     bool clearOffscreen (OffscreenTarget& baseTarget, GpuColor color) override
@@ -501,6 +474,31 @@ private:
         callbackInfo.userdata1 = new std::shared_ptr<GpuBuffer::Impl::ReadbackSlot> (freeSlot);
 
         wgpuBufferMapAsync (freeSlot->staging.Get(), WGPUMapMode_Read, 0, byteSize, callbackInfo);
+    }
+
+    std::unique_ptr<OffscreenTargetWebGPU> makeOffscreenTarget (int width, int height, bool isRenderable)
+    {
+        if (width <= 0 || height <= 0 || renderContext == nullptr)
+            return nullptr;
+
+        auto target = std::make_unique<OffscreenTargetWebGPU>();
+        target->width = width;
+        target->height = height;
+        target->isRenderable = isRenderable;
+        target->renderCanvas = renderContext->makeRenderCanvas (static_cast<uint32_t> (width),
+                                                                static_cast<uint32_t> (height));
+        if (target->renderCanvas == nullptr)
+            return nullptr;
+
+        return target;
+    }
+
+    void releaseUnusedOffscreenContexts (GpuUnusedResources resources) override
+    {
+        releaseIdleOffscreenContexts (offscreenContextPool, resources, [] (const auto& slot)
+        {
+            return ! slot->leased;
+        });
     }
 
     OffscreenContextSlot* acquireOffscreenContext()

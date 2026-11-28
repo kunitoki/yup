@@ -94,6 +94,7 @@ public:
 
         static const Identifier cornerRadiusId; /**< Corner radius, unset for a pill */
         static const Identifier thumbInsetId;   /**< Inset of the handle inside its slot, 4 by default */
+        static const Identifier thumbSizeId;    /**< Thickness of the switch, which is twice as long: 28 by default */
     };
 
     //==============================================================================
@@ -104,9 +105,21 @@ public:
     const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
     //==============================================================================
-    /** @internal */
-    Rectangle<float> getSwitchCircleBounds() const { return switchCircleBounds; }
+    /** Returns the area of the switch in the component.
 
+        The switch keeps the thickness its style gives it (Style::thumbSizeId) and is twice as long, whatever the
+        size of the component: it is centered in it, and only gets smaller in a component with less room. It is
+        what the pointer hits: a press beside it in a larger component is not a press of the switch.
+    */
+    Rectangle<float> getTrackBounds() const;
+
+    /** Returns the area of the handle in the switch, before the inset of its style: it slides from one end of
+        getTrackBounds() to the other when the switch is toggled.
+    */
+    Rectangle<float> getThumbBounds() const;
+
+    /** @internal */
+    bool hitTest (float x, float y) override;
     /** @internal */
     void refreshDisplay (double lastFrameTimeSeconds);
     /** @internal */
@@ -114,25 +127,30 @@ public:
     /** @internal */
     void resized() override;
     /** @internal */
+    void visibilityChanged() override;
+    /** @internal */
+    void parentHierarchyChanged() override;
+    /** @internal */
     void clicked() override;
 
 private:
     //==============================================================================
     void updateSwitchCirclePosition();
+    void updateFrameAttachment();
 
     //==============================================================================
     bool toggleState = false;
     bool isVerticalValue = false;
     int millisecondsToSpendMoving = 50;
 
-    Rectangle<float> switchCircleBounds;
+    // Where the handle is between the end it has when off (0) and the one it has when on (1)
+    float handlePosition = 0.0f;
 
     // Animation state
-    Rectangle<float> animationStartBounds;
-    Rectangle<float> animationTargetBounds;
-    Time animationStartTime;
+    float animationStartPosition = 0.0f;
+    double animationSeconds = 0.0;
     bool isAnimating = false;
-    FrameAttachment frameAttachment { *this, bindFront (&SwitchButton::refreshDisplay, this) };
+    FrameAttachment frameAttachment { *this, bindFront (&SwitchButton::refreshDisplay, this), false };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SwitchButton)
 };

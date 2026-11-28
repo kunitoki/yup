@@ -154,7 +154,8 @@ flowchart LR
 ### yup_rhi
 
 The low-level GPU abstraction layer: device management, compute and render
-pipelines, frames, render passes, buffers, textures, and offscreen targets.
+pipelines, frames, render passes, buffers, textures, offscreen targets, and
+image shaders drawn over a target with their parameters set by name.
 This is the foundation for GPU work that does not require a window or Rive
 vector rendering — use it directly for GPU compute (audio DSP, FFT) without
 pulling in the 2D graphics stack.
@@ -244,10 +245,46 @@ flowchart LR
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
 ```
 
+### yup_gui_markup
+
+[YUI](ui/yui/index.md), the declarative language of `.yui` files: the parser
+and the writer, the builder turning a document into components, `YuiDocument`,
+`YuiLoader` and `YuiView` with hot reload, and the SVG importer. It is opt-in:
+an interface written in C++ needs `yup_gui` only. Link `yup_renderer` next to
+it and a document can write [3D scenes](ui/yui/scenes.md) too, link
+`yup_audio_gui` and it can write its
+[audio components](audio/audio-gui.md#in-yui-documents).
+
+```mermaid
+flowchart LR
+    yup_gui_markup:::self --> yup_gui
+    yup_gui_markup -. optional .-> yup_renderer:::opt
+    yup_gui_markup -. optional .-> yup_audio_gui:::opt
+    classDef self fill:#005aff,color:#fff,stroke:#003db3;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+    classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
+```
+
+### yup_artboard
+
+[Rive artboards](ui/artboard.md) as components: `ArtboardFile` loads a `.riv`,
+`Artboard` plays it with its state machines, `ArtboardNode` reaches its nodes
+and `ArtboardViewModel` / `ArtboardViewModelInstance` drive its data bindings.
+It is opt-in: an interface without Rive content needs `yup_gui` only.
+
+```mermaid
+flowchart LR
+    yup_artboard:::self --> yup_gui
+    yup_artboard --> rive:::ext
+    classDef self fill:#005aff,color:#fff,stroke:#003db3;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
+
 ### yup_audio_gui
 
 Audio-specific GUI components - waveforms, meters, spectrum analyzers, and
-audio-graph editor views - bridging the UI and audio stacks.
+audio-graph editor views - bridging the UI and audio stacks. Link
+`yup_audio_devices` next to it for the device settings panels.
 
 ```mermaid
 flowchart LR
@@ -257,8 +294,10 @@ flowchart LR
     yup_audio_gui --> yup_audio_graph
     yup_audio_gui --> yup_dsp
     yup_audio_gui --> yup_gui
+    yup_audio_gui -. optional .-> yup_audio_devices:::opt
     classDef self fill:#005aff,color:#fff,stroke:#003db3;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+    classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
 ```
 
 ## 3D
@@ -269,8 +308,8 @@ flowchart LR
 
 Scenes as a small entity-component system: entity trees with attached nodes
 (transforms, meshes, cameras, lights, material overrides), views, collections,
-signals and ordered systems, plus resources and glTF 2.0 loading through
-`tinygltf`. glTF textures are decoded
+signals and ordered systems, plus resources, animation (clips, CPU skinning
+and morph targets) and glTF 2.0 loading through `tinygltf`. glTF textures are decoded
 with the image formats `yup_graphics` has: link `libpng`, `libjpeg` and/or
 `libwebp` for the textures your assets use.
 
@@ -289,8 +328,10 @@ The PBR scene renderer for `yup_3d` scenes: `SceneRenderer`, `SceneComponent`,
 `RenderSettings` and `RenderCapabilities`, the scene feature nodes (background,
 ambient light, exposure, tone mapping, default light, environment and fog,
 resolved by `SceneSettings`), environment maps, reflection probes and
-irradiance volumes. Its shader bundles are compiled at
-build time from the permutations declared in its module header.
+irradiance volumes, custom material shaders, and the components a
+[`.yui` document](ui/yui/scenes.md) writes a scene with (`Scene3D`, `Node3D`,
+`Camera3D`, `Light3D`, `Mesh3D`, `Model3D`, `Material3D`). Its shader bundles
+are compiled at build time from the permutations declared in its module header.
 
 ```mermaid
 flowchart LR
@@ -456,7 +497,7 @@ Bindings for driving YUP from scripts. See the [Scripting](scripting/index.md) a
 
 Python bindings for creating and driving YUP applications from scripts. Its only
 hard dependency is `yup_core`; it additionally generates bindings for
-`yup_events`, `yup_expression`, `yup_data_model`, `yup_graphics`, `yup_gui`, `yup_ai`,
+`yup_events`, `yup_expression`, `yup_data_model`, `yup_graphics`, `yup_gui`, `yup_gui_markup`, `yup_ai`,
 `yup_audio_basics`, `yup_audio_devices`, and `yup_audio_processors` when those modules are present in
 the build.
 
@@ -473,6 +514,7 @@ flowchart LR
     yup_python -. optional .-> yup_expression:::opt
     yup_python -. optional .-> yup_graphics:::opt
     yup_python -. optional .-> yup_gui:::opt
+    yup_python -. optional .-> yup_gui_markup:::opt
     classDef self fill:#005aff,color:#fff,stroke:#003db3;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
     classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
@@ -509,6 +551,10 @@ flowchart TD
     gui[yup_gui] --> events
     gui --> data
     gui --> graphics
+
+    markup[yup_gui_markup] --> gui
+
+    artboard[yup_artboard] --> gui
 
     three[yup_3d] --> rhi
     three --> graphics

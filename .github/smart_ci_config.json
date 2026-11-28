@@ -2,16 +2,18 @@
   "modules_root": "modules",
   "patterns": {
     "global": [
-      {"pattern": "^\\.github/(actions/smart_ci/|tools/smart_ci\\.py$|smart_ci_config\\.json$|workflows/(ci\\.yml$|build_))", "targets": ["all"]},
+      {"pattern": "^\\.github/(actions/(smart_ci|ccache)/|tools/smart_ci\\.py$|smart_ci_config\\.json$|ci_settings\\.cmake$|workflows/(ci\\.yml$|build_))", "targets": ["all"]},
       {"pattern": "^codecov\\.yml$", "targets": ["all"]},
       {"pattern": "^CMakeLists\\.txt$", "targets": ["all"]},
-      {"pattern": "^cmake/.*", "targets": ["all"]},
+      {"pattern": "^cmake/(?!tools/yui_tool/).*", "targets": ["all"]},
       {"pattern": "^thirdparty/[^/]+$", "targets": ["all"]}
     ],
     "skip": [
       {"pattern": "^\\.github/.*", "targets": []},
       {"pattern": "^docs/.*", "targets": []},
       {"pattern": "^tools/.*", "targets": []},
+      {"pattern": "^cmake/tools/yui_tool/.*", "targets": []},
+      {"pattern": "^modules/[^/]+/tools/vscode-[^/]+/.*", "targets": []},
       {"pattern": "^website/.*", "targets": []},
       {"pattern": "^\\.vscode/.*", "targets": []},
       {"pattern": "^[^/]+\\.(md|svg|jpg|png)$", "targets": []},
@@ -122,7 +124,7 @@
       ],
       "deps": ["wasmDeps"],
       "tests": true,
-      "untested": ["yup_audio_plugin_host", "yup_audio_plugin_client", "yup_gui", "yup_audio_gui", "yup_3d", "yup_renderer", "yup_python"],
+      "untested": ["yup_audio_plugin_host", "yup_audio_plugin_client", "yup_gui", "yup_gui_markup", "yup_artboard", "yup_audio_gui", "yup_3d", "yup_renderer", "yup_python"],
       "skip": [
         "/native/(generated|java[^/]*)/",
         "/native/[^/]*_(android|apple|linux|mac|vulkan|windows)\\.",

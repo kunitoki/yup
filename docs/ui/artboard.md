@@ -11,6 +11,21 @@ classes cooperate:
 - `ArtboardViewModelInstance` — a live set of values for that schema, bound to
   an artboard to drive its data bindings.
 
+**Modules covered:** `yup_artboard`, on top of `yup_gui`. It is opt-in: add the
+module to your target and include its header, which brings `yup_gui` along:
+
+```cmake
+yup_standalone_app (
+    # ...
+    MODULES
+        yup::yup_gui
+        yup::yup_artboard)
+```
+
+```cpp
+#include <yup_artboard/yup_artboard.h>
+```
+
 <p align="center">
   <img class="rounded" src="../_static/images/yup_rive_artboard.jpg" alt="A Rive artboard, in the graphics example" width="640">
 </p>
@@ -130,6 +145,10 @@ true.
 
 Call `advanceAndApply` directly only when driving it manually (in tests, or for
 a fixed-step render). It returns true when the artboard needs to be drawn again.
+
+An artboard with no file, a paused one, and one that is hidden (unless it is told
+to keep advancing) asks its window for no frame, so a window with nothing else to
+do stays idle.
 
 ```cpp
 artboard->setPaused (true);              // stop advancing

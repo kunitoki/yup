@@ -92,6 +92,35 @@ frame.submit();
   the `GpuRenderPass`, so one compiled pipeline can serve many passes with
   different bindings. Compile once, reuse across frames.
 
+## Releasing memory
+
+A device keeps some resources after you stop using them, so that steady
+rendering stops allocating: what its last frames drew with, its shader caches,
+and the buffers and contexts 2D drawing uses. After a heavy scene is gone, give
+them back with `GpuDevice::releaseUnusedResources()`:
+
+```cpp
+device->releaseUnusedResources();
+
+// Or only what costs nothing to get back
+device->releaseUnusedResources (yup::GpuUnusedResources::frameResources);
+```
+
+Flags of `GpuUnusedResources` combine with `|`:
+
+| Flag | Releases | Cost afterwards |
+|---|---|---|
+| `frameResources` | What finished frames left behind (targets, textures and pipelines you no longer hold), pooled uniform buffers | None |
+| `shaderCaches` | Shader modules and parsed shader bundles | Compiled and parsed again on next use |
+| `renderBuffers` | The buffers 2D drawing fills each frame | Allocated again by the next frame |
+| `offscreenContexts` | Idle contexts of offscreen 2D frames (`GpuCanvas`) | Created again on next use |
+
+Call it between frames, from the thread that draws with the device. For the
+device of a window (`GraphicsContext::getGpuDevice()`) that is the message
+thread, outside `Component::paint()`. It never waits for the GPU: what the GPU
+may still be using stays, and a later call releases it. Resources you still
+hold are untouched.
+
 ## Immediate results
 
 `submit()` does **not** block the CPU. If you need the rendered pixels

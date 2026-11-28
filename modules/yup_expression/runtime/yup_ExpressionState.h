@@ -40,7 +40,8 @@ namespace yup
     soon as they produce the value they had before, and hasChanged() tells which outputs changed in
     the last evaluation, so callers can skip updating what depends on them. Array inputs are read
     again on every evaluation, so their elements can change in place, and functions that aren't pure
-    run for every row.
+    run for every row. isUpToDate() tells, before evaluating, whether the outputs could be other
+    than the ones of the last evaluation.
 
     @code
     ExpressionContext context;
@@ -199,6 +200,27 @@ public:
     /** Returns true if any output may have changed in the last evaluation. */
     bool hasChanged() const noexcept;
 
+    /** Returns true if evaluating the rows of the last evaluation again would give the outputs it gave.
+
+        It tells whether what was made of the outputs still holds, without evaluating them. It is true
+        once the state was evaluated, until an input is set to a different value or a binding changes:
+        setting an input to the value it has keeps it true, and one set to another value and back keeps
+        it false until the next evaluation. A bound row index doesn't prevent it, as the same rows give
+        the same outputs.
+
+        It is always false for what can change with no input being set: a state reading columns, and a
+        program reading arrays, whose elements can change in place, or calling functions that aren't
+        pure.
+
+        @code
+        state.set (hovered, isMouseOver());
+
+        if (! state.isUpToDate())
+            drawAgainWhatTheOutputsPaint();
+        @endcode
+    */
+    bool isUpToDate() const noexcept;
+
     //==============================================================================
     /** Sets an input of a built-in type from a var. */
     Result setVar (int inputIndex, const var& value);
@@ -253,6 +275,7 @@ private:
     std::vector<Column> inputColumns, outputColumns;
     int rowIndexRegister = -1, numEvaluatedRows = 0;
     bool scheduleChanged = true, uniformsChanged = true, forceUniformCalls = true;
+    bool hasImpureCalls = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ExpressionState)
 };

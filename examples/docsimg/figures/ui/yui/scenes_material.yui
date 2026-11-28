@@ -1,0 +1,24 @@
+// size: 400 318
+shader Hologram {
+    material: "fx/hologram.glsl";
+    property rim: color = #35e0ff;
+    property strength: number = 1;
+}
+
+style {
+    Material3D                 { strength: 1; transition: strength 200ms; }
+    Model3D:hover > Material3D { strength: 2.5; }
+}
+
+Scene3D {
+    background: #101116; toneMapping: aces;
+
+    Camera3D { position: [0, 0.4, 5]; lookAt: [0, 0, 0]; fov: 32deg; }
+
+    Model3D {
+        source: "../../../data/knot.glb"; rotation: [60deg, 30deg, 0]; scale: 0.6;
+
+        // The material gives the base color the function starts from, the shader the rest
+        Material3D { shader: Hologram; baseColor: #06202a; }
+    }
+}

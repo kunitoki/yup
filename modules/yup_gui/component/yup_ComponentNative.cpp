@@ -167,6 +167,7 @@ ComponentNative::Options& ComponentNative::Options::withRepaintMode (RepaintMode
 ComponentNative::ComponentNative (Component& newComponent, const Flags& newFlags)
     : component (newComponent)
     , flags (newFlags)
+    , lastThemeGeneration (ApplicationTheme::getLastGeneration())
 {
 }
 
@@ -197,8 +198,17 @@ bool ComponentNative::hasFrameListeners() const noexcept
     return numFrameListeners.load (std::memory_order_acquire) > 0;
 }
 
+bool ComponentNative::hasThemeChanged() const noexcept
+{
+    return lastThemeGeneration.load (std::memory_order_acquire) != ApplicationTheme::getLastGeneration();
+}
+
 void ComponentNative::callFrameListeners (double elapsedSeconds)
 {
+    // The stylesheets that are up to date take no frame: they are told that a theme changed, to follow it in this one
+    if (const auto generation = ApplicationTheme::getLastGeneration(); lastThemeGeneration.exchange (generation, std::memory_order_acq_rel) != generation)
+        component.internalThemeChanged();
+
     frameListeners.call (&FrameListener::frameStarted, elapsedSeconds);
 }
 

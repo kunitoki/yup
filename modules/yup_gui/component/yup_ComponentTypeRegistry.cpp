@@ -34,6 +34,27 @@ void ComponentTypeRegistry::registerType (const ComponentTypeInfo& typeInfo)
     types.insert_or_assign (typeInfo.getTypeName(), &typeInfo);
 }
 
+void ComponentTypeRegistry::registerDefaultType (const ComponentTypeInfo& typeInfo)
+{
+    registerDefaultTypes ({ typeInfo });
+}
+
+void ComponentTypeRegistry::registerDefaultTypes (std::initializer_list<std::reference_wrapper<const ComponentTypeInfo>> typeInfos)
+{
+    const ScopedLock sl (lock);
+
+    for (const ComponentTypeInfo& typeInfo : typeInfos)
+        types.try_emplace (typeInfo.getTypeName(), &typeInfo);
+}
+
+void ComponentTypeRegistry::unregisterType (const ComponentTypeInfo& typeInfo)
+{
+    const ScopedLock sl (lock);
+
+    if (const auto found = types.find (typeInfo.getTypeName()); found != types.end() && found->second == &typeInfo)
+        types.erase (found);
+}
+
 const ComponentTypeInfo* ComponentTypeRegistry::findType (const Identifier& typeName) const
 {
     const ScopedLock sl (lock);
@@ -60,6 +81,51 @@ std::vector<const ComponentTypeInfo*> ComponentTypeRegistry::getRegisteredTypes(
     });
 
     return result;
+}
+
+//==============================================================================
+
+void registerBuiltInComponentTypes()
+{
+    static std::once_flag once;
+    std::call_once (once, []
+    {
+        ComponentTypeRegistry::getInstance().registerDefaultTypes ({
+            Component::getClassTypeInfo(),
+            Button::getClassTypeInfo(),
+            Label::getClassTypeInfo(),
+            Slider::getClassTypeInfo(),
+            TextButton::getClassTypeInfo(),
+            ToggleButton::getClassTypeInfo(),
+            SwitchButton::getClassTypeInfo(),
+            ComboBox::getClassTypeInfo(),
+            PopupMenu::getClassTypeInfo(),
+            TextEditor::getClassTypeInfo(),
+            ProgressBar::getClassTypeInfo(),
+            ImageComponent::getClassTypeInfo(),
+            ScrollBar::getClassTypeInfo(),
+            ListBoxItem::getClassTypeInfo(),
+            ListBox::getClassTypeInfo(),
+            TreeViewRow::getClassTypeInfo(),
+            TreeView::getClassTypeInfo(),
+            Viewport::getClassTypeInfo(),
+            TabButton::getClassTypeInfo(),
+            TabBar::getClassTypeInfo(),
+            TabComponent::getClassTypeInfo(),
+            ResizableCorner::getClassTypeInfo(),
+            ResizableDivider::getClassTypeInfo(),
+            JoystickComponent::getClassTypeInfo(),
+            CodeEditor::getClassTypeInfo(),
+            DocumentWindow::getClassTypeInfo(),
+            LayoutComponent::getClassTypeInfo(),
+            FlexBoxComponent::getClassTypeInfo(),
+            RowComponent::getClassTypeInfo(),
+            ColumnComponent::getClassTypeInfo(),
+            GridComponent::getClassTypeInfo(),
+            StackComponent::getClassTypeInfo(),
+            WindowComponent::getClassTypeInfo(),
+        });
+    });
 }
 
 } // namespace yup

@@ -22,7 +22,7 @@ graphics (e.g. audio DSP on the GPU), use `GpuDevice` directly — no
 | ----------------------------------------------------- | -------------------------------- |
 | Draw 2D vector content (paths, text, images)          | `Graphics` (not the RHI)         |
 | Render custom geometry with your own shaders          | `GpuPipeline` + `GpuRenderPass`  |
-| Apply a fullscreen post-process effect                | `GpuPipeline` (fullscreen)       |
+| Apply a fullscreen post-process effect                | `GpuImageShader`, or `GpuPipeline` (fullscreen) |
 | Run GPU compute (DSP, simulation)                     | `GpuComputePipeline` + `GpuComputePass` |
 | Render offscreen and sample the result as a texture   | `GpuTarget` or `GpuCanvas`       |
 | Mix 2D drawing *and* custom passes on one surface     | `GpuCanvas`                      |
@@ -42,6 +42,10 @@ graphics (e.g. audio DSP on the GPU), use `GpuDevice` directly — no
 - **`GpuComputePipeline`** - an immutable, compiled compute pipeline (single
   compute stage, native backend API, no ore dependency).
 - **`GpuPipelineCache`** - thread-safe compile-or-fetch cache for pipelines.
+- **`GpuImageShader`** - a fragment shader drawn over a whole target, with its
+  pipeline, its bindings and its fullscreen triangle taken care of.
+- **`ShaderUniforms`** - the bytes of a uniform block, set member by member by
+  name, or by a handle found once.
 - **`GpuBuffer`** - an immutable vertex, index, uniform, or storage buffer.
 - **`GpuTexture`** - an opaque GPU texture, the currency between passes,
   `Image`, and `Graphics::drawTexture`.
@@ -66,6 +70,8 @@ per-backend notes and how a window chooses one.
   and `GpuRenderOptions`.
 - [Pipelines & shaders](pipelines.md) - compiling pipelines, pipeline options,
   shader sources, binding maps, and the pipeline cache.
+- [Image shaders](image-shaders.md) - `GpuImageShader` and `ShaderUniforms`:
+  a fragment shader drawn over a target, with its parameters set by name.
 - [Buffers & textures](buffers-and-textures.md) - `GpuBuffer` and `GpuTexture`.
 - [Offscreen targets & canvases](targets.md) - `GpuTarget`, `GpuCanvas`, and CPU
   readback.
@@ -87,6 +93,7 @@ per-backend notes and how a window chooses one.
 concepts
 frames-and-passes
 pipelines
+image-shaders
 buffers-and-textures
 targets
 compute-shaders

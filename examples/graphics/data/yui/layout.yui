@@ -1,0 +1,104 @@
+// Layout: the containers of a document. Each cell shows one of them with the properties that
+// place its items: a Row and a Column with justify and align, a FlexBox that wraps, a Grid
+// with named areas and spans, a Stack with items over one another, and what an item says of
+// itself (order, margin, alignSelf, flexGrow).
+component Cell : Column {
+    property name: string = "";
+
+    class: cell;
+    padding: 8;
+    gap: 6;
+
+    Label { class: caption; text: root.name; preferredHeight: 14; }
+}
+
+style {
+    .cell    { cornerRadius: 8; shadow: 0 0 palette.surface; }
+    .caption { textFillColor: palette.textMuted; }
+    .over    { backgroundColor: palette.accent; textColor: palette.onAccent; }
+}
+
+Grid {
+    columns: "1fr 1fr";
+    rows: "1fr 1fr 1fr";
+    padding: 12;
+    gap: 10;
+
+    Cell {
+        name: "Row: justify";
+
+        Row { justify: start; gap: 4; flexGrow: 1; TextButton { text: "start"; preferredWidth: 64; } TextButton { text: "B"; preferredWidth: 28; } }
+        Row { justify: center; gap: 4; flexGrow: 1; TextButton { text: "center"; preferredWidth: 64; } TextButton { text: "B"; preferredWidth: 28; } }
+        Row { justify: spaceBetween; gap: 4; flexGrow: 1; TextButton { text: "between"; preferredWidth: 64; } TextButton { text: "B"; preferredWidth: 28; } }
+    }
+
+    Cell {
+        name: "Row: align";
+
+        Row {
+            gap: 6;
+            flexGrow: 1;
+
+            Row { align: start; gap: 4; flexGrow: 1; TextButton { text: "start"; flexGrow: 1; preferredHeight: 22; } }
+            Row { align: center; gap: 4; flexGrow: 1; TextButton { text: "center"; flexGrow: 1; preferredHeight: 22; } }
+            Row { align: end; gap: 4; flexGrow: 1; TextButton { text: "end"; flexGrow: 1; preferredHeight: 22; } }
+            Row { align: stretch; gap: 4; flexGrow: 1; TextButton { text: "stretch"; flexGrow: 1; } }
+        }
+    }
+
+    Cell {
+        name: "FlexBox: wrap";
+
+        FlexBox {
+            wrap: wrap;
+            gap: 4;
+            flexGrow: 1;
+
+            repeat i in 0 .. 9 {
+                TextButton { text: format ("%d", i + 1); preferredWidth: 36 + (i % 3) * 20; preferredHeight: 22; }
+            }
+        }
+    }
+
+    Cell {
+        name: "Grid: areas and spans";
+
+        Grid {
+            columns: "64px 1fr 1fr";
+            rows: "22px 1fr";
+            areas: "head head head, nav body body";
+            gap: 4;
+            flexGrow: 1;
+
+            TextButton { text: "head"; gridArea: "head"; }
+            TextButton { text: "nav"; gridArea: "nav"; }
+            TextButton { text: "body"; gridArea: "body"; }
+        }
+    }
+
+    Cell {
+        name: "Stack";
+
+        Stack {
+            flexGrow: 1;
+
+            TextButton { text: "content"; }
+            TextButton { text: "3"; class: over; alignSelf: start; justifySelf: end; margin: 6; preferredWidth: 24; preferredHeight: 24; }
+            TextButton { text: "saved"; class: over; alignSelf: end; justifySelf: center; margin: 6; preferredWidth: 72; preferredHeight: 22; }
+        }
+    }
+
+    Cell {
+        name: "Items";
+
+        Row {
+            gap: 4;
+            flexGrow: 1;
+
+            TextButton { text: "order 1"; order: 1; preferredWidth: 64; }
+            TextButton { text: "margin"; margin: "0 12"; preferredWidth: 56; }
+            TextButton { text: "end"; alignSelf: end; preferredWidth: 44; preferredHeight: 22; }
+            TextButton { text: "grow"; flexGrow: 1; }
+        }
+    }
+}

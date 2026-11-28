@@ -31,6 +31,9 @@ struct ListBoxItemIds
     static inline const Identifier iconPosition { "iconPosition" };
     static inline const Identifier selected { "selected" };
     static inline const Identifier hovered { "hovered" };
+    static inline const Identifier hasIcon { "hasIcon" };
+    static inline const Identifier iconBounds { "iconBounds" };
+    static inline const Identifier textBounds { "textBounds" };
 };
 
 } // namespace
@@ -41,6 +44,8 @@ const Identifier ListBoxItem::Style::textColorSelectedId { "listBoxItemTextSelec
 const Identifier ListBoxItem::Style::backgroundColorId { "listBoxItemBackground" };
 const Identifier ListBoxItem::Style::backgroundColorSelectedId { "listBoxItemBackgroundSelected" };
 const Identifier ListBoxItem::Style::backgroundColorHoveredId { "listBoxItemBackgroundHovered" };
+const Identifier ListBoxItem::Style::iconPartId { "icon" };
+const Identifier ListBoxItem::Style::textPartId { "text" };
 
 //==============================================================================
 const ComponentTypeInfo& ListBoxItem::getClassTypeInfo()
@@ -55,6 +60,11 @@ const ComponentTypeInfo& ListBoxItem::getClassTypeInfo()
                                  .enumeration (ListBoxItemIds::iconPosition, { "left", "right", "above", "below" }, &ListBoxItem::getIconPosition, &ListBoxItem::setIconPosition, "Where the icon is positioned relative to the text.")
                                  .state (ListBoxItemIds::selected, &ListBoxItem::isSelected, &ListBoxItem::setSelected, false, "Whether this list item is selected.")
                                  .state (ListBoxItemIds::hovered, &ListBoxItem::isHovered, &ListBoxItem::setHovered, false, "Whether this list item is hovered.")
+                                 .readOnly (ListBoxItemIds::hasIcon, [] (const ListBoxItem& i) { return i.getIconDrawable() != nullptr || i.getIconImage().isValid(); }, false, "Whether the item was given an icon, which the part 'icon' paints.")
+                                 .readOnly (ListBoxItemIds::iconBounds, &ListBoxItem::getIconBounds, {}, "The area of the icon, empty for an item without one.")
+                                 .readOnly (ListBoxItemIds::textBounds, &ListBoxItem::getTextBounds, {}, "The area of the text.")
+                                 .part (Style::iconPartId, &ListBoxItem::getIconBounds, "The drawable or the image the item was given as its icon.")
+                                 .part (Style::textPartId, &ListBoxItem::getTextBounds, "The text, laid out by the theme for the area it is given and filled with the fill color.")
                                  .build();
 
     return info;
@@ -251,13 +261,6 @@ void ListBoxItem::calculateLayout()
             break;
         }
     }
-}
-
-//==============================================================================
-void ListBoxItem::paint (Graphics& g)
-{
-    if (auto style = ApplicationTheme::findComponentStyle (*this))
-        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
 }
 
 //==============================================================================

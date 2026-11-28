@@ -1,0 +1,271 @@
+{
+  "Component": {
+    "prefix": "component",
+    "body": [
+      "component ${1:Name} : ${2:Column} {",
+      "    property ${3:label}: ${4:string} = ${5:\"VALUE\"};",
+      "    signal ${6:onChanged} (${7:value}: ${8:number});",
+      "",
+      "    gap: ${9:4};",
+      "",
+      "    Label {",
+      "        id: ${10:caption};",
+      "        text: root.$3;",
+      "    }",
+      "}",
+      ""
+    ],
+    "description": "A YUI component: a new type deriving from a layout or a widget, with a property and a signal"
+  },
+  "PropertyDeclaration": {
+    "prefix": "property",
+    "body": [
+      "property ${1:name}: ${2|number,integer,boolean,string,color,point,rectangle,transform,font|} = ${3:0};"
+    ],
+    "description": "A typed property with a default value"
+  },
+  "PropertyAlias": {
+    "prefix": "alias",
+    "body": [
+      "property alias ${1:value} <=> ${2:knob}.${3:value};"
+    ],
+    "description": "An alias exposing the property of an inner element as a property of the component"
+  },
+  "Signal": {
+    "prefix": "signal",
+    "body": [
+      "signal ${1:onChanged} (${2:value}: ${3:number});"
+    ],
+    "description": "A signal the parts of a component emit with root.name (...)"
+  },
+  "Drawing": {
+    "prefix": "drawing",
+    "body": [
+      "drawing ${1:Name} {",
+      "    property ${2:fillColor}: color = ${3:#4080ff};",
+      "",
+      "    let c: bounds.center;",
+      "    let r: min (bounds.width, bounds.height) * ${4:0.4};",
+      "",
+      "    circle { id: body; center: c; radius: r; fill: $2; }",
+      "}",
+      ""
+    ],
+    "description": "A drawing with an input property, named values and one shape"
+  },
+  "Shader": {
+    "prefix": "shader",
+    "body": [
+      "shader ${1:Name} {",
+      "    ${2|fragment,material|}: \"${3:fx/name.frag}\";",
+      "    property ${4:intensity}: ${5|number,integer,boolean,color,point,rectangle|} = ${6:0.5};",
+      "}",
+      ""
+    ],
+    "description": "A shader: the GLSL file of an effect or of a material, with an input set where the shader is used"
+  },
+  "DrawingRepeat": {
+    "prefix": "repeat",
+    "body": [
+      "repeat ${1:i} in ${2:0} .. ${3:12} {",
+      "    circle { center: polar (${4:c}, ${5:r}, ${6:0deg} + ${7:360deg} * $1 / $3); radius: ${8:2}; fill: ${9:#4080ff}; }",
+      "}"
+    ],
+    "description": "A repeat scope drawing one shape per integer of the range"
+  },
+  "Style": {
+    "prefix": "style",
+    "body": [
+      "style {",
+      "    .${1:knob} {",
+      "        backgroundColor: palette.surface;",
+      "        trackColor: palette.accent;",
+      "        transition: trackColor ${2:150}ms easeOut;",
+      "    }",
+      "",
+      "    .$1:hover {",
+      "        trackColor: palette.accent.brighter (0.1);",
+      "    }",
+      "}",
+      ""
+    ],
+    "description": "A stylesheet with a class rule and its hover variant"
+  },
+  "StyleRule": {
+    "prefix": "rule",
+    "body": [
+      "${1:.knob}${2|:hover,:pressed,:focus,:disabled|} {",
+      "    ${3:backgroundColor}: ${4:palette.surfaceRaised};",
+      "}"
+    ],
+    "description": "A style rule for a selector and an optional pseudo class"
+  },
+  "Transition": {
+    "prefix": "transition",
+    "body": [
+      "transition: ${1:trackColor} ${2:150}ms ${3|easeOut,easeIn,easeInOut,linear|};"
+    ],
+    "description": "A transition of a style property"
+  },
+  "Keyframes": {
+    "prefix": "keyframes",
+    "body": [
+      "@keyframes ${1:pulse} {",
+      "    from { ${2:glow}: ${3:0}; }",
+      "    to { $2: ${4:1}; }",
+      "}"
+    ],
+    "description": "A keyframes block, declared inside a style block"
+  },
+  "Animation": {
+    "prefix": "animation",
+    "body": [
+      "animation: ${1:pulse} ${2:0.8}s ${3|easeInOut,easeOut,easeIn,linear|} ${4|infinite alternate,infinite,1|};"
+    ],
+    "description": "An animation of a keyframes sequence"
+  },
+  "Palette": {
+    "prefix": "palette",
+    "body": [
+      "palette ${1:Name} {",
+      "    mode: ${2|dark,light|};",
+      "    colors: ${3:#252628}, ${4:#78c8ff}, ${5:#8a8d92}, ${6:#d9dbde}, ${7:#2c2d30};",
+      "",
+      "    background: $3;",
+      "    surface: $7;",
+      "    surfaceRaised: $7;",
+      "    outline: ${8:#45484c};",
+      "    text: $6;",
+      "    textMuted: $5;",
+      "    accent: $4;",
+      "    onAccent: ${9:#0b1a26};",
+      "}",
+      ""
+    ],
+    "description": "A palette: the source colors and the roles pinned on top of them"
+  },
+  "Tokens": {
+    "prefix": "tokens",
+    "body": [
+      "tokens {",
+      "    property ${1:spacing}: number = ${2:10};",
+      "    property ${3:rowHeight}: number = ${4:30};",
+      "}",
+      ""
+    ],
+    "description": "Document tokens, read by bare name everywhere"
+  },
+  "Row": {
+    "prefix": "row",
+    "body": [
+      "Row {",
+      "    gap: ${1:8};",
+      "",
+      "    Label { text: \"${2:Label}\"; }",
+      "}"
+    ],
+    "description": "A horizontal flex container"
+  },
+  "Column": {
+    "prefix": "column",
+    "body": [
+      "Column {",
+      "    gap: ${1:8};",
+      "",
+      "    Label { text: \"${2:Label}\"; }",
+      "}"
+    ],
+    "description": "A vertical flex container"
+  },
+  "Grid": {
+    "prefix": "grid",
+    "body": [
+      "Grid {",
+      "    columns: \"${1:1fr 1fr}\";",
+      "    rows: \"${2:auto 1fr}\";",
+      "    areas: \"${3:head head, body body}\";",
+      "    gap: ${4:8};",
+      "",
+      "    Label { gridArea: \"${5:head}\"; text: \"${6:Title}\"; }",
+      "}"
+    ],
+    "description": "A grid container with named areas"
+  },
+  "Stack": {
+    "prefix": "stack",
+    "body": [
+      "Stack {",
+      "    justify: ${1|center,start,end,stretch|};",
+      "    align: ${2|center,start,end,stretch|};",
+      "",
+      "    Label { text: \"${3:Overlay}\"; }",
+      "}"
+    ],
+    "description": "A stack container layering its children in the same box"
+  },
+  "Scene3D": {
+    "prefix": "scene",
+    "body": [
+      "Scene3D {",
+      "    background: ${1:#101014}; flexGrow: 1;",
+      "",
+      "    Camera3D { position: [${2:0, 0.5, 4}]; lookAt: [0, 0, 0]; }",
+      "    Light3D { type: directional; rotation: [-45deg, 30deg, 0]; intensity: ${3:3}; }",
+      "",
+      "    Mesh3D {",
+      "        vertices: [-1, -1, 0,  1, -1, 0,  1, 1, 0,  -1, 1, 0];",
+      "        indices: [0, 1, 2,  0, 2, 3];",
+      "",
+      "        Material3D { baseColor: ${4:#ff8800}; metallic: 0; roughness: ${5:0.6}; }",
+      "    }",
+      "}"
+    ],
+    "description": "A 3D scene: a camera, a light and a mesh written as numbers, with its material"
+  },
+  "Model3D": {
+    "prefix": "model",
+    "body": [
+      "Model3D {",
+      "    source: \"${1:models/device.glb}\";",
+      "",
+      "    Node3D { node: \"${2:Knob}\"; rotation: [0, ${3:90deg}, 0]; }",
+      "}"
+    ],
+    "description": "A glTF model in a 3D scene, with a node bound to one of its parts to move it"
+  },
+  "Binding": {
+    "prefix": "bind",
+    "body": [
+      "${1:value} <=> ${2:params}.${3:cutoff};"
+    ],
+    "description": "A two-way binding to another element or to a model property"
+  },
+  "Handler": {
+    "prefix": "handler",
+    "body": [
+      "${1:onClick}: action (\"${2:reset}\");"
+    ],
+    "description": "A signal handler calling an action registered by the application"
+  },
+  "HandlerArguments": {
+    "prefix": "handler-arguments",
+    "body": [
+      "${1:onValueChanged}: (${2:v}) => ${3:root.onChanged ($2)};"
+    ],
+    "description": "A signal handler naming the arguments of the signal"
+  },
+  "Changed": {
+    "prefix": "changed",
+    "body": [
+      "changed ${1:value}: (${2:v}) => action (\"${3:log}\", $2);"
+    ],
+    "description": "A handler running when a property changes"
+  },
+  "Import": {
+    "prefix": "import",
+    "body": [
+      "import \"${1:palette.yui}\";"
+    ],
+    "description": "Merges another document into this one"
+  }
+}

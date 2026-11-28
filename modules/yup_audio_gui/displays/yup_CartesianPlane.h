@@ -111,6 +111,17 @@ public:
     ~CartesianPlane() override = default;
 
     //==============================================================================
+    /** Returns the static type info describing the CartesianPlane type, of the same name in `.yui`.
+
+        A document writes the axes, the title and the legend. The signals, the grid lines and
+        the axis labels are data, given in C++ (see YuiDocument::setInitializer).
+    */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
+
+    //==============================================================================
     // Axis configuration
 
     /** Set the range for the X axis */
@@ -125,17 +136,24 @@ public:
     /** Get the current Y axis range */
     Range<double> getYRange() const { return { yMin, yMax }; }
 
-    /** Set the scaling type for X axis */
+    /** Set the scaling type for X axis.
+
+        A logarithmic scale needs a range above zero: asked on another one, the axis is linear
+        until its range is above zero.
+    */
     void setXScaleType (AxisScaleType scaleType);
 
-    /** Set the scaling type for Y axis */
+    /** Set the scaling type for Y axis.
+
+        @see setXScaleType
+    */
     void setYScaleType (AxisScaleType scaleType);
 
-    /** Get the X axis scale type */
-    AxisScaleType getXScaleType() const { return xScaleType; }
+    /** Get the X axis scale type: linear while a logarithmic one is asked on a range that is not above zero */
+    AxisScaleType getXScaleType() const { return xMin > 0.0 ? xScaleType : AxisScaleType::linear; }
 
-    /** Get the Y axis scale type */
-    AxisScaleType getYScaleType() const { return yScaleType; }
+    /** Get the Y axis scale type: linear while a logarithmic one is asked on a range that is not above zero */
+    AxisScaleType getYScaleType() const { return yMin > 0.0 ? yScaleType : AxisScaleType::linear; }
 
     //==============================================================================
     // Margins configuration
@@ -152,11 +170,12 @@ public:
     //==============================================================================
     // Title configuration
 
-    /** Set the plot title */
-    void setTitle (const String& title) override;
+    /** Set the plot title.
 
-    /** Get the current title */
-    const String& getTitle() const { return titleText; }
+        The title of the plot is the one of the component: Component::getTitle() returns it, and
+        it is the title of the window when the plot is one.
+    */
+    void setTitle (const String& title) override;
 
     /** Set title font and size */
     void setTitleFont (const Font& font);
@@ -307,10 +326,42 @@ public:
 private:
     //==============================================================================
 
+    /* How the values of an axis are placed along it, worked out once for all the values of a paint. */
+    struct AxisMapping
+    {
+        /* Places the values of a range from an origin, over an extent that is negative for values growing backwards. */
+        static AxisMapping create (AxisScaleType scaleType, double minValue, double maxValue, float origin, float extent) noexcept;
+
+        float toPosition (double value) const noexcept;
+
+        bool operator== (const AxisMapping& other) const = default;
+
+        bool isLogarithmic = false;
+        double start = 0.0;
+        double length = 1.0;
+        float origin = 0.0f;
+        float extent = 0.0f;
+    };
+
+    /* What the paths of the signals are made for: the axes, the plot and the pixels a unit takes where they are painted. */
+    struct SignalMapping
+    {
+        bool operator== (const SignalMapping& other) const = default;
+
+        AxisMapping x, y;
+        Rectangle<float> bounds;
+        float pixelsPerUnit = 0.0f;
+    };
+
+    AxisMapping getXMapping (const Rectangle<float>& bounds) const;
+    AxisMapping getYMapping (const Rectangle<float>& bounds) const;
+
     void drawBackground (Graphics& g);
     void drawGrid (Graphics& g, const Rectangle<float>& bounds);
     void drawSignals (Graphics& g, const Rectangle<float>& bounds);
+    Path createSignalPath (const PlotSignal& signal, const SignalMapping& mapping);
     void drawAxisLabels (Graphics& g, const Rectangle<float>& bounds);
+    void layoutAxisLabels();
     void drawTitle (Graphics& g);
     void drawLegend (Graphics& g, const Rectangle<float>& bounds);
 
@@ -331,7 +382,6 @@ private:
     EdgeSpacing<int> margins { 60, 30, 20, 25 };
 
     // Title
-    String titleText;
     Font titleFont;
     Color titleColor { Colors::white };
     Justification titleJustification { Justification::center };
@@ -347,8 +397,19 @@ private:
     std::vector<AxisLabel> xAxisLabels;
     std::vector<AxisLabel> yAxisLabels;
 
+    // The text of each axis label, laid out when the label is added and when the margin it is written in or the font
+    // of the theme changes
+    std::vector<std::unique_ptr<StyledText>> xAxisLabelTexts;
+    std::vector<std::unique_ptr<StyledText>> yAxisLabelTexts;
+    Font axisLabelFont;
+
     // Signals
     std::vector<PlotSignal> signals;
+
+    // The path each signal was last painted as, kept while its data and what the paths are made for are the same
+    std::vector<std::optional<Path>> signalPaths;
+    SignalMapping signalMapping;
+    std::vector<Point<float>> signalRun;
 
     // Legend
     bool showLegend { true };

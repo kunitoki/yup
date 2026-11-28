@@ -1431,7 +1431,7 @@ bool SDLComponentNative::cancelMouseGestureIfReleasedElsewhere()
 
 bool SDLComponentNative::isIdleFrame()
 {
-    if (shouldRenderContinuous.load (std::memory_order_relaxed) || hasFrameListeners())
+    if (shouldRenderContinuous.load (std::memory_order_relaxed) || hasFrameListeners() || hasThemeChanged())
         return false;
 
     // A lost surface is recreated by the frame

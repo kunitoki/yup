@@ -1,4 +1,4 @@
-# Publishes the YUI extension of modules/yup_gui/tools/vscode-yui to the Visual Studio Marketplace.
+# Publishes the YUI extension of modules/yup_gui_markup/tools/vscode-yui to the Visual Studio Marketplace.
 #
 # It publishes with Trusted Publishing, so there is no token to store. Set up once, at
 # https://marketplace.visualstudio.com/manage:
@@ -20,75 +20,42 @@ concurrency:
   group: deploy-vscode
   cancel-in-progress: false
 
-env:
-  INSTALL_DEPS: >-
-    libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev libfreetype6-dev
-    libx11-dev libxcomposite-dev libxcursor-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev
-    libxrandr-dev libxrender-dev libglu1-mesa-dev mesa-common-dev
-  EM_VERSION: 4.0.21
-  EMCC_SKIP_SANITY_CHECK: 1
-
 jobs:
+  # The tool and the extension are built and tested as on every change of the tooling, then packaged
   build:
+    uses: ./.github/workflows/yui_tooling.yml
+    with:
+      package: true
+
+  # Only this job can publish, and it builds nothing: it takes the package as it was made, and publishes it with
+  # the vsce the package-lock.json of the extension holds
+  publish:
+    needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     defaults:
       run:
-        working-directory: modules/yup_gui/tools/vscode-yui
+        working-directory: modules/yup_gui_markup/tools/vscode-yui
     steps:
       - uses: actions/checkout@v7
-
-      - name: Install dependencies
-        working-directory: ${{ github.workspace }}
-        run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-
-      - name: Setup emsdk
-        uses: mymindstorm/setup-emsdk@v16
         with:
-          version: ${{ env.EM_VERSION }}
+          sparse-checkout: modules/yup_gui_markup/tools/vscode-yui
 
-      - name: Build the tool for the web
-        working-directory: cmake/tools/yui_tool
-        run: |
-          emcmake cmake -G Ninja -S . -B build_wasm -DCMAKE_BUILD_TYPE=Release
-          cmake --build build_wasm
+      - uses: actions/download-artifact@v8
+        with:
+          name: vscode-yui
+          path: modules/yup_gui_markup/tools/vscode-yui
 
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: modules/yup_gui/tools/vscode-yui/package-lock.json
+          cache-dependency-path: modules/yup_gui_markup/tools/vscode-yui/package-lock.json
 
-      - name: Test the tool for the web
-        working-directory: cmake/tools/yui_tool
-        run: node --test tests/test_web.js
-
-      - name: Test and package the extension
-        run: |
-          sh tools/package-tool.sh
-          npm ci
-          npm test
-          npx --yes @vscode/vsce package -o vscode-yui.vsix
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: vscode-yui
-          path: modules/yup_gui/tools/vscode-yui/vscode-yui.vsix
-          if-no-files-found: error
-
-  # Only this job can publish, and it runs nothing of the build: it takes the package as it was made
-  publish:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/download-artifact@v8
-        with:
-          name: vscode-yui
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
+      - name: Install vsce
+        run: npm ci
 
       - name: Publish to the Visual Studio Marketplace
-        run: npx --yes @vscode/vsce publish --oidc --packagePath vscode-yui.vsix
+        run: npx --no-install vsce publish --oidc --packagePath vscode-yui.vsix

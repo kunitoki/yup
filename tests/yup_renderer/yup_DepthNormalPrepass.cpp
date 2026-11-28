@@ -154,3 +154,77 @@ TEST_F (DepthNormalPrepassTests, ReadsOnlyTheViewAndTheDraw)
             EXPECT_TRUE (block.set == 0 || block.set == 2) << toString (stage) << " set " << (int) block.set;
     }
 }
+
+/** DepthNormalPrepass recording on a mocked device. What it draws is tested on Metal, in
+    native/yup_DepthNormalPrepass_apple.cpp. */
+class DepthNormalPrepassMockTests : public RendererMockTests
+{
+protected:
+    void SetUp() override
+    {
+        RendererMockTests::SetUp();
+        resources = std::make_unique<FrameResources> (device);
+        mesh->addPrimitive ({ { { 0.0f, 1.0f, 0.0f } }, { { -1.0f, -1.0f, 0.0f } }, { { 1.0f, -1.0f, 0.0f } } }, { 0, 1, 2 });
+    }
+
+    /** Adds the triangle at @p z on the axis of a camera standing at the origin and looking down -Z. */
+    void addTriangle (float z, Material::Ptr material = nullptr)
+    {
+        auto entity = scene.createEntity();
+        entity.getOrAttach<TransformNode>().setPosition ({ 0.0f, 0.0f, z });
+        entity.attach<MeshNode> (mesh);
+
+        if (material != nullptr)
+            entity.attach<MaterialNode> (std::move (material));
+    }
+
+    bool renderFrame (DepthNormalPrepass& pass)
+    {
+        resources->beginFrame (64, 64);
+
+        auto frame = GpuFrame::begin (device);
+        const auto rendered = pass.render (frame, view, drawList, *resources, 64, 64);
+        frame.submit();
+
+        resources->endFrame();
+        return rendered;
+    }
+
+    Scene scene;
+    SceneDrawList drawList;
+    ViewData view;
+    std::unique_ptr<FrameResources> resources;
+    Mesh::Ptr mesh { new Mesh ("triangle") };
+};
+
+TEST_F (DepthNormalPrepassMockTests, DrawsTheOpaqueItemsInView)
+{
+    auto glass = Material::Ptr (new Material());
+    glass->alphaMode = Material::AlphaMode::blend;
+
+    addTriangle (-5.0f);
+    addTriangle (-6.0f);
+    addTriangle (5.0f);
+    addTriangle (-7.0f, glass);
+
+    DepthNormalPrepass pass (device);
+
+    // Without the projection of the camera every opaque item is in view, the one behind it too
+    drawList.build (scene.getRoot(), {});
+    ASSERT_EQ (drawList.getOpaqueItems().size(), 3u);
+
+    ASSERT_TRUE (renderFrame (pass));
+    ASSERT_EQ (passes.size(), 1u);
+    EXPECT_EQ (passes[0].draws, 3);
+    EXPECT_NE (pass.getDepth(), nullptr);
+
+    SceneDrawList::BuildOptions options;
+    options.projection = Matrix4::perspective (MathConstants<float>::halfPi, 1.0f, 0.1f, 100.0f);
+    drawList.build (scene.getRoot(), {}, options);
+    ASSERT_EQ (drawList.getOpaqueItems().size(), 3u);
+
+    ASSERT_TRUE (renderFrame (pass));
+    ASSERT_EQ (passes.size(), 2u);
+    EXPECT_EQ (passes[1].draws, 2);
+    EXPECT_NE (pass.getDepth(), nullptr);
+}

@@ -92,6 +92,35 @@ protected:
         return state.get (output.getReference());
     }
 
+    /** A component keeping an array in a block of its own, and another one it gives as a var each time it is asked. */
+    class ScopeWidget : public Component
+    {
+    public:
+        const ComponentTypeInfo& getDefaultTypeInfo() const override
+        {
+            static const ComponentTypeInfo info = ComponentTypeBuilder<ScopeWidget> ("ScopeWidget")
+                .series ("levels", &ScopeWidget::getLevels)
+                .series ("spots", &ScopeWidget::getSpots)
+                .readOnly ("steps", &ScopeWidget::getSteps)
+                .build();
+            return info;
+        }
+
+        Span<const float> getLevels() const noexcept { return levels; }
+        Span<const Point<float>> getSpots() const noexcept { return spots; }
+
+        StringArray getSteps() const
+        {
+            ++numStepsReads;
+            return steps;
+        }
+
+        std::vector<float> levels { 1.0f, 2.0f, 4.0f };
+        std::vector<Point<float>> spots { { 1.0f, 2.0f }, { 3.0f, 4.0f } };
+        StringArray steps { "a", "bb" };
+        mutable int numStepsReads = 0;
+    };
+
     ApplicationTheme::Ptr theme;
     ApplicationTheme::Ptr oldTheme;
     ExpressionContext context;
@@ -266,6 +295,121 @@ TEST_F (DrawingScopeTest, ResolvesArrayProperties)
     EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (scope, "out = len (lanes)")), 0.0);
 }
 
+TEST_F (DrawingScopeTest, ReadsSeriesWhereTheComponentKeepsThem)
+{
+    ScopeWidget widget;
+    DrawingScope scope (widget, context);
+    scope.install();
+
+    auto compiled = CompiledExpression::compile ("count = len (levels); last = levels[2]; peak = max (levels, 0, 3); x = spots[1].x", context);
+    ASSERT_TRUE (compiled.wasOk()) << compiled.getErrorMessage();
+
+    const auto& program = compiled.getReference();
+    ExpressionState state (program);
+    auto inputs = scope.bindInputs (program);
+
+    scope.updateInputs (inputs, state);
+    state.evaluate();
+    EXPECT_EQ (static_cast<int> (state.getVar (program.findOutput ("count"))), 3);
+    EXPECT_FLOAT_EQ (static_cast<float> (state.getVar (program.findOutput ("last"))), 4.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (state.getVar (program.findOutput ("peak"))), 4.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (state.getVar (program.findOutput ("x"))), 3.0f);
+
+    // The state views the memory of the component: what changes there is read without another update
+    widget.levels[2] = 9.0f;
+    state.evaluate();
+    EXPECT_FLOAT_EQ (static_cast<float> (state.getVar (program.findOutput ("last"))), 9.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (state.getVar (program.findOutput ("peak"))), 9.0f);
+
+    // A series that moved or changed its length is followed by the next update
+    widget.levels = { 5.0f };
+    scope.updateInputs (inputs, state);
+    state.evaluate();
+    EXPECT_EQ (static_cast<int> (state.getVar (program.findOutput ("count"))), 1);
+    EXPECT_FLOAT_EQ (static_cast<float> (state.getVar (program.findOutput ("last"))), 5.0f);
+
+    widget.levels.clear();
+    scope.updateInputs (inputs, state);
+    state.evaluate();
+    EXPECT_EQ (static_cast<int> (state.getVar (program.findOutput ("count"))), 0);
+    EXPECT_FLOAT_EQ (static_cast<float> (state.getVar (program.findOutput ("last"))), 0.0f);
+}
+
+TEST_F (DrawingScopeTest, ConvertsAnArrayGivenAsAVarOnceForARoundOfUpdates)
+{
+    ScopeWidget widget;
+    DrawingScope scope (widget, context);
+    scope.install();
+
+    auto first = CompiledExpression::compile ("out = len (steps)", context);
+    auto second = CompiledExpression::compile ("out = steps[1]", context);
+    ASSERT_TRUE (first.wasOk()) << first.getErrorMessage();
+    ASSERT_TRUE (second.wasOk()) << second.getErrorMessage();
+
+    ExpressionState firstState (first.getReference());
+    ExpressionState secondState (second.getReference());
+    auto firstInputs = scope.bindInputs (first.getReference());
+    auto secondInputs = scope.bindInputs (second.getReference());
+
+    const auto update = [&]
+    {
+        scope.updateInputs (firstInputs, firstState);
+        scope.updateInputs (secondInputs, secondState);
+        firstState.evaluate();
+        secondState.evaluate();
+    };
+
+    // Without rounds the component is asked by every update
+    update();
+    EXPECT_EQ (widget.numStepsReads, 2);
+    EXPECT_EQ (static_cast<int> (firstState.getVar (0)), 2);
+    EXPECT_EQ (secondState.getVar (0).toString(), String ("bb"));
+
+    // In a round it is asked once, whichever programs read the array and however often
+    widget.numStepsReads = 0;
+    scope.beginUpdates();
+    update();
+    update();
+    EXPECT_EQ (widget.numStepsReads, 1);
+    EXPECT_EQ (static_cast<int> (firstState.getVar (0)), 2);
+    EXPECT_EQ (secondState.getVar (0).toString(), String ("bb"));
+
+    // The next round reads what the component holds by then
+    widget.steps = { "c", "dd", "eee" };
+    scope.beginUpdates();
+    update();
+    EXPECT_EQ (widget.numStepsReads, 2);
+    EXPECT_EQ (static_cast<int> (firstState.getVar (0)), 3);
+    EXPECT_EQ (secondState.getVar (0).toString(), String ("dd"));
+}
+
+TEST_F (DrawingScopeTest, ASeriesOfAnotherElementTypeLeavesNothingToRead)
+{
+    const auto steps = context.addArray<float> ("steps");
+
+    auto compiled = CompiledExpression::compile ("out = len (steps)", context);
+    ASSERT_TRUE (compiled.wasOk()) << compiled.getErrorMessage();
+
+    const auto& program = compiled.getReference();
+    ExpressionState state (program);
+
+    const float numbers[] = { 1.0f, 2.0f, 3.0f };
+    DrawingScope::bindArrayView (state, steps.index, ComponentProperty::Type::number, { numbers, 3, 0 });
+    state.evaluate();
+    EXPECT_EQ (static_cast<int> (state.getVar (program.findOutput ("out"))), 3);
+
+    // Points can't feed numbers, and the numbers that were viewed are let go
+    const Point<float> points[] = { { 1.0f, 2.0f } };
+    DrawingScope::bindArrayView (state, steps.index, ComponentProperty::Type::point, { points, 1, 0 });
+    state.evaluate();
+    EXPECT_EQ (static_cast<int> (state.getVar (program.findOutput ("out"))), 0);
+
+    // A view of nothing is an empty array
+    DrawingScope::bindArrayView (state, steps.index, ComponentProperty::Type::number, {});
+    state.evaluate();
+    EXPECT_EQ (static_cast<int> (state.getVar (program.findOutput ("out"))), 0);
+}
+
 TEST_F (DrawingScopeTest, DestroyedComponentFeedsNothing)
 {
     auto slider = std::make_unique<Slider> (Slider::LinearHorizontal);
@@ -291,6 +435,34 @@ TEST_F (DrawingScopeTest, DestroyedComponentFeedsNothing)
 
     // value defaults to 0 when the component is gone, so the result is just the constant.
     EXPECT_DOUBLE_EQ (static_cast<double> (state.getVar (outputIndex)), 1.0);
+}
+
+TEST_F (DrawingScopeTest, ADestroyedComponentLeavesNoArrayToRead)
+{
+    auto widget = std::make_unique<ScopeWidget>();
+    DrawingScope scope (*widget, context);
+    scope.install();
+
+    auto compiled = CompiledExpression::compile ("count = len (levels); numSteps = len (steps)", context);
+    ASSERT_TRUE (compiled.wasOk()) << compiled.getErrorMessage();
+
+    const auto& program = compiled.getReference();
+    ExpressionState state (program);
+    auto inputs = scope.bindInputs (program);
+
+    scope.beginUpdates();
+    scope.updateInputs (inputs, state);
+    state.evaluate();
+    EXPECT_EQ (static_cast<int> (state.getVar (program.findOutput ("count"))), 3);
+    EXPECT_EQ (static_cast<int> (state.getVar (program.findOutput ("numSteps"))), 2);
+
+    // The series was in the memory of the component and the other array in what the round kept: both are let go
+    widget.reset();
+    scope.beginUpdates();
+    scope.updateInputs (inputs, state);
+    state.evaluate();
+    EXPECT_EQ (static_cast<int> (state.getVar (program.findOutput ("count"))), 0);
+    EXPECT_EQ (static_cast<int> (state.getVar (program.findOutput ("numSteps"))), 0);
 }
 
 TEST_F (DrawingScopeTest, ResolvesBindingProviderModelsDirectly)

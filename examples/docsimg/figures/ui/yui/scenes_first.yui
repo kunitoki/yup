@@ -1,0 +1,24 @@
+// size: 560 368
+Scene3D {
+    background: #101116; ambient: #2a3040; toneMapping: aces;
+
+    Camera3D { position: [0.4, 2.4, 4.8]; lookAt: [0.4, 0.45, 0]; fov: 32deg; }
+    Light3D  { type: directional; position: [-4, 3, 2]; lookAt: [0, 0, 0]; intensity: 2; castsShadows: true; }
+
+    // The floor: two triangles, counter-clockwise seen from above
+    Mesh3D {
+        vertices: [-3, 0, -3,  -3, 0, 3,  3, 0, 3,  3, 0, -3];
+        indices: [0, 1, 2,  0, 2, 3];
+
+        Material3D { baseColor: #6b7080; metallic: 0; roughness: 0.9; }
+    }
+
+    // A pyramid: four triangles sharing their top
+    Mesh3D {
+        rotation: [0, 30deg, 0];
+        vertices: [-0.6, 0, 0.6,  0.6, 0, 0.6,  0.6, 0, -0.6,  -0.6, 0, -0.6,  0, 1.4, 0];
+        indices: [0, 1, 4,  1, 2, 4,  2, 3, 4,  3, 0, 4];
+
+        Material3D { baseColor: #ff8800; metallic: 0; roughness: 0.5; }
+    }
+}

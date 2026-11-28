@@ -1,0 +1,170 @@
+// Shapes: geometry and motion written as numbers.
+//
+// - The solids are meshes of a few vertices. Without normals each triangle is flat, and two of them have a color
+//   for each vertex.
+// - Keyframes turn them and lift them, each at its own pace. The cube becomes a pyramid under the pointer: both
+//   are the same eight vertices, so a transition blends one into the other, and the colors of one into those of
+//   the other.
+// - A light circles above them, changing color, and the camera circles the stage: each stands in a node that
+//   turns. The scene has no background: what shows behind it is 2D, a gradient and a shader painted by a drawing.
+
+palette Console { colors: #14161c, #35e0c2, #e9edf3; }
+
+shader Plasma {
+    fragment: "fx/plasma.frag";
+    property ink: color = #35e0c2;
+    property flow: number = 1;
+}
+
+// Two drawings, each on a component of its own: the gradient stays if the shader can't be used
+drawing Sky {
+    rect { bounds: bounds; fillGradient: linearGradient (#0b1024, point (0, 0), #2a1740, point (0, bounds.height)); }
+}
+
+drawing Aurora {
+    property strength: number = 0.8;
+
+    use Plasma { bounds: bounds; ink: palette.accent; flow: 0.6; opacity: strength; }
+}
+
+// Counter-clockwise triangles, seen from outside
+component Octahedron : Mesh3D {
+    vertices: [0, 1, 0,   1, 0, 0,   0, 0, 1,   -1, 0, 0,   0, 0, -1,   0, -1, 0];
+    indices: [0, 2, 1,   0, 3, 2,   0, 4, 3,   0, 1, 4,   5, 1, 2,   5, 2, 3,   5, 3, 4,   5, 4, 1];
+}
+
+style {
+    :root   { palette: Console; }
+    .panel  { cornerRadius: 12; shadow: 0 0 palette.surface.withAlpha (0.9), 0 8 22 #00000070; }
+    .title  { textFillColor: palette.text; textHeightProportion: 0.8; preferredHeight: 24; }
+    .hint   { textFillColor: palette.textMuted; textHeightProportion: 0.8; preferredHeight: 16; }
+    .sky    { drawing: Sky; }
+    .aurora { drawing: Aurora; }
+
+    // A camera inside a node that turns goes around the point it looks at: a round path from two keyframes
+    .rig   { animation: turn 48s linear infinite; }
+    .orbit { animation: turn 7s linear infinite; }
+
+    .gem   { animation: turn 11s linear infinite, bob 3.1s easeInOut infinite alternate; }
+    .block { animation: turn 19s linear infinite, bob 4.3s easeInOut infinite alternate; }
+    .wedge { animation: tumble 9s linear infinite, bob 2.6s easeInOut infinite alternate; }
+
+    // What an animation moves has the value of its rule until its first frame
+    .sun {
+        position: [1.5, 2.3, 0]; color: #ff6a3d;
+        animation: rise 5s easeInOut infinite alternate, hue 9s linear infinite;
+    }
+
+    // A cube, and a pyramid that holds it: the pointer stays over the shape while it changes. Each vertex has a
+    // color, lighter for the four on top: amber over orange for the cube, pink over violet for the pyramid
+    .block {
+        vertices: [-0.4, -0.4, -0.4,   0.4, -0.4, -0.4,   0.4, 0.4, -0.4,   -0.4, 0.4, -0.4,
+                   -0.4, -0.4, 0.4,   0.4, -0.4, 0.4,   0.4, 0.4, 0.4,   -0.4, 0.4, 0.4];
+        colors: [0.8, 0.1, 0.02, 1,   0.8, 0.1, 0.02, 1,   1, 0.6, 0.1, 1,   1, 0.6, 0.1, 1,
+                 0.8, 0.1, 0.02, 1,   0.8, 0.1, 0.02, 1,   1, 0.6, 0.1, 1,   1, 0.6, 0.1, 1];
+        transition: vertices 450ms easeInOut, colors 450ms easeInOut;
+    }
+
+    .block:hover {
+        vertices: [-0.85, -0.4, -0.85,   0.85, -0.4, -0.85,   0.04, 1.2, -0.04,   -0.04, 1.2, -0.04,
+                   -0.85, -0.4, 0.85,   0.85, -0.4, 0.85,   0.04, 1.2, 0.04,   -0.04, 1.2, 0.04];
+        colors: [0.25, 0.04, 0.7, 1,   0.25, 0.04, 0.7, 1,   1, 0.1, 0.45, 1,   1, 0.1, 0.45, 1,
+                 0.25, 0.04, 0.7, 1,   0.25, 0.04, 0.7, 1,   1, 0.1, 0.45, 1,   1, 0.1, 0.45, 1];
+    }
+
+    @keyframes turn   { from { rotation: [0, 0, 0]; } to { rotation: [0, 360deg, 0]; } }
+    @keyframes tumble { from { rotation: [0, 0, 0]; } to { rotation: [360deg, 360deg, 0]; } }
+    @keyframes bob    { from { position: [0, -0.12, 0]; } to { position: [0, 0.12, 0]; } }
+    @keyframes rise   { from { position: [1.5, 2.3, 0]; } to { position: [1.7, 2.8, 0]; } }
+
+    @keyframes hue {
+        0%   { color: #ff6a3d; }
+        33%  { color: #35e0c2; }
+        66%  { color: #5a7bff; }
+        100% { color: #ff6a3d; }
+    }
+}
+
+Stack {
+    Component { class: sky; }
+    Component { class: aurora; strength: veil.value; }
+
+    Scene3D {
+        background: colors.transparentBlack; ambient: #3a4160; toneMapping: aces;
+
+        Node3D {
+            class: rig;
+
+            Camera3D { position: [0, 3, 7.4]; lookAt: [0, 0.9, 0]; fov: 32deg; }
+        }
+
+        // A wide emitter softens the shadows the solids cast on the stage
+        Light3D { type: directional; position: [-3, 6, 3.5]; lookAt: [0, 0, 0]; intensity: 2.2; radius: 0.03; castsShadows: true; }
+
+        // The light turns with the node it is in, rises and falls by itself, and carries a spark to be seen
+        Node3D {
+            class: orbit;
+
+            Light3D {
+                class: sun; type: point; intensity: spark.value * 24; range: 9;
+
+                Octahedron { scale: 0.07; Material3D { baseColor: #000000; metallic: 0; emissive: #ffffff; emissiveStrength: 6; } }
+            }
+        }
+
+        Model3D { source: "../gltf/stage.glb"; }
+
+        // Each solid is placed by a node, and moved around that place by its animations
+        Node3D {
+            position: [-1.25, 1.35, -0.35];
+
+            Octahedron {
+                class: gem; scale: 0.75;
+                colors: [1, 0.25, 0.5, 1,   1, 0.1, 0.3, 1,   1, 0.55, 0.05, 1,   0.05, 0.85, 0.7, 1,   0.1, 0.3, 1, 1,   0.45, 0.1, 1, 1];
+
+                Material3D { metallic: 0; roughness: 0.25; }
+            }
+        }
+
+        Node3D {
+            position: [0.35, 0.95, 0.75];
+
+            Mesh3D {
+                class: block;
+                indices: [4, 5, 6,   4, 6, 7,   1, 0, 3,   1, 3, 2,   5, 1, 2,   5, 2, 6,
+                          0, 4, 7,   0, 7, 3,   7, 6, 2,   7, 2, 3,   0, 1, 5,   0, 5, 4];
+
+                Material3D { metallic: 0; roughness: 0.35; }
+            }
+        }
+
+        Node3D {
+            position: [1.45, 1.25, -0.45];
+
+            Mesh3D {
+                class: wedge; scale: 0.5;
+                vertices: [1, 1, 1,   -1, -1, 1,   -1, 1, -1,   1, -1, -1];
+                indices: [0, 1, 3,   0, 3, 2,   0, 2, 1,   1, 2, 3];
+
+                Material3D { baseColor: #35e0c2; metallic: 0; roughness: 0.3; }
+            }
+        }
+
+        Column {
+            x: 18; y: 14; width: 300; height: 42; gap: 2;
+
+            Label { class: title; text: "Shapes"; }
+            Label { class: hint; text: "Point at the cube: it turns into a pyramid"; }
+        }
+
+        Row {
+            class: panel; x: 12; y: parent.height - 64; width: parent.width - 24; height: 52; padding: "8 14"; gap: 10;
+
+            Label  { text: "Light"; preferredWidth: 40; }
+            Slider { id: spark; value: 0.5; flexGrow: 1; }
+
+            Label  { text: "Aurora"; preferredWidth: 50; }
+            Slider { id: veil; value: 0.8; flexGrow: 1; }
+        }
+    }
+}

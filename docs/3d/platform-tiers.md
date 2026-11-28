@@ -51,25 +51,33 @@ shadows, at the cost of more frames before the image is final.
   goes idle. `getRenderer().isConverged()` tells whether it has; it is always
   true on the raster tier.
 - Most changes keep the history and only restart the convergence, so animated
-  scenes stay smooth: moving the camera or objects, changing the content of a
-  `Texture`, a material, a light, the ambient light, the environment, the world
-  fog or the exposure. Once the scene is still again, the history counts as a
+  scenes stay smooth: moving the camera or objects, giving a `Mesh` new
+  vertices, changing the content of a `Texture`, a material, the values of a
+  [material shader](custom-materials.md), a light, the ambient light, the
+  environment, the world fog or the exposure. Once the scene is still again, the history counts as a
   single frame among the `taaSamples` that follow, so edges keep only a faint
   trace of the image before the change. After a large change, such as a cut to another
   shot, call `restartAccumulation()`.
 - Changing the size of the view, the tier, `taaSamples`, `upscaling` or
-  `renderScale` discards the history, and the image starts over.
+  `renderScale` discards the history, and the image starts over. So does
+  hiding the `SceneComponent`, which lets go of what the renderer drew into
+  (`SceneRenderer::releaseTargets()`): the image is refined again once it shows.
 - Tone mapping, the bloom, depth of field and motion blur settings, the depth
   of field fields of the camera and the debug view are applied after the
   accumulation, so changing them neither restarts nor discards it. Repaint
   after changing them: the component does not repaint by itself for them.
-- When you change something the renderer cannot see, such as vertices edited in
-  place in a `Mesh`, or a `GpuTexture` redrawn without calling
-  `Texture::setGpuTexture()`, call `getRenderer().restartAccumulation()`. It
-  discards the history, and the image starts over.
-- Calling `Texture::setGpuTexture()` on every frame stops the image from ever
-  converging, and the component then repaints forever. Call it only when the
-  content changed.
+- When you change something the renderer cannot see, such as a `GpuTexture`
+  redrawn without calling `Texture::setGpuTexture()`, call
+  `getRenderer().restartAccumulation()`. It discards the history, and the image
+  starts over. The vertices of a `Mesh` are seen: change them with
+  [`Mesh::setVertices()`](meshes-and-gltf.md#changing-a-mesh).
+- A mesh that changes shape, by `setVertices()`, a skin or morph targets, has
+  no motion of its own: it is not reprojected, so a fast deformation can ghost
+  slightly at its silhouette for a few frames.
+- Calling `Texture::setGpuTexture()` or `Mesh::setVertices()` on every frame
+  stops the image from ever converging, and the component then repaints
+  forever. Call them only when the content changed. A playing clip does this
+  for the meshes it deforms, as any animation does, until it stops.
 
 ## Upscaling
 

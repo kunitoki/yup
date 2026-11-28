@@ -83,6 +83,15 @@ public:
     */
     bool isIndeterminate() const noexcept;
 
+    /** Returns how far an indeterminate bar is in the cycle of its animation.
+
+        The bar repaints at every frame while it is indeterminate and showing, and what paints it moves its
+        ribbons by this: it goes from 0 to 1 every two seconds, then starts again.
+
+        @return The phase of the animation, from 0 to 1. It stays where it is while the bar shows a progress, or is hidden.
+    */
+    double getAnimationPhase() const noexcept { return animationPhase; }
+
     //==============================================================================
     /** Called when the progress value changes.
 
@@ -121,15 +130,19 @@ public:
 
     //==============================================================================
     /** @internal */
-    void paint (Graphics& g) override;
+    void refreshDisplay (double lastFrameTimeSeconds);
 
     /** @internal */
-    void refreshDisplay (double lastFrameTimeSeconds);
+    void visibilityChanged() override;
+
+    /** @internal */
+    void parentHierarchyChanged() override;
 
 private:
     //==============================================================================
     void updateProgress (double newProgress, NotificationType notification);
     void sendProgressChanged (NotificationType notification);
+    void updateFrameAttachment();
 
     //==============================================================================
     Atomic<double> currentProgress { 0.0 };
@@ -140,8 +153,7 @@ private:
 
     // Animation state for indeterminate mode
     double animationPhase = 0.0;
-    Time lastAnimationTime;
-    FrameAttachment frameAttachment { *this, bindFront (&ProgressBar::refreshDisplay, this) };
+    FrameAttachment frameAttachment { *this, bindFront (&ProgressBar::refreshDisplay, this), false };
 
     //==============================================================================
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ProgressBar)

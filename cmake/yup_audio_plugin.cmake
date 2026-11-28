@@ -156,6 +156,12 @@ function (yup_audio_plugin)
         ${additional_libraries}
         ${target_modules})
 
+    if (YUP_ARG_PRECOMPILE_HEADERS)
+        _yup_module_precompile_target_headers (${target_name}_shared "${YUP_ARG_PRECOMPILE_HEADERS}"
+            ${additional_libraries}
+            ${target_modules})
+    endif()
+
     # Format binaries link the core objects, so they must not see the module INTERFACE_SOURCES
     # again: export the resolved compile settings for the per-format wrapper sources instead.
     foreach (compile_property IN ITEMS COMPILE_DEFINITIONS COMPILE_OPTIONS COMPILE_FEATURES INCLUDE_DIRECTORIES)

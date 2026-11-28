@@ -86,8 +86,6 @@ public:
 
     //==============================================================================
     /** @internal */
-    void paint (Graphics& g) override;
-    /** @internal */
     void mouseDown (const MouseEvent& event) override;
     /** @internal */
     void mouseDrag (const MouseEvent& event) override;

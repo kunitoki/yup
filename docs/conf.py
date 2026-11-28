@@ -140,7 +140,7 @@ def setup(app):
                 (r'"(\\.|[^"\\])*"', String.Double),
                 (r"#[0-9a-fA-F]{3,8}\b", Number.Hex),
                 (words (("import", "component", "property", "alias", "style", "palette",
-                         "tokens", "drawing", "repeat", "in", "changed", "from", "to"),
+                         "tokens", "drawing", "shader", "repeat", "in", "changed", "from", "to"),
                         suffix=r"\b"), Keyword),
                 (words (("number", "string", "color", "font", "bool", "point", "rect", "size"),
                         suffix=r"\b"), Keyword.Type),

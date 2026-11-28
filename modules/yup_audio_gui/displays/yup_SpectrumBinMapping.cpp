@@ -137,11 +137,11 @@ float SpectrumBinMapping::getInterpolatedLevel (Span<const float> binLevels, flo
 //==============================================================================
 float SpectrumBinMapping::getBandLevel (Span<const float> binLevels, int displayPoint, BandAggregation aggregation) const noexcept
 {
-    if (displayRanges.empty() || binLevels.empty())
+    if (binLevels.empty() || ! isPositiveAndBelow (displayPoint, (int) displayRanges.size()))
         return 0.0f;
 
     const int lastBin = (int) binLevels.size() - 1;
-    const auto& range = getRange (displayPoint);
+    const auto& range = displayRanges[(size_t) displayPoint];
     const float startBin = jlimit (0.0f, (float) lastBin, range.startBin);
     const float endBin = jlimit (startBin, (float) lastBin, range.endBin);
     const int firstBinInside = jmax (0, (int) std::ceil (startBin));
@@ -198,26 +198,27 @@ void SpectrumBinMapping::updateRanges()
     const float logRange = logMaxFrequency - logMinFrequency;
     const float halvedStep = half * invLastPoint * logRange;
     const float binPerHz = (float) fftSize / (float) sampleRate;
+    float startFrequency = minFrequency;
 
     for (int displayPoint = 0; displayPoint < numDisplayPoints; ++displayPoint)
     {
         const float logFrequency = logMinFrequency + (float) displayPoint * invLastPoint * logRange;
 
         auto& range = displayRanges[(size_t) displayPoint];
-        range.centerFrequency = std::pow (10.0f, logFrequency);
+        range.centerFrequency = jlimit (minFrequency, maxFrequency, std::pow (10.0f, logFrequency));
         range.exactBin = range.centerFrequency * binPerHz;
 
         // The band edges sit halfway (in log-frequency) between neighbouring display points, and
-        // the outermost points reach the ends of the displayed range.
-        const float startFrequency = displayPoint == 0
-                                       ? minFrequency
-                                       : std::pow (10.0f, logFrequency - halvedStep);
+        // the outermost points reach the ends of the displayed range. Each edge is computed once,
+        // for the two bands it parts, so that the bands tile the range.
         const float endFrequency = displayPoint == numDisplayPoints - 1
                                      ? maxFrequency
                                      : std::pow (10.0f, logFrequency + halvedStep);
 
         range.startBin = startFrequency * binPerHz;
         range.endBin = endFrequency * binPerHz;
+
+        startFrequency = endFrequency;
     }
 }
 

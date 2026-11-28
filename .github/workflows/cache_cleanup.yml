@@ -1,9 +1,30 @@
-name: Cleanup Branch Caches
+# Keeps the Actions caches of the repository inside its 10 GB, see .github/tools/prune_caches.py for what it deletes.
+#
+# The compiler caches are saved by .github/actions/ccache, a new one on every run, and the build trees by the
+# configure jobs of the platform workflows: it runs when the workflows saving them end. Deleted branches, closed
+# pull requests and a daily run catch the rest.
+
+name: Cache Cleanup
 
 on:
+  workflow_run:
+    workflows: [Continuous Integration, Coverage, YUI Tooling]
+    types: [completed]
+  delete:
   pull_request:
-    types:
-      - closed
+    types: [closed]
+  schedule:
+    - cron: "30 4 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Only print what would be deleted
+        type: boolean
+        default: false
+
+concurrency:
+  group: cache-cleanup
+  cancel-in-progress: false
 
 env:
   ACTION_RUNNER: github-actions
@@ -14,22 +35,14 @@ jobs:
     permissions:
       actions: write
       contents: read
+      pull-requests: read
     steps:
-      - name: Cleanup
-        run: |
-          echo "Fetching list of cache key..."
-          cacheKeysForPR=$(gh cache list --ref $BRANCH --limit 100 --json id --jq '.[].id')
-
-          ## Setting this to not fail the workflow while deleting cache keys.
-          set +e
-          echo "Deleting caches..."
-          for cacheKey in $cacheKeysForPR
-          do
-              gh cache delete $cacheKey
-          done
-
-          echo "Done!"
+      # The merge ref of a closed pull request may be gone, the other events check out the default branch or the chosen one
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.repository.default_branch || '' }}
+          sparse-checkout: .github/tools
+      - name: Prune caches
+        run: python3 .github/tools/prune_caches.py ${{ inputs.dry_run && '--dry-run' || '' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          BRANCH: refs/pull/${{ github.event.pull_request.number }}/merge

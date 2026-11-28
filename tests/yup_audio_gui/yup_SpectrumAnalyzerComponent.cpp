@@ -30,9 +30,146 @@ namespace yup
 extern std::unique_ptr<yup::GraphicsContext> yup_constructHeadlessGraphicsContext (yup::GpuDevice::Options, yup::GpuDevice::Ptr);
 } // namespace yup
 
+class SpectrumAnalyzerComponentTests;
+
+namespace yup
+{
+
+/** What the tests of the analyzer reach of a component to put it in a window of their own. */
+template <>
+class ComponentTestHelper<SpectrumAnalyzerComponentTests>
+{
+public:
+    /** Attaches a native the caller built, which the component then owns. */
+    static void attachNative (Component& component, ComponentNative* newNative)
+    {
+        component.native = newNative;
+    }
+};
+
+} // namespace yup
+
 class SpectrumAnalyzerComponentTests : public ::testing::Test
 {
 protected:
+    /** A window with no display: its frames are the ones a test sends, and it counts the repaints it is asked for. */
+    class FakeWindow final : public ComponentNative
+    {
+    public:
+        explicit FakeWindow (Component& window)
+            : ComponentNative (window, ComponentNative::defaultFlags)
+        {
+        }
+
+        using ComponentNative::callFrameListeners;
+        using ComponentNative::hasFrameListeners;
+
+        void repaint() override { ++numRepaints; }
+
+        void repaint (const Rectangle<float>&) override { ++numRepaints; }
+
+        const RectangleList<float>& getRepaintAreas() const override { return repaintAreas; }
+
+        void setTitle (const String&) override {}
+
+        String getTitle() const override { return {}; }
+
+        void setVisible (bool) override {}
+
+        bool isVisible() const override { return false; }
+
+        bool isResizable() const override { return false; }
+
+        void setResizable (bool) override {}
+
+        void toFront() override {}
+
+        void setSize (const Size<int>&) override {}
+
+        Size<int> getSize() const override { return {}; }
+
+        Size<int> getContentSize() const override { return {}; }
+
+        Point<int> getPosition() const override { return {}; }
+
+        void setPosition (const Point<int>&) override {}
+
+        Rectangle<int> getBounds() const override { return {}; }
+
+        void setBounds (const Rectangle<int>&) override {}
+
+        Rectangle<int> getSafeAreaBounds() const override { return {}; }
+
+        void setFullScreen (bool) override {}
+
+        bool isFullScreen() const override { return false; }
+
+        bool isDecorated() const override { return false; }
+
+        void setAspectRatio (std::optional<float>) override {}
+
+        std::optional<float> getAspectRatio() const override { return std::nullopt; }
+
+        void setOpacity (float) override {}
+
+        float getOpacity() const override { return 1.0f; }
+
+        void setFocusedComponent (Component*, FocusChangeType) override {}
+
+        Component* getFocusedComponent() const override { return nullptr; }
+
+        Component* getPointerTarget() const override { return nullptr; }
+
+        bool isContinuousRepaintingEnabled() const override { return false; }
+
+        void enableContinuousRepainting (bool) override {}
+
+        bool isAtomicModeEnabled() const override { return false; }
+
+        void enableAtomicMode (bool) override {}
+
+        bool isWireframeEnabled() const override { return false; }
+
+        void enableWireframe (bool) override {}
+
+        GpuTriangulationThresholds getTriangulationThresholds() const override { return {}; }
+
+        void setTriangulationThresholds (const GpuTriangulationThresholds&) override {}
+
+        void setGlobalMouseCaptureActive (bool) override {}
+
+        void cancelCurrentMouseGesture() override {}
+
+        void startTextInput (Component&) override {}
+
+        void stopTextInput (Component&) override {}
+
+        void updateTextInputRect (Component&) override {}
+
+        float getScaleDpi() const override { return 1.0f; }
+
+        float getCurrentFrameRate() const override { return 60.0f; }
+
+        float getDesiredFrameRate() const override { return 60.0f; }
+
+        void setDesiredFrameRate (std::optional<float>) override {}
+
+        bool isVsyncEnabled() const override { return false; }
+
+        void setVsyncEnabled (bool) override {}
+
+        void* getNativeHandle() const override { return nullptr; }
+
+        rive::Factory* getFactory() override { return nullptr; }
+
+        GraphicsContext* getGraphicsContext() override { return nullptr; }
+
+        int numRepaints = 0;
+
+    private:
+        RectangleList<float> repaintAreas;
+    };
+
     void SetUp() override
     {
         mm = MessageManager::getInstance();
@@ -52,6 +189,35 @@ protected:
 #if YUP_MODAL_LOOPS_PERMITTED
         mm->runDispatchLoopUntil (millisecondsToRunFor);
 #endif
+    }
+
+    /** Puts a component in a window of its own, shown, and returns the native that sends its frames. */
+    static FakeWindow& makeWindow (Component& window)
+    {
+        auto* native = new FakeWindow (window);
+        ComponentTestHelper<SpectrumAnalyzerComponentTests>::attachNative (window, native);
+        window.setVisible (true);
+        return *native;
+    }
+
+    // A sine of full scale lasting a whole number of periods, which puts it on a bin of any FFT size
+    static void pushFullScaleSine (SpectrumAnalyzerState& target, int numSamples)
+    {
+        constexpr int period = 32;
+
+        std::vector<float> sine (static_cast<size_t> (numSamples));
+
+        for (int i = 0; i < numSamples; ++i)
+            sine[static_cast<size_t> (i)] = std::sin (MathConstants<float>::twoPi * static_cast<float> (i % period) / static_cast<float> (period));
+
+        target.pushSamples (sine.data(), numSamples);
+    }
+
+    static float getHighestLevel (const SpectrumAnalyzerComponent& component)
+    {
+        const auto levels = component.getLevels();
+
+        return *std::max_element (levels.begin(), levels.end());
     }
 
     MessageManager* mm = nullptr;
@@ -81,43 +247,69 @@ TEST_F (SpectrumAnalyzerComponentTests, ConstructorWithDifferentFFTSize)
 // FFT Size Tests
 //==============================================================================
 
-TEST_F (SpectrumAnalyzerComponentTests, SetFFTSizeUpdatesSize)
+TEST_F (SpectrumAnalyzerComponentTests, FFTSizeIsTheOneOfTheState)
 {
-    analyzer->setFFTSize (4096);
+    state->setFftSize (4096);
     EXPECT_EQ (4096, analyzer->getFFTSize());
-}
 
-TEST_F (SpectrumAnalyzerComponentTests, SetFFTSizeWith512)
-{
-    analyzer->setFFTSize (512);
+    state->setFftSize (512);
     EXPECT_EQ (512, analyzer->getFFTSize());
-}
 
-TEST_F (SpectrumAnalyzerComponentTests, SetFFTSizeWith8192)
-{
-    analyzer->setFFTSize (8192);
+    state->setFftSize (8192);
     EXPECT_EQ (8192, analyzer->getFFTSize());
 }
 
-TEST_F (SpectrumAnalyzerComponentTests, DISABLED_SetFFTSizeWithNonPowerOfTwo)
+TEST_F (SpectrumAnalyzerComponentTests, FollowsASmallerFFTSizeSetOnTheState)
 {
-    // Should handle gracefully or clamp to nearest power of 2
-    analyzer->setFFTSize (1000);
-    EXPECT_TRUE (true);
+    analyzer->setVisible (true);
+    analyzer->setWindowType (WindowType::rectangular);
+
+    // The analyzer took a size of 2048 from the state in setState()
+    state->setFftSize (512);
+    pushFullScaleSine (*state, 512);
+    analyzer->refreshDisplay (1.0 / 60.0);
+
+    EXPECT_EQ (512, analyzer->getFFTSize());
+    EXPECT_LT (state->getNumAvailableSamples(), 512);
+    EXPECT_NEAR (1.0f, getHighestLevel (*analyzer), 0.01f);
 }
 
-TEST_F (SpectrumAnalyzerComponentTests, DISABLED_SetFFTSizeWithZero)
+TEST_F (SpectrumAnalyzerComponentTests, FollowsALargerFFTSizeSetOnTheState)
 {
-    // Should handle gracefully
-    analyzer->setFFTSize (0);
-    EXPECT_TRUE (true);
+    analyzer->setVisible (true);
+    analyzer->setWindowType (WindowType::rectangular);
+
+    // A frame of the state is now larger than the buffers the analyzer sized in setState()
+    state->setFftSize (8192);
+    pushFullScaleSine (*state, 8192);
+    analyzer->refreshDisplay (1.0 / 60.0);
+
+    EXPECT_EQ (8192, analyzer->getFFTSize());
+    EXPECT_LT (state->getNumAvailableSamples(), 8192);
+    EXPECT_NEAR (1.0f, getHighestLevel (*analyzer), 0.01f);
 }
 
-TEST_F (SpectrumAnalyzerComponentTests, DISABLED_SetFFTSizeNegative)
+TEST_F (SpectrumAnalyzerComponentTests, NeverGoesBeyondTheMaximumFFTSizeOfItsState)
 {
-    // Should handle gracefully
-    analyzer->setFFTSize (-1024);
-    EXPECT_TRUE (true);
+    SpectrumAnalyzerState small (256, 512);
+
+    analyzer->setVisible (true);
+    analyzer->setWindowType (WindowType::rectangular);
+    analyzer->setState (&small);
+
+    EXPECT_EQ (256, analyzer->getFFTSize());
+
+    // The largest size the state takes is analyzed as any other, and the analyzer leaves the state at it
+    small.setFftSize (small.getMaxFftSize());
+    pushFullScaleSine (small, 512);
+    analyzer->refreshDisplay (1.0 / 60.0);
+
+    EXPECT_EQ (512, analyzer->getFFTSize());
+    EXPECT_EQ (512, small.getFftSize());
+    EXPECT_LT (small.getNumAvailableSamples(), 512);
+    EXPECT_NEAR (1.0f, getHighestLevel (*analyzer), 0.01f);
+
+    analyzer->setState (state.get());
 }
 
 //==============================================================================
@@ -417,6 +609,69 @@ TEST_F (SpectrumAnalyzerComponentTests, DISABLED_SetSampleRateNegative)
 // Display Type Tests
 //==============================================================================
 
+TEST_F (SpectrumAnalyzerComponentTests, TellsItsLevelsAsASeriesWithARevision)
+{
+    // One level for each display point, at rest until a spectrum is analyzed
+    const auto levels = analyzer->getLevels();
+    ASSERT_EQ (levels.size(), static_cast<size_t> (SpectrumAnalyzerComponent::scopeSize));
+    EXPECT_TRUE (std::all_of (levels.begin(), levels.end(), [] (float level) { return level == 0.0f; }));
+
+    const auto* property = analyzer->getTypeInfo().findProperty (Identifier ("levels"));
+    ASSERT_NE (property, nullptr);
+    EXPECT_TRUE (property->isSeries());
+    EXPECT_TRUE (property->isReadOnly());
+    EXPECT_EQ (property->elementType, ComponentProperty::Type::number);
+
+    // A drawing reads the levels where the analyzer keeps them
+    const auto view = property->arrayGetter (*analyzer);
+    EXPECT_EQ (view.data, levels.data());
+    EXPECT_EQ (view.size, static_cast<int> (SpectrumAnalyzerComponent::scopeSize));
+    EXPECT_EQ (view.revision, analyzer->getLevelsRevision());
+    EXPECT_NE (view.revision, 0u);
+
+    // The revision tells when they change: another state starts from silence
+    const auto revision = analyzer->getLevelsRevision();
+    SpectrumAnalyzerState other (2048);
+
+    analyzer->setState (&other);
+    EXPECT_NE (analyzer->getLevelsRevision(), revision);
+    EXPECT_EQ (analyzer->getLevels().data(), levels.data());
+
+    analyzer->setState (state.get());
+}
+
+TEST_F (SpectrumAnalyzerComponentTests, AStyleSetOnTheAnalyzerPaintsItInPlaceOfItsOwnPaint)
+{
+    struct CountingStyle final : ComponentStyle
+    {
+        void paint (Graphics&, const ApplicationTheme&, const Component&) override { ++numPaints; }
+
+        int numPaints = 0;
+    };
+
+    const auto oldTheme = ApplicationTheme::getGlobalTheme();
+    ApplicationTheme::setGlobalTheme (new ApplicationTheme());
+
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    auto renderer = context->makeRenderer (800, 400);
+
+    {
+        Graphics g (*context, *renderer);
+
+        ReferenceCountedObjectPtr<CountingStyle> style (new CountingStyle());
+        analyzer->setStyle (style);
+        analyzer->paint (g);
+        EXPECT_EQ (style->numPaints, 1);
+
+        // Without one the analyzer paints itself
+        analyzer->setStyle (nullptr);
+        analyzer->paint (g);
+        EXPECT_EQ (style->numPaints, 1);
+    }
+
+    ApplicationTheme::setGlobalTheme (oldTheme.get());
+}
+
 TEST_F (SpectrumAnalyzerComponentTests, DefaultDisplayTypeIsFilled)
 {
     EXPECT_EQ (SpectrumAnalyzerComponent::DisplayType::filled, analyzer->getDisplayType());
@@ -469,42 +724,6 @@ TEST_F (SpectrumAnalyzerComponentTests, SetReleaseTimeNegative)
 {
     // Should handle gracefully
     analyzer->setReleaseTimeSeconds (-1.0f);
-    EXPECT_TRUE (true);
-}
-
-//==============================================================================
-// Overlap Factor Tests
-//==============================================================================
-
-TEST_F (SpectrumAnalyzerComponentTests, SetOverlapFactorHalf)
-{
-    analyzer->setOverlapFactor (0.5f);
-    EXPECT_FLOAT_EQ (0.5f, analyzer->getOverlapFactor());
-}
-
-TEST_F (SpectrumAnalyzerComponentTests, SetOverlapFactorThreeQuarters)
-{
-    analyzer->setOverlapFactor (0.75f);
-    EXPECT_FLOAT_EQ (0.75f, analyzer->getOverlapFactor());
-}
-
-TEST_F (SpectrumAnalyzerComponentTests, SetOverlapFactorZero)
-{
-    analyzer->setOverlapFactor (0.0f);
-    EXPECT_FLOAT_EQ (0.0f, analyzer->getOverlapFactor());
-}
-
-TEST_F (SpectrumAnalyzerComponentTests, DISABLED_SetOverlapFactorNegative)
-{
-    // Should clamp to valid range
-    analyzer->setOverlapFactor (-0.5f);
-    EXPECT_TRUE (true);
-}
-
-TEST_F (SpectrumAnalyzerComponentTests, DISABLED_SetOverlapFactorAboveOne)
-{
-    // Should clamp to valid range
-    analyzer->setOverlapFactor (1.5f);
     EXPECT_TRUE (true);
 }
 
@@ -581,18 +800,18 @@ TEST_F (SpectrumAnalyzerComponentTests, FrequencyBinConversionRoundTrip)
 }
 
 //==============================================================================
-// Timer Callback Tests
+// Refresh Tests
 //==============================================================================
 
-TEST_F (SpectrumAnalyzerComponentTests, TimerCallbackDoesNotCrash)
+TEST_F (SpectrumAnalyzerComponentTests, RefreshDisplayDoesNotCrash)
 {
-    analyzer->timerCallback();
+    analyzer->refreshDisplay (1.0 / 60.0);
 
     // Should not crash
     EXPECT_TRUE (true);
 }
 
-TEST_F (SpectrumAnalyzerComponentTests, TimerCallbackWithAudioData)
+TEST_F (SpectrumAnalyzerComponentTests, RefreshDisplayWithAudioData)
 {
     // Push some test data
     std::vector<float> testData (2048);
@@ -601,19 +820,193 @@ TEST_F (SpectrumAnalyzerComponentTests, TimerCallbackWithAudioData)
 
     state->pushSamples (testData.data(), 2048);
 
-    analyzer->timerCallback();
+    analyzer->refreshDisplay (1.0 / 60.0);
 
     // Should process FFT without crashing
     EXPECT_TRUE (true);
 }
 
-TEST_F (SpectrumAnalyzerComponentTests, MultipleTimerCallbacks)
+TEST_F (SpectrumAnalyzerComponentTests, MultipleRefreshDisplays)
 {
     for (int i = 0; i < 10; ++i)
-        analyzer->timerCallback();
+        analyzer->refreshDisplay (1.0 / 60.0);
 
     // Should handle multiple calls
     EXPECT_TRUE (true);
+}
+
+TEST_F (SpectrumAnalyzerComponentTests, AFixedUpdateRateTakesTheFramesItNeeds)
+{
+    analyzer->setVisible (true);
+    analyzer->setUpdateRate (30);
+
+    pushFullScaleSine (*state, 2048);
+
+    // The frames come every 20 ms and an update is due every 33: the first frame is left out
+    analyzer->refreshDisplay (0.02);
+    EXPECT_FLOAT_EQ (0.0f, getHighestLevel (*analyzer));
+
+    analyzer->refreshDisplay (0.02);
+    EXPECT_GT (getHighestLevel (*analyzer), 0.5f);
+}
+
+//==============================================================================
+// Idle Tests
+//==============================================================================
+
+TEST_F (SpectrumAnalyzerComponentTests, AFrameWithNothingNewAsksForNoRepaintAndLeavesTheRevisionAlone)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.addAndMakeVisible (*analyzer);
+
+    const auto initialRevision = analyzer->getLevelsRevision();
+    const int initialRepaints = native.numRepaints;
+
+    pushFullScaleSine (*state, 2048);
+    native.callFrameListeners (1.0 / 60.0);
+
+    // The spectrum of the sine came up
+    const auto revision = analyzer->getLevelsRevision();
+    const int numRepaints = native.numRepaints;
+
+    EXPECT_NE (initialRevision, revision);
+    EXPECT_GT (numRepaints, initialRepaints);
+    EXPECT_GT (getHighestLevel (*analyzer), 0.5f);
+
+    // The next frame comes before the next spectrum, with the levels where the last one put them
+    native.callFrameListeners (1.0 / 60.0);
+
+    EXPECT_EQ (revision, analyzer->getLevelsRevision());
+    EXPECT_EQ (numRepaints, native.numRepaints);
+
+    // The audio may well be going on: the analyzer keeps looking at every frame
+    EXPECT_TRUE (native.hasFrameListeners());
+}
+
+TEST_F (SpectrumAnalyzerComponentTests, ComesToRestWhenTheAudioStopsAndWakesWhenItComesBack)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.addAndMakeVisible (*analyzer);
+
+    analyzer->setReleaseTimeSeconds (0.1f);
+
+    pushFullScaleSine (*state, 2048);
+    native.callFrameListeners (1.0 / 60.0);
+
+    EXPECT_GT (getHighestLevel (*analyzer), 0.5f);
+
+    // No more samples: the spectrum falls, and the analyzer takes the frames it needs to show it falling
+    native.callFrameListeners (0.25);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    for (int frame = 0; frame < 100 && native.hasFrameListeners(); ++frame)
+        native.callFrameListeners (0.25);
+
+    EXPECT_FALSE (native.hasFrameListeners());
+    EXPECT_FLOAT_EQ (0.0f, getHighestLevel (*analyzer));
+
+    // At rest the analyzer looks at its state ten times a second, which is the call made here: with no
+    // samples it asks nothing of its window
+    const auto revision = analyzer->getLevelsRevision();
+    const int numRepaints = native.numRepaints;
+
+    analyzer->refreshDisplay (0.1);
+
+    EXPECT_FALSE (native.hasFrameListeners());
+    EXPECT_EQ (revision, analyzer->getLevelsRevision());
+    EXPECT_EQ (numRepaints, native.numRepaints);
+
+    // The audio is back
+    pushFullScaleSine (*state, 2048);
+    analyzer->refreshDisplay (0.1);
+
+    EXPECT_TRUE (native.hasFrameListeners());
+    EXPECT_NE (revision, analyzer->getLevelsRevision());
+    EXPECT_GT (native.numRepaints, numRepaints);
+    EXPECT_GT (getHighestLevel (*analyzer), 0.5f);
+}
+
+TEST_F (SpectrumAnalyzerComponentTests, AnAnalyzerAtRestLooksForSamplesByItself)
+{
+#if YUP_MODAL_LOOPS_PERMITTED
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.addAndMakeVisible (*analyzer);
+
+    // Nothing was ever pushed: the first frame finds nothing to do
+    native.callFrameListeners (1.0 / 60.0);
+    ASSERT_FALSE (native.hasFrameListeners());
+
+    pushFullScaleSine (*state, 2048);
+
+    // Nothing tells the analyzer that samples came, the audio thread least of all
+    const auto startMs = Time::getMillisecondCounterHiRes();
+
+    while (! native.hasFrameListeners() && Time::getMillisecondCounterHiRes() - startMs < 2000.0)
+        runDispatchLoopUntil (10);
+
+    EXPECT_TRUE (native.hasFrameListeners());
+    EXPECT_GT (getHighestLevel (*analyzer), 0.5f);
+#else
+    GTEST_SKIP() << "the analyzer looks at its state from a timer, which needs a message loop the test can run";
+#endif
+}
+
+TEST_F (SpectrumAnalyzerComponentTests, AHiddenAnalyzerOrOneWithoutAStateHasNoFrameListener)
+{
+    Component window ("window");
+    auto& native = makeWindow (window);
+
+    // A component is hidden until it is made visible
+    window.addChildComponent (*analyzer);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    analyzer->setVisible (true);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    // Hidden by its parent
+    window.setVisible (false);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    window.setVisible (true);
+    EXPECT_TRUE (native.hasFrameListeners());
+
+    analyzer->setState (nullptr);
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    analyzer->setState (state.get());
+    EXPECT_TRUE (native.hasFrameListeners());
+}
+
+TEST_F (SpectrumAnalyzerComponentTests, AnAnalyzerThatWasNotToldItShowsWakesWhenPainted)
+{
+    // A subclass can keep the notifications of the analyzer for itself: being painted still tells it that it shows
+    struct QuietAnalyzer final : SpectrumAnalyzerComponent
+    {
+        void visibilityChanged() override {}
+
+        void parentHierarchyChanged() override {}
+    };
+
+    QuietAnalyzer quiet;
+    quiet.setBounds (0.0f, 0.0f, 300.0f, 150.0f);
+    quiet.setState (state.get());
+
+    Component window ("window");
+    auto& native = makeWindow (window);
+    window.addAndMakeVisible (quiet);
+
+    EXPECT_FALSE (native.hasFrameListeners());
+
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
+    auto renderer = context->makeRenderer (300, 150);
+    Graphics g (*context, *renderer);
+
+    quiet.paint (g);
+
+    EXPECT_TRUE (native.hasFrameListeners());
 }
 
 //==============================================================================
@@ -694,7 +1087,7 @@ TEST_F (SpectrumAnalyzerComponentTests, PaintWithAudioData)
         testData[i] = std::sin (2.0f * MathConstants<float>::pi * i / 100.0f);
 
     state->pushSamples (testData.data(), 2048);
-    analyzer->timerCallback();
+    analyzer->refreshDisplay (1.0 / 60.0);
 
     auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (800, 400);
@@ -753,7 +1146,7 @@ TEST_F (SpectrumAnalyzerComponentTests, ResizedWithVeryLargeSize)
 TEST_F (SpectrumAnalyzerComponentTests, CompleteWorkflow)
 {
     // Setup
-    analyzer->setFFTSize (4096);
+    state->setFftSize (4096);
     analyzer->setWindowType (WindowType::hamming);
     analyzer->setUpdateRate (30);
     analyzer->setFrequencyRange (20.0f, 20000.0f);
@@ -768,8 +1161,8 @@ TEST_F (SpectrumAnalyzerComponentTests, CompleteWorkflow)
 
     state->pushSamples (testData.data(), 4096);
 
-    // Process
-    analyzer->timerCallback();
+    // Process: at 30 updates a second the frame of an update is one that comes 1/30 s after the last
+    analyzer->refreshDisplay (1.0 / 30.0);
 
     // Render
     auto context = yup_constructHeadlessGraphicsContext ({}, {});
@@ -783,11 +1176,11 @@ TEST_F (SpectrumAnalyzerComponentTests, CompleteWorkflow)
 
 TEST_F (SpectrumAnalyzerComponentTests, MultipleConfigurationChanges)
 {
-    analyzer->setFFTSize (1024);
+    state->setFftSize (1024);
     analyzer->setWindowType (WindowType::blackman);
-    analyzer->setFFTSize (2048);
+    state->setFftSize (2048);
     analyzer->setWindowType (WindowType::hann);
-    analyzer->setFFTSize (4096);
+    state->setFftSize (4096);
 
     EXPECT_EQ (4096, analyzer->getFFTSize());
     EXPECT_EQ (WindowType::hann, analyzer->getWindowType());
@@ -805,7 +1198,7 @@ TEST_F (SpectrumAnalyzerComponentTests, DifferentWindowTypesWithSameData)
     {
         analyzer->setWindowType (type);
         state->pushSamples (testData.data(), 2048);
-        analyzer->timerCallback();
+        analyzer->refreshDisplay (1.0 / 60.0);
 
         EXPECT_EQ (type, analyzer->getWindowType());
     }
@@ -828,16 +1221,19 @@ TEST_F (SpectrumAnalyzerComponentTests, FrequencyRangeAffectsDisplay)
 // Edge Cases
 //==============================================================================
 
-TEST_F (SpectrumAnalyzerComponentTests, VeryShortFFTSize)
+TEST_F (SpectrumAnalyzerComponentTests, AnalyzesAtTheSmallestAndTheLargestFFTSize)
 {
-    analyzer->setFFTSize (64);
-    EXPECT_EQ (64, analyzer->getFFTSize());
-}
+    analyzer->setVisible (true);
 
-TEST_F (SpectrumAnalyzerComponentTests, VeryLongFFTSize)
-{
-    analyzer->setFFTSize (16384);
-    EXPECT_EQ (16384, analyzer->getFFTSize());
+    for (const int fftSize : { SpectrumAnalyzerState::minFftSize, SpectrumAnalyzerState::maxFftSize })
+    {
+        state->setFftSize (fftSize);
+        pushFullScaleSine (*state, fftSize);
+        analyzer->refreshDisplay (1.0 / 60.0);
+
+        EXPECT_EQ (fftSize, analyzer->getFFTSize());
+        EXPECT_LT (state->getNumAvailableSamples(), fftSize);
+    }
 }
 
 TEST_F (SpectrumAnalyzerComponentTests, ExtremeSampleRates)
@@ -862,7 +1258,7 @@ TEST_F (SpectrumAnalyzerComponentTests, SilentAudioInput)
     std::vector<float> silentData (2048, 0.0f);
     state->pushSamples (silentData.data(), 2048);
 
-    analyzer->timerCallback();
+    analyzer->refreshDisplay (1.0 / 60.0);
 
     // Should handle silent input without crashing
     EXPECT_TRUE (true);
@@ -873,7 +1269,7 @@ TEST_F (SpectrumAnalyzerComponentTests, MaximumAudioInput)
     std::vector<float> maxData (2048, 1.0f);
     state->pushSamples (maxData.data(), 2048);
 
-    analyzer->timerCallback();
+    analyzer->refreshDisplay (1.0 / 60.0);
 
     // Should handle maximum input without crashing
     EXPECT_TRUE (true);
@@ -911,7 +1307,7 @@ TEST_F (SpectrumAnalyzerComponentTests, PaintWithEveryLevelModeAndDisplayType)
         testData[static_cast<size_t> (i)] = std::sin (2.0f * MathConstants<float>::pi * static_cast<float> (i) / 100.0f);
 
     state->pushSamples (testData.data(), 2048);
-    analyzer->timerCallback();
+    analyzer->refreshDisplay (1.0 / 60.0);
 
     auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (800, 400);
@@ -936,7 +1332,7 @@ TEST_F (SpectrumAnalyzerComponentTests, PaintWithBandsNarrowerThanOneBin)
 {
     // 20 Hz > 25 Hz at 44.1 kHz makes every display band narrower than an FFT bin, so the rendered
     // levels come from the interpolation between the surrounding bins.
-    analyzer->setFFTSize (2048);
+    state->setFftSize (2048);
     analyzer->setSampleRate (44100.0);
     analyzer->setFrequencyRange (20.0f, 25.0f);
 
@@ -946,7 +1342,7 @@ TEST_F (SpectrumAnalyzerComponentTests, PaintWithBandsNarrowerThanOneBin)
         testData[static_cast<size_t> (i)] = std::sin (2.0f * MathConstants<float>::pi * static_cast<float> (i) / 400.0f);
 
     state->pushSamples (testData.data(), 2048);
-    analyzer->timerCallback();
+    analyzer->refreshDisplay (1.0 / 60.0);
 
     auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (400, 200);
@@ -965,9 +1361,12 @@ TEST_F (SpectrumAnalyzerComponentTests, PaintWithBandsNarrowerThanOneBin)
 TEST_F (SpectrumAnalyzerComponentTests, PaintAfterEveryMappingChangingConfiguration)
 {
     // The bin mapping is rebuilt from the FFT size, the sample rate and the frequency range, so
-    // every combination has to keep rendering.
+    // every combination has to keep rendering. The FFT size is taken from the state at each update,
+    // which only a showing analyzer runs.
     const double sampleRates[] = { 44100.0, 48000.0, 96000.0 };
     const int fftSizes[] = { 512, 2048, 8192 };
+
+    analyzer->setVisible (true);
 
     auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (300, 150);
@@ -978,16 +1377,163 @@ TEST_F (SpectrumAnalyzerComponentTests, PaintAfterEveryMappingChangingConfigurat
         for (auto fftSize : fftSizes)
         {
             analyzer->setSampleRate (sampleRate);
-            analyzer->setFFTSize (fftSize);
+            state->setFftSize (fftSize);
             analyzer->setFrequencyRange (30.0f, static_cast<float> (sampleRate) / 3.0f);
 
             std::vector<float> testData (static_cast<size_t> (fftSize), 0.5f);
 
             state->pushSamples (testData.data(), fftSize);
-            analyzer->timerCallback();
+            analyzer->refreshDisplay (1.0 / 60.0);
             analyzer->paint (g);
 
             EXPECT_EQ (fftSize, analyzer->getFFTSize());
         }
     }
+}
+
+//==============================================================================
+// State Tests
+//==============================================================================
+
+TEST_F (SpectrumAnalyzerComponentTests, AnAnalyzerWithoutAStateIsConfiguredAndPainted)
+{
+    SpectrumAnalyzerComponent stateless;
+    stateless.setBounds (0.0f, 0.0f, 300.0f, 150.0f);
+
+    EXPECT_EQ (nullptr, stateless.getState());
+    EXPECT_EQ (4096, stateless.getFFTSize());
+
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
+    auto renderer = context->makeRenderer (300, 150);
+    Graphics g (*context, *renderer);
+
+    stateless.refreshDisplay (1.0 / 60.0);
+    stateless.paint (g);
+}
+
+TEST_F (SpectrumAnalyzerComponentTests, SetStateTakesTheFFTSizeOfTheNewState)
+{
+    SpectrumAnalyzerState other (1024);
+
+    analyzer->setVisible (true);
+    analyzer->setState (&other);
+
+    EXPECT_EQ (&other, analyzer->getState());
+    EXPECT_EQ (1024, analyzer->getFFTSize());
+
+    // The size is the one of the state the analyzer has, which is where it is set
+    other.setFftSize (512);
+    analyzer->refreshDisplay (1.0 / 60.0);
+
+    EXPECT_EQ (512, analyzer->getFFTSize());
+    EXPECT_EQ (2048, state->getFftSize());
+
+    // Without a state the analyzer keeps the size it last analyzed at
+    analyzer->setState (nullptr);
+
+    EXPECT_EQ (nullptr, analyzer->getState());
+    EXPECT_EQ (512, analyzer->getFFTSize());
+}
+
+TEST_F (SpectrumAnalyzerComponentTests, AFullScaleSineReadsZeroDecibels)
+{
+    analyzer->setVisible (true);
+    analyzer->setWindowType (WindowType::rectangular);
+    analyzer->setDecibelRange (-100.0f, 20.0f);
+
+    pushFullScaleSine (*state, 2048);
+    analyzer->refreshDisplay (1.0 / 60.0);
+
+    // 0 dB sits at 100 of the 120 dB of the range, with room above it to tell a level that is too high:
+    // 6 dB, the difference between a one-sided and a two-sided spectrum, are 0.05
+    EXPECT_NEAR (100.0f / 120.0f, getHighestLevel (*analyzer), 0.02f);
+}
+
+TEST_F (SpectrumAnalyzerComponentTests, SamplesThatAreNotFiniteLeaveNoTraceInTheLevels)
+{
+    analyzer->setVisible (true);
+    analyzer->setLevelMode (SpectrumAnalyzerComponent::LevelMode::powerDecibels);
+
+    // A block that is not a number, then one whose magnitude overflows, as an unstable filter gives
+    for (const float value : { std::numeric_limits<float>::quiet_NaN(), 1.0e30f })
+    {
+        const std::vector<float> block (2048, value);
+
+        state->pushSamples (block.data(), 2048);
+        analyzer->refreshDisplay (1.0 / 60.0);
+    }
+
+    // The frames of the next update only hold the sine
+    pushFullScaleSine (*state, 4096);
+    analyzer->refreshDisplay (1.0 / 60.0);
+
+    const auto levels = analyzer->getLevels();
+
+    EXPECT_TRUE (std::all_of (levels.begin(), levels.end(), [] (float level) { return std::isfinite (level); }));
+    EXPECT_GT (getHighestLevel (*analyzer), 0.8f);
+}
+
+TEST_F (SpectrumAnalyzerComponentTests, DecibelRangeStaysWithinItsLimits)
+{
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
+    auto renderer = context->makeRenderer (800, 400);
+    Graphics g (*context, *renderer);
+
+    // The grid has a line every 10 dB: it has to stay a few lines to paint, whatever the range asked for
+    analyzer->setDecibelRange (-1.0e9f, 1.0e9f);
+    analyzer->paint (g);
+
+    EXPECT_FLOAT_EQ (SpectrumAnalysis::lowestDecibels, analyzer->getMinDecibels());
+    EXPECT_FLOAT_EQ (SpectrumAnalysis::highestDecibels, analyzer->getMaxDecibels());
+
+    // A document writes any number, one end at a time
+    analyzer->setProperty ("minDecibels", 1.0e30);
+    analyzer->paint (g);
+
+    EXPECT_FLOAT_EQ (SpectrumAnalysis::highestDecibels - 1.0f, analyzer->getMinDecibels());
+    EXPECT_FLOAT_EQ (SpectrumAnalysis::highestDecibels, analyzer->getMaxDecibels());
+
+    analyzer->setProperty ("maxDecibels", -1.0e30);
+    analyzer->paint (g);
+
+    EXPECT_FLOAT_EQ (SpectrumAnalysis::lowestDecibels, analyzer->getMinDecibels());
+    EXPECT_FLOAT_EQ (SpectrumAnalysis::lowestDecibels + 1.0f, analyzer->getMaxDecibels());
+}
+
+TEST_F (SpectrumAnalyzerComponentTests, TheTypeInfoSetsTheRangesInAnyOrder)
+{
+    const auto& type = SpectrumAnalyzerComponent::getClassTypeInfo();
+    EXPECT_EQ (type.getTypeName().toString(), "SpectrumAnalyzer");
+    EXPECT_EQ (&analyzer->getTypeInfo(), &type);
+
+    const auto created = type.createInstance();
+    auto* instance = dynamic_cast<SpectrumAnalyzerComponent*> (created.get());
+    ASSERT_NE (nullptr, instance);
+    EXPECT_EQ (nullptr, instance->getState());
+    EXPECT_EQ (instance->getProperty ("displayType").toString(), "filled");
+    EXPECT_EQ (instance->getProperty ("windowType").toString(), "hann");
+
+    // An end written past the other one moves it out of its way, one written before it leaves it alone
+    instance->setProperty ("minFrequency", 30000.0);
+    instance->setProperty ("maxFrequency", 40000.0);
+    EXPECT_FLOAT_EQ (30000.0f, instance->getMinFrequency());
+    EXPECT_FLOAT_EQ (40000.0f, instance->getMaxFrequency());
+
+    instance->setProperty ("maxDecibels", -120.0);
+    instance->setProperty ("minDecibels", -140.0);
+    EXPECT_FLOAT_EQ (-140.0f, instance->getMinDecibels());
+    EXPECT_FLOAT_EQ (-120.0f, instance->getMaxDecibels());
+
+    // A value a range can't take is ignored
+    instance->setProperty ("minFrequency", -5.0);
+    instance->setProperty ("sampleRate", 0.0);
+    EXPECT_FLOAT_EQ (30000.0f, instance->getMinFrequency());
+    EXPECT_DOUBLE_EQ (44100.0, instance->getSampleRate());
+
+    instance->setProperty ("windowType", "blackmanHarris");
+    instance->setProperty ("levelMode", "rmsDecibels");
+    instance->setProperty ("displayType", "lines");
+    EXPECT_EQ (WindowType::blackmanHarris, instance->getWindowType());
+    EXPECT_EQ (SpectrumAnalyzerComponent::LevelMode::rmsDecibels, instance->getLevelMode());
+    EXPECT_EQ (SpectrumAnalyzerComponent::DisplayType::lines, instance->getDisplayType());
 }

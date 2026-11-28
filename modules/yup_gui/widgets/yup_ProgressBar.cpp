@@ -29,6 +29,7 @@ struct ProgressBarIds
 {
     static inline const Identifier progress { "progress" };
     static inline const Identifier indeterminate { "indeterminate" };
+    static inline const Identifier phase { "phase" };
 };
 
 } // namespace
@@ -47,6 +48,7 @@ const ComponentTypeInfo& ProgressBar::getClassTypeInfo()
                                  .number ("cornerRadius", Style::cornerRadiusId, {}, "The corner radius, unset for a pill.")
                                  .property (ProgressBarIds::progress, &ProgressBar::getProgress, [] (ProgressBar& p, double v) { p.setProgress (v); })
                                  .readOnly (ProgressBarIds::indeterminate, &ProgressBar::isIndeterminate)
+                                 .readOnly (ProgressBarIds::phase, &ProgressBar::getAnimationPhase, 0.0, "How far an indeterminate bar is in the cycle of its animation, from 0 to 1.")
                                  .build();
 
     return info;
@@ -62,7 +64,6 @@ ProgressBar::ProgressBar (StringRef componentID)
     : Component (componentID)
 {
     setOpaque (false);
-    lastAnimationTime = Time::getCurrentTime();
 }
 
 ProgressBar::~ProgressBar() = default;
@@ -89,12 +90,10 @@ void ProgressBar::setProgress (double newProgress, NotificationType notification
     {
         indeterminate.set (true);
         currentProgress.set (-1.0);
+        updateFrameAttachment();
 
         if (! wasIndeterminate)
-        {
             animationPhase = 0.0;
-            lastAnimationTime = Time::getCurrentTime();
-        }
 
         const BailOutChecker bailOutChecker (this);
 
@@ -120,6 +119,7 @@ void ProgressBar::setProgress (double newProgress, NotificationType notification
     newProgress = jlimit (0.0, 1.0, newProgress);
     indeterminate.set (false);
     currentProgress.set (newProgress);
+    updateFrameAttachment();
 
     const bool progressDidChange = ! approximatelyEqual (oldProgress, newProgress);
 
@@ -161,30 +161,28 @@ void ProgressBar::progressChanged()
 }
 
 //==============================================================================
-void ProgressBar::paint (Graphics& g)
-{
-    if (auto style = ApplicationTheme::findComponentStyle (*this))
-    {
-        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
-    }
-}
-
-void ProgressBar::refreshDisplay ([[maybe_unused]] double lastFrameTimeSeconds)
+void ProgressBar::refreshDisplay (double lastFrameTimeSeconds)
 {
     // Animate in indeterminate mode
     if (indeterminate.get())
     {
-        auto currentTime = Time::getCurrentTime();
-        auto deltaTime = (currentTime - lastAnimationTime).inSeconds();
-        lastAnimationTime = currentTime;
-
         // Update animation phase (full cycle every 2 seconds)
-        animationPhase += deltaTime * 0.5;
-        while (animationPhase >= 1.0)
-            animationPhase -= 1.0;
+        animationPhase = std::fmod (animationPhase + jmax (0.0, lastFrameTimeSeconds) * 0.5, 1.0);
 
         repaint();
     }
+
+    updateFrameAttachment();
+}
+
+void ProgressBar::visibilityChanged()
+{
+    updateFrameAttachment();
+}
+
+void ProgressBar::parentHierarchyChanged()
+{
+    updateFrameAttachment();
 }
 
 //==============================================================================
@@ -192,6 +190,11 @@ void ProgressBar::updateProgress (double newProgress, NotificationType notificat
 {
     repaint();
     sendProgressChanged (notification);
+}
+
+void ProgressBar::updateFrameAttachment()
+{
+    frameAttachment.setActive (indeterminate.get() && isShowing());
 }
 
 void ProgressBar::sendProgressChanged (NotificationType notification)

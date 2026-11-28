@@ -10,7 +10,8 @@ const fs = require ("node:fs");
 const path = require ("node:path");
 const { before, test } = require ("node:test");
 
-const createYuiTool = require (process.env.YUI_TOOL_WASM ?? path.join (__dirname, "../build_wasm/yup_yui_tool.js"));
+const script = require.resolve (process.env.YUI_TOOL_WASM ?? path.join (__dirname, "../build_wasm/yup_yui_tool.js"));
+const createYuiTool = require (script);
 const repository = path.join (__dirname, "../../../..");
 
 let tool;
@@ -25,17 +26,28 @@ function write (name, data) {
     tool.ccall ("yuiToolWriteFile", null, ["string"], [name]);
 }
 
+// The files the documents loaded since this was last asked name without having been given them
+function missingFiles () {
+    return JSON.parse (tool.ccall ("yuiToolMissingFiles", "string", [], []));
+}
+
 function run (...args) {
     output = [];
     errors = [];
 
     const code = tool.ccall ("yuiToolRun", "number", ["string"], [JSON.stringify (args)]);
-    return { code, stdout: output.join ("\n"), stderr: errors.join ("\n") };
+    return { code, stdout: output.join ("\n"), stderr: errors.join ("\n"), missing: missingFiles () };
 }
 
 function lint (...args) {
     const result = run ("lint", "--json", ...args);
     return { code: result.code, diagnostics: JSON.parse (result.stdout).diagnostics };
+}
+
+// Checks a file as an application loading it would find it, and tells the files it names that were not given
+function verify (file) {
+    const result = run ("verify", "--json", file);
+    return { code: result.code, diagnostics: JSON.parse (result.stdout).diagnostics, missing: result.missing };
 }
 
 function agent (name, args = {}) {
@@ -151,7 +163,10 @@ test ("what is not a command is refused with the usage", () => {
 test ("rendering to an image is left to the native tool", () => {
     write ("render/main.yui", "Column {}\n");
 
-    assert.equal (run ("render", "render/main.yui", "--output", "main.png").code, 3);
+    const result = run ("render", "render/main.yui", "--output", "main.png");
+
+    assert.equal (result.code, 3);
+    assert.match (result.stderr, /no graphics device to render with/);
 });
 
 test ("the tools of an agent are listed, with those only a page can run", () => {
@@ -261,9 +276,358 @@ test ("an agent is told why a tool can't answer", () => {
     write ("agent/plain.yui", "Column {}\n");
 
     assert.equal (agent ("yui_check", { file: "agent/missing.yui" }).isError, true);
+    assert.match (agent ("yui_check", { file: "../outside.yui" }).text, /'file' is a file inside '\/yui'/);
+    assert.match (agent ("yui_check", { file: "agent/plain.yui", models: "/outside.json" }).text, /'models' is a file inside '\/yui'/);
     assert.equal (agent ("yui_bogus").isError, true);
     assert.match (agent ("yui_render", { file: "agent/plain.yui" }).text, /no graphics device/);
     assert.match (agent ("yui_render", { file: "agent/plain.yui", output: "agent/plain.png" }).text, /nowhere to write/);
     assert.equal (agent ("yui_render", { file: "agent/plain.yui", reference: "agent/missing.png" }).isError, true);
     assert.match (agent ("yui_capture_preview").text, /no live preview/);
+});
+
+//==============================================================================
+// Shaders and 3D scenes
+
+// A scene with a camera, a light and a mesh written as numbers, as the snippet of the VS Code extension writes it
+const scene = `Scene3D {
+    background: #101014; flexGrow: 1;
+
+    Camera3D { position: [0, 0.5, 4]; lookAt: [0, 0, 0]; }
+    Light3D { type: directional; rotation: [-45deg, 30deg, 0]; intensity: 3; }
+
+    Mesh3D {
+        vertices: [-1, -1, 0,  1, -1, 0,  1, 1, 0,  -1, 1, 0];
+        indices: [0, 1, 2,  0, 2, 3];
+
+        Material3D { baseColor: #ff8800; metallic: 0; roughness: 0.6; }
+    }
+}
+`;
+
+// An image shader tinting the picture it reads, and one whose third line does not compile
+const tintFragment = `#version 450
+layout(set = 0, binding = 0) uniform Parameters
+{
+    vec4 tint;
+    float intensity;
+} params;
+layout(set = 0, binding = 1) uniform texture2D source;
+layout(set = 0, binding = 2) uniform sampler sourceSampler;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main()
+{
+    vec4 pixel = texture (sampler2D (source, sourceSampler), uv);
+    color = mix (pixel, pixel * params.tint, params.intensity);
+}
+`;
+
+const brokenFragment = "#version 450\nlayout(location = 0) out vec4 color;\nvoid main() { color = vec4 (missingValue); }\n";
+
+// A shader two components are drawn through
+const effect = `shader Tint {
+    fragment: "fx/tint.frag";
+    property tint: color = #ff0000;
+    property intensity: number = 0.5;
+}
+
+style {
+    .tinted { effect: Tint; intensity: 0.8; }
+}
+
+Component {
+    Component { class: tinted; }
+    Component { class: tinted; }
+}
+`;
+
+// A material lit at its rim, and one whose third line does not compile
+const rimMaterial = `YUP_MATERIAL_PARAMS
+{
+    vec4 rim;
+    float strength;
+} params;
+
+vec4 yupMaterial (YupSurface surface)
+{
+    float fresnel = pow (1.0 - max (dot (surface.normal, surface.view), 0.0), 3.0);
+    return vec4 (params.rim.rgb * fresnel, fresnel * params.strength);
+}
+`;
+
+const brokenMaterial = "vec4 yupMaterial (YupSurface surface)\n{\n    return vec4 (missingValue);\n}\n";
+
+const material = `shader Rim {
+    material: "fx/rim.glsl";
+    property rim: color = #00ffff;
+    property strength: number = 1;
+}
+
+Component { }
+`;
+
+// A model of one triangle that holds its vertices itself
+const model = JSON.stringify ({
+    asset: { version: "2.0" },
+    scene: 0,
+    scenes: [{ name: "Main", nodes: [0] }],
+    nodes: [{ name: "Knob", mesh: 0 }],
+    meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }],
+    buffers: [{ uri: "data:application/octet-stream;base64," + Buffer.from (new Float32Array ([0, 0, 0, 1, 0, 0, 0, 1, 0]).buffer).toString ("base64"), byteLength: 36 }],
+    bufferViews: [{ buffer: 0, byteLength: 36 }],
+    accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: "VEC3" }]
+});
+
+// Whether the module compiles the shaders written in GLSL. One built with YUP_YUI_TOOL_WEB_SHADER_COMPILER=OFF only
+// loads the bundles a build compiled them into, and says so of a source
+let compiles;
+
+function compilesShaders () {
+    if (compiles === undefined) {
+        write ("compiler/main.yui", effect);
+        write ("compiler/fx/tint.frag", tintFragment);
+
+        compiles = ! verify ("compiler/main.yui").diagnostics.some (diagnostic => diagnostic.message.includes ("only compiled when the shader transpiler is built in"));
+    }
+
+    return compiles;
+}
+
+test ("a scene written as elements loads, and the schema describes the 3D types", () => {
+    write ("scene/main.yui", scene);
+
+    assert.deepEqual (lint ("scene/main.yui"), { code: 0, diagnostics: [] });
+
+    const types = JSON.parse (run ("schema").stdout).types;
+
+    for (const name of ["Scene3D", "Node3D", "Camera3D", "Light3D", "Mesh3D", "Model3D", "Material3D"])
+        assert.ok (types.some (type => type.name === name && type.instantiable), name);
+
+    // A drawing is shown alone as a widget, not as a part of a scene
+    const hosts = JSON.parse (run ("outline", "scene/main.yui").stdout).hosts;
+
+    assert.ok (hosts.includes ("Slider"));
+    assert.deepEqual (hosts.filter (host => host.endsWith ("3D")), []);
+});
+
+test ("the audio components load with no state, and the schema describes their types", () => {
+    write ("audio/main.yui", "Column {\n    SpectrumAnalyzer { displayType: lines; }\n    Spectrogram { colorMap: viridis; }\n    CartesianPlane { title: \"Response\"; }\n    AudioView { }\n\n    Row {\n        KMeter { channel: 0; }\n        ModWheel { }\n        PitchWheel { }\n        MidiKeyboard { lowestVisibleKey: 36; highestVisibleKey: 84; }\n    }\n}\n");
+
+    const checked = verify ("audio/main.yui");
+
+    assert.deepEqual ({ code: checked.code, diagnostics: checked.diagnostics }, { code: 0, diagnostics: [] });
+
+    const types = JSON.parse (run ("schema").stdout).types;
+
+    for (const name of ["MidiKeyboard", "PitchWheel", "ModWheel", "SpectrumAnalyzer", "Spectrogram", "KMeter", "AudioView", "CartesianPlane"])
+        assert.ok (types.some (type => type.name === name && type.instantiable), name);
+});
+
+test ("a mesh whose arrays do not fit is reported at the line of the one that does not", () => {
+    write ("mesh/main.yui", scene.replace ("indices: [0, 1, 2,  0, 2, 3];", "indices: [0, 1, 7];"));
+
+    const { code, diagnostics } = lint ("mesh/main.yui");
+
+    assert.equal (code, 1);
+    assert.equal (diagnostics.length, 1, JSON.stringify (diagnostics));
+    assert.deepEqual ([diagnostics[0].file, diagnostics[0].line, diagnostics[0].severity], ["/yui/mesh/main.yui", 9, "error"]);
+    assert.match (diagnostics[0].message, /^Mesh3D[.]indices: /);
+});
+
+test ("a shader written in GLSL is compiled, and what its compiler says is reported where it names its file", t => {
+    if (! compilesShaders ())
+        return t.skip ("the module was built without the compiler of shaders");
+
+    write ("effect/main.yui", effect);
+    write ("effect/fx/tint.frag", tintFragment);
+
+    // The bundle a build compiles the shader into is read first, as an application reads it: the host is asked for it
+    assert.deepEqual (verify ("effect/main.yui"), { code: 0, diagnostics: [], missing: ["effect/fx/tint.frag.ysl"] });
+
+    write ("effect/fx/tint.frag", brokenFragment);
+
+    // Once, however many components the shader is the effect of, and on one line
+    const { code, diagnostics } = verify ("effect/main.yui");
+
+    assert.equal (code, 1);
+    assert.equal (diagnostics.length, 1, JSON.stringify (diagnostics));
+    assert.deepEqual ([diagnostics[0].file, diagnostics[0].line, diagnostics[0].column, diagnostics[0].severity], ["/yui/effect/main.yui", 2, 5, "error"]);
+    assert.match (diagnostics[0].message, /^shader Tint: .*:3: .*missingValue/);
+});
+
+test ("a module built without the compiler of shaders tells the bundle the source of a shader needs", t => {
+    if (compilesShaders ())
+        return t.skip ("the module compiles the shaders written in GLSL");
+
+    const { code, diagnostics, missing } = verify ("compiler/main.yui");
+
+    assert.equal (code, 1);
+    assert.deepEqual (diagnostics.map (diagnostic => [diagnostic.line, diagnostic.column]), [[2, 5]]);
+    assert.match (diagnostics[0].message, /^shader Tint: .*there is no 'fx\/tint[.]frag[.]ysl'$/);
+    assert.deepEqual (missing, ["compiler/fx/tint.frag.ysl"]);
+});
+
+test ("a material is compiled from its source, around the template of the renderer the module holds", t => {
+    if (! compilesShaders ())
+        return t.skip ("the module was built without the compiler of shaders");
+
+    write ("material/main.yui", material);
+    write ("material/fx/rim.glsl", rimMaterial);
+
+    // What a build compiles the material into, for each tier of the renderer, is read first
+    assert.deepEqual (verify ("material/main.yui"), { code: 0, diagnostics: [], missing: ["material/fx/rim.glsl.raster.ysl", "material/fx/rim.glsl.full.ysl"] });
+
+    write ("material/fx/rim.glsl", brokenMaterial);
+
+    // The compiler tells the lines of the material from its first one
+    const { code, diagnostics } = verify ("material/main.yui");
+
+    assert.equal (code, 1);
+    assert.equal (diagnostics.length, 1, JSON.stringify (diagnostics));
+    assert.deepEqual ([diagnostics[0].line, diagnostics[0].column], [2, 5]);
+    assert.match (diagnostics[0].message, /^shader Rim: /);
+    assert.match (diagnostics[0].message, /material:3/);
+    assert.match (diagnostics[0].message, /missingValue/);
+});
+
+test ("the module tells nothing of where it was built", () => {
+    // What a module embeds or was compiled from is named in its script or in the binary beside it
+    for (const file of [script, script.replace (/[.]js$/, ".wasm")]) {
+        const content = fs.readFileSync (file);
+
+        assert.equal (content.includes ("modules/yup_renderer/shaders/"), false, file);
+        assert.equal (content.includes (repository), false, file);
+    }
+});
+
+test ("a model the host did not give is reported and told as missing, and loads once it is given", () => {
+    write ("model/main.yui", "Scene3D {\n    Model3D { source: \"models/triangle.gltf\"; }\n}\n");
+
+    const lacking = verify ("model/main.yui");
+
+    assert.equal (lacking.code, 1);
+    assert.ok (lacking.diagnostics.length > 0);
+
+    for (const diagnostic of lacking.diagnostics) {
+        assert.equal (diagnostic.line, 2);
+        assert.match (diagnostic.message, /Model3D[.]source: .*'models\/triangle[.]gltf'/);
+    }
+
+    // The file is told by the folder of the document followed by the path the document names it by
+    assert.deepEqual (lacking.missing, ["model/models/triangle.gltf"]);
+
+    write ("model/models/triangle.gltf", model);
+
+    assert.deepEqual (verify ("model/main.yui"), { code: 0, diagnostics: [], missing: [] });
+});
+
+test ("the files a document names are told once to who asks, and not those it was given", () => {
+    write ("asked/main.yui", material.replace ("Component { }", "Scene3D {\n    Mesh3D {\n        Material3D { baseColorTexture: \"../shared/wood.png\"; normalTexture: \"textures/bumps.png\"; }\n    }\n}"));
+    write ("asked/textures/bumps.png", "not an image, but given");
+    write ("asked/fx/rim.glsl", rimMaterial);
+
+    // The shaders first, each after what a build compiles it into, then the files of the scenes
+    assert.deepEqual (run ("lint", "--json", "asked/main.yui").missing,
+                      ["asked/fx/rim.glsl.raster.ysl", "asked/fx/rim.glsl.full.ysl", "asked/../shared/wood.png"]);
+
+    assert.deepEqual (missingFiles (), []);
+});
+
+//==============================================================================
+// The VS Code extension, which lists by hand what the tool knows: in its grammar and in its snippets
+
+// A file of the extension, all of which are JSON
+function readExtension (name) {
+    return JSON.parse (fs.readFileSync (path.join (repository, "modules/yup_gui_markup/tools/vscode-yui", name), "utf8"));
+}
+
+// The words a rule of the grammar lists, between the first parentheses of what it matches
+function wordsOf (rule) {
+    return rule.match.match (/[(][?]:([^()]+)[)]/)[1].split ("|");
+}
+
+function schemaTopic (topic) {
+    return JSON.parse (agent ("yui_schema", { topic }).text);
+}
+
+// What a snippet writes while its stops are left as they are: each with its text, or the first of its choices
+function writtenBy (snippet) {
+    const texts = new Map ();
+    const written = snippet.body.join ("\n").replace (/[$][{]([0-9]+)(?::([^{}]*)|[|]([^,|]+)[^{}]*)[}]/g, (stop, number, text, choice) => {
+        texts.set (number, text ?? choice);
+        return text ?? choice;
+    });
+
+    return written.replace (/[$]([0-9]+)/g, (stop, number) => texts.get (number));
+}
+
+// Where a snippet that is no document by itself is written, and what uses what it declares: the tool tells the
+// problems of what it builds, which a component, a drawing or a rule nothing uses is not
+const snippetPlaces = {
+    component: written => `${written}\nName { }\n`,
+    property: written => `component Probe : Column {\n${written}\n}\n\nProbe { }\n`,
+    alias: written => `component Probe : Column {\n${written}\n    Slider { id: knob; }\n}\n\nProbe { }\n`,
+    signal: written => `component Probe : Column {\n${written}\n}\n\nProbe { }\n`,
+    drawing: written => `${written}\nComponent { drawing: Name; }\n`,
+    repeat: written => `drawing Probe {\n    let c: bounds.center;\n    let r: bounds.width * 0.4;\n${written}\n}\n\nComponent { drawing: Probe; }\n`,
+    style: written => `${written}\nSlider { class: knob; }\n`,
+    rule: written => `style {\n${written}\n}\n\nSlider { class: knob; }\n`,
+    transition: written => `style {\n    .knob {\n${written}\n    }\n}\n\nSlider { class: knob; }\n`,
+    keyframes: written => `style {\n${written}\n}\n`,
+    animation: written => `style {\n    @keyframes pulse { from { glow: 0; } to { glow: 1; } }\n\n    .knob {\n${written}\n    }\n}\n\nSlider { class: knob; }\n`,
+    model: written => `Scene3D {\n${written}\n}\n`,
+    bind: written => `Slider {\n${written}\n}\n`,
+    handler: written => `TextButton {\n${written}\n}\n`,
+    "handler-arguments": written => `component Probe : Column {\n    signal onChanged (value: number);\n\n    Slider {\n${written}\n    }\n}\n\nProbe { }\n`,
+    changed: written => `Slider {\n${written}\n}\n`
+};
+
+test ("the shapes the grammar of the extension lists are the elements of a drawing", () => {
+    const grammar = readExtension ("syntaxes/yui.tmLanguage.json").repository;
+    const elements = new Set (schemaTopic ("drawing").elements.map (element => element.type));
+    const shapes = wordsOf (grammar.shapes.patterns[0]);
+
+    // What declares, repeats or uses is a keyword of the language, which the grammar lists apart
+    const keywords = grammar.keywords.patterns.filter (rule => ["keyword.control.yui", "storage.type.yui"].includes (rule.name)).flatMap (wordsOf);
+
+    assert.deepEqual (shapes.filter (name => ! elements.has (name)), []);
+    assert.deepEqual ([...elements].filter (name => ! shapes.includes (name) && ! keywords.includes (name)), []);
+});
+
+test ("the functions the grammar of the extension lists cover those of an expression", () => {
+    const listed = wordsOf (readExtension ("syntaxes/yui.tmLanguage.json").repository.functions.patterns[0]);
+
+    // A function is told as `name (parameters) -> result`. What makes a value by a name after a dot, as
+    // transform.rotation, is listed by the name before it
+    const names = schemaTopic ("expressions").functions.map (signature => signature.split (" (")[0].split (".")[0]);
+
+    assert.deepEqual ([...new Set (names)].filter (name => ! listed.includes (name)), []);
+});
+
+test ("the snippets of the extension write what the tool finds no problem in", () => {
+    // What the snippets name: a document to import, a model with a node named Knob, a shader and a model property
+    write ("snippets/palette.yui", "");
+    write ("snippets/models/device.glb", model);
+    write ("snippets/fx/name.frag", tintFragment);
+    write ("snippets/models.json", JSON.stringify ({ params: { cutoff: 0.5 } }));
+
+    const told = {};
+
+    for (const snippet of Object.values (readExtension ("snippets/yui.code-snippets"))) {
+        // A module built without the compiler of shaders tells the bundle the source of one lacks
+        if (snippet.prefix === "shader" && ! compilesShaders ())
+            continue;
+
+        const file = `snippets/${snippet.prefix}.snippet.yui`;
+        const place = snippetPlaces[snippet.prefix] ?? (written => written);
+
+        write (file, place (writtenBy (snippet)));
+
+        const { code, diagnostics } = lint ("--models", "snippets/models.json", file);
+
+        if (code !== 0 || diagnostics.length > 0)
+            told[snippet.prefix] = diagnostics.map (diagnostic => `${diagnostic.line}:${diagnostic.column}: ${diagnostic.severity}: ${diagnostic.message}`);
+    }
+
+    assert.deepEqual (told, {});
 });

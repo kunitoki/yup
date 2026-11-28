@@ -126,6 +126,29 @@ def test_reports_changed_outputs():
 
 #==================================================================================================
 
+def test_tells_whether_its_outputs_are_up_to_date_without_evaluating():
+    context = yup.ExpressionContext()
+    context.addInput("x", "float")
+
+    state = yup.ExpressionState(yup.CompiledExpression.compile("a = x * 2", context))
+    state.set("x", 2.0)
+    assert not state.isUpToDate()
+
+    state.evaluate()
+    assert state.isUpToDate()
+
+    # The value an input has changes nothing, another one does until the next evaluation
+    state.set("x", 2.0)
+    assert state.isUpToDate()
+
+    state.set("x", 3.0)
+    assert not state.isUpToDate()
+
+    state.evaluate()
+    assert state.isUpToDate()
+
+#==================================================================================================
+
 def test_multiple_outputs_and_sub_expressions():
     context = yup.ExpressionContext()
     context.addInput("x", "double")

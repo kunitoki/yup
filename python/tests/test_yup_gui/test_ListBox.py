@@ -180,8 +180,8 @@ def test_list_box_item_rendering_bounds_are_empty_without_a_size():
     # Only construction and the two getters run here, so nothing has laid the item out yet.
     item = yup.ListBoxItem()
 
-    assert item.getTextBoundsForRendering().isEmpty() is True
-    assert item.getIconBoundsForRendering().isEmpty() is True
+    assert item.getTextBounds().isEmpty() is True
+    assert item.getIconBounds().isEmpty() is True
 
 
 # ==============================================================================
@@ -384,9 +384,9 @@ def test_the_scroll_bars_are_components_of_the_list_box():
 def test_style_ids_are_exposed():
     assert str(yup.ListBox.Style.backgroundColorId) == "listBoxBackground"
     assert str(yup.ListBox.Style.outlineColorId) == "listBoxOutline"
-    assert str(yup.ListBox.Style.rowBackgroundColorId) == "rowBackground"
-    assert str(yup.ListBox.Style.selectedRowBackgroundColorId) == "selectedRowBackground"
-    assert str(yup.ListBox.Style.hoveredRowBackgroundColorId) == "hoveredRowBackground"
+    assert str(yup.ListBox.Style.rowBackgroundColorId) == "listBoxRowBackground"
+    assert str(yup.ListBox.Style.selectedRowBackgroundColorId) == "listBoxSelectedRowBackground"
+    assert str(yup.ListBox.Style.hoveredRowBackgroundColorId) == "listBoxHoveredRowBackground"
 
     assert str(yup.ListBoxItem.Style.textColorId) == "listBoxItemText"
     assert str(yup.ListBoxItem.Style.textColorSelectedId) == "listBoxItemTextSelected"

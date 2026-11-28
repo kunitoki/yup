@@ -53,7 +53,20 @@ protected:
 
     void TearDown() override
     {
+        if (themeReplaced)
+            ApplicationTheme::setGlobalTheme (oldTheme.get());
+
         folder.deleteRecursively();
+    }
+
+    /** Makes a theme the global one until the test ends: an image is painted by the theme. */
+    void useTheme (ApplicationTheme::Ptr theme)
+    {
+        if (! themeReplaced)
+            oldTheme = ApplicationTheme::getGlobalTheme();
+
+        themeReplaced = true;
+        ApplicationTheme::setGlobalTheme (std::move (theme));
     }
 
     static String svgText()
@@ -66,6 +79,70 @@ protected:
         return "data:image/png;base64," + Base64::toBase64 (pngData, sizeof (pngData));
     }
 
+    static MemoryBlock bytesOf (const String& text)
+    {
+        return MemoryBlock (text.toRawUTF8(), text.getNumBytesAsUTF8());
+    }
+
+    /** A document of one root: it serves the assets it is given, then the files of its folder when it has one, and
+        keeps what it is asked for and what it is told.
+    */
+    struct FakeDocument final : ComponentDocument
+    {
+        explicit FakeDocument (Component& rootToUse)
+            : root (rootToUse)
+        {
+            attachToRoot();
+        }
+
+        ~FakeDocument() override
+        {
+            detachFromRoot();
+        }
+
+        Component* getRoot() const override { return &root; }
+
+        const File& getBaseDirectory() const override { return baseDirectory; }
+
+        std::optional<MemoryBlock> readAsset (const String& path) const override
+        {
+            read.add (path);
+
+            if (const auto found = assets.find (path); found != assets.end())
+                return found->second;
+
+            if (baseDirectory != File())
+                return readAssetFile (resolveAssetFile (path, baseDirectory));
+
+            return std::nullopt;
+        }
+
+        File getAssetFile (const String& path) const override
+        {
+            return baseDirectory != File() ? resolveAssetFile (path, baseDirectory) : File();
+        }
+
+        std::shared_ptr<const DataTreeSourceMap> getSourceMap() const override { return nullptr; }
+
+        DrawingScope::ComponentResolver getComponentResolver() const override { return nullptr; }
+
+        void reportDiagnostic (DataTreeDiagnostic diagnostic, const Component* subject = nullptr) override
+        {
+            problems.add (diagnostic.message + " [" + diagnostic.property.toString() + "]");
+            subjects.push_back (subject);
+        }
+
+        using ComponentDocument::notifyDocumentAssetChanged;
+        using ComponentDocument::notifyDocumentLoaded;
+
+        Component& root;
+        File baseDirectory;
+        std::map<String, MemoryBlock> assets;
+        mutable StringArray read;
+        StringArray problems;
+        std::vector<const Component*> subjects;
+    };
+
     // A 4 x 2 opaque red RGBA image
     static constexpr uint8 pngData[] = {
         0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
@@ -77,6 +154,8 @@ protected:
 
     ImageComponent image;
     File folder;
+    ApplicationTheme::Ptr oldTheme;
+    bool themeReplaced = false;
 };
 
 TEST_F (ImageComponentTests, StartsEmptyAndTransparent)
@@ -165,10 +244,13 @@ TEST_F (ImageComponentTests, LoadsADataUriAsAnImage)
     EXPECT_EQ (image.getImage().getHeight(), 2);
 }
 
-TEST_F (ImageComponentTests, LoadsFilesRelativeToTheBaseDirectory)
+TEST_F (ImageComponentTests, LoadsFilesRelativeToTheFolderOfItsDocument)
 {
-    image.setBaseDirectory (folder);
-    EXPECT_EQ (image.getBaseDirectory(), folder);
+    Component root;
+    root.addChildComponent (image);
+
+    FakeDocument document (root);
+    document.baseDirectory = folder;
 
     image.setSource ("logo.svg");
     EXPECT_NE (image.getDrawable(), nullptr);
@@ -179,33 +261,124 @@ TEST_F (ImageComponentTests, LoadsFilesRelativeToTheBaseDirectory)
     ASSERT_TRUE (image.getImage().isValid());
     EXPECT_EQ (image.getImage().getWidth(), 4);
     EXPECT_EQ (image.getImage().getHeight(), 2);
+
+    EXPECT_TRUE (document.problems.isEmpty()) << document.problems.joinIntoString ("\n");
 }
 
-TEST_F (ImageComponentTests, LoadsAnAbsolutePathWithoutABaseDirectory)
+TEST_F (ImageComponentTests, LoadsAnAbsolutePathInNoDocument)
 {
     image.setSource (folder.getChildFile ("logo.svg").getFullPathName());
     EXPECT_NE (image.getDrawable(), nullptr);
 
     image.setSource (folder.getChildFile ("pixels.png").getFullPathName());
     EXPECT_TRUE (image.getImage().isValid());
+
+    // An SVG file is read as any text is: its byte order mark tells how it is encoded
+    const auto wide = folder.getChildFile ("wide.svg");
+    ASSERT_TRUE (wide.replaceWithText (svgText(), true, true));
+
+    image.setSource (wide.getFullPathName());
+    EXPECT_NE (image.getDrawable(), nullptr);
 }
 
-TEST_F (ImageComponentTests, LoadsARelativeSourceAgainWhenTheBaseDirectoryChanges)
+TEST_F (ImageComponentTests, ShowsTheAssetItsDocumentGivesItAndNotAFile)
 {
-    image.setSource ("pixels.png");
+    Component root;
+    root.addChildComponent (image);
+
+    FakeDocument document (root);
+    document.assets["memory/pixels.png"] = MemoryBlock (pngData, sizeof (pngData));
+    document.assets["memory/logo.svg"] = bytesOf (svgText());
+
+    image.setSource ("memory/pixels.png");
+    EXPECT_EQ (image.getDrawable(), nullptr);
+    ASSERT_TRUE (image.getImage().isValid());
+    EXPECT_EQ (image.getImage().getWidth(), 4);
+    EXPECT_EQ (image.getImage().getHeight(), 2);
+
+    image.setSource ("  memory/logo.svg ");
+    EXPECT_NE (image.getDrawable(), nullptr);
     EXPECT_FALSE (image.getImage().isValid());
 
-    image.setBaseDirectory (folder);
+    // Each is asked for once, by the path that was written without the spaces around it
+    EXPECT_EQ (document.read, StringArray ({ "memory/pixels.png", "memory/logo.svg" }));
+    EXPECT_TRUE (document.problems.isEmpty()) << document.problems.joinIntoString ("\n");
+}
+
+TEST_F (ImageComponentTests, TellsItsDocumentAboutASourceItCantLoadAndAgainAfterEachLoad)
+{
+    Component root;
+    root.addChildComponent (image);
+
+    FakeDocument document (root);
+    document.assets["memory/pixels.png"] = MemoryBlock (pngData, sizeof (pngData));
+    document.assets["memory/notes.png"] = bytesOf ("not a picture");
+
+    image.setSource ("memory/missing.png");
+    EXPECT_FALSE (image.getImage().isValid());
+    EXPECT_EQ (document.problems, StringArray ({ "Image.source: the file 'memory/missing.png' can't be read [source]" }));
+    ASSERT_EQ (document.subjects.size(), 1u);
+    EXPECT_EQ (document.subjects.front(), &image);
+
+    // A load forgets what it was told: the image tells it again
+    document.problems.clear();
+    document.notifyDocumentLoaded();
+    EXPECT_EQ (document.problems, StringArray ({ "Image.source: the file 'memory/missing.png' can't be read [source]" }));
+
+    // A file that is read and is no image is told too
+    document.problems.clear();
+    image.setSource ("memory/notes.png");
+    EXPECT_FALSE (image.getImage().isValid());
+    ASSERT_EQ (document.problems.size(), 1);
+    EXPECT_TRUE (document.problems[0].startsWith ("Image.source: ")) << document.problems[0];
+    EXPECT_TRUE (document.problems[0].endsWith (" [source]")) << document.problems[0];
+
+    // A source that loads leaves nothing to tell
+    document.problems.clear();
+    image.setSource ("memory/pixels.png");
+    document.notifyDocumentLoaded();
     EXPECT_TRUE (image.getImage().isValid());
+    EXPECT_TRUE (document.problems.isEmpty()) << document.problems.joinIntoString ("\n");
+}
 
-    image.setBaseDirectory (folder.getChildFile ("missing"));
+TEST_F (ImageComponentTests, ReadsItsSourceAgainWhenItsDocumentTellsThatTheAssetChanged)
+{
+    Component root;
+    root.addChildComponent (image);
+
+    auto document = std::make_unique<FakeDocument> (root);
+
+    image.setSource ("memory/pixels.png");
     EXPECT_FALSE (image.getImage().isValid());
+    EXPECT_EQ (document->problems.size(), 1);
+
+    // Another asset changing reads nothing again
+    document->assets["memory/pixels.png"] = MemoryBlock (pngData, sizeof (pngData));
+    document->notifyDocumentAssetChanged ("memory/other.png");
+    EXPECT_FALSE (image.getImage().isValid());
+    EXPECT_EQ (document->read.size(), 1);
+
+    document->notifyDocumentAssetChanged ("memory/pixels.png");
+    ASSERT_TRUE (image.getImage().isValid());
+    EXPECT_EQ (image.getImage().getWidth(), 4);
+    EXPECT_EQ (document->read.size(), 2);
+    EXPECT_EQ (document->problems.size(), 1);
+
+    // An asset that went is not shown anymore, and that is told
+    document->assets.clear();
+    document->notifyDocumentAssetChanged ("memory/pixels.png");
+    EXPECT_FALSE (image.getImage().isValid());
+    EXPECT_EQ (document->problems.size(), 2);
+
+    // The image outlives its document, and reads its files by itself from then on
+    document.reset();
+    image.setSource (folder.getChildFile ("pixels.png").getFullPathName());
+    EXPECT_TRUE (image.getImage().isValid());
 }
 
 TEST_F (ImageComponentTests, ShowsNothingForASourceThatCantBeLoaded)
 {
-    image.setBaseDirectory (folder);
-    image.setSource ("logo.svg");
+    image.setSource (folder.getChildFile ("logo.svg").getFullPathName());
     ASSERT_NE (image.getDrawable(), nullptr);
 
     image.setSource ("missing.png");
@@ -244,8 +417,47 @@ TEST_F (ImageComponentTests, ShowsEitherAnImageOrADrawable)
     EXPECT_TRUE (image.getImage().isValid());
 }
 
+TEST_F (ImageComponentTests, IsPaintedByTheStyleOfTheThemeOrByItsOwn)
+{
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    auto renderer = context->makeRenderer (64, 64);
+    Graphics g (*context, *renderer);
+
+    image.setBounds (0, 0, 64, 64);
+    image.setImage (Image (4, 2));
+
+    ApplicationTheme::Ptr theme = new ApplicationTheme();
+    useTheme (theme);
+
+    int numThemePaints = 0, numOwnPaints = 0;
+    const ImageComponent* painted = nullptr;
+
+    theme->setComponentStyle<ImageComponent> (ComponentStyle::createStyle<ImageComponent> ([&] (Graphics&, const ApplicationTheme& paintingTheme, const ImageComponent& c)
+    {
+        EXPECT_EQ (std::addressof (paintingTheme), theme.get());
+
+        ++numThemePaints;
+        painted = std::addressof (c);
+    }));
+
+    image.paint (g);
+    EXPECT_EQ (numThemePaints, 1);
+    EXPECT_EQ (painted, std::addressof (image));
+
+    image.setStyle (ComponentStyle::createStyle<ImageComponent> ([&numOwnPaints] (Graphics&, const ApplicationTheme&, const ImageComponent&)
+    {
+        ++numOwnPaints;
+    }));
+
+    image.paint (g);
+    EXPECT_EQ (numThemePaints, 1);
+    EXPECT_EQ (numOwnPaints, 1);
+}
+
 TEST_F (ImageComponentTests, PaintingLeavesTheGraphicsStateUntouched)
 {
+    useTheme (createThemeVersion1());
+
     auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics g (*context, *renderer);
@@ -283,4 +495,33 @@ TEST_F (ImageComponentTests, PaintingLeavesTheGraphicsStateUntouched)
     image.paint (g);
 
     EXPECT_FLOAT_EQ (g.getOpacity(), 1.0f);
+}
+
+TEST_F (ImageComponentTests, TheThemeTilesTheImageFromTheCornerOfItsBounds)
+{
+    const auto gpuContext = GraphicsContext::createContext (GpuPlatform::Metal, {});
+    if (gpuContext == nullptr || ! gpuContext->isGpuAvailable())
+        GTEST_SKIP() << "No Metal GPU context available";
+
+    useTheme (createThemeVersion1());
+
+    // Red on its left half, blue on its right one
+    Image tile (4, 4);
+    tile.fillColor (Color (0xff0000ff));
+
+    for (int y = 0; y < 4; ++y)
+        for (int x = 0; x < 2; ++x)
+            tile.setPixelColor (x, y, Color (0xffff0000));
+
+    image.setBounds (0, 0, 16, 16);
+    image.setFitting (Fitting::tile);
+    image.setImage (tile);
+
+    const auto painted = image.snapshotToImage (*gpuContext);
+    ASSERT_TRUE (painted.isValid());
+
+    EXPECT_EQ (painted.getPixelColor (1, 8), Color (0xffff0000));
+    EXPECT_EQ (painted.getPixelColor (2, 8), Color (0xff0000ff));
+    EXPECT_EQ (painted.getPixelColor (5, 8), Color (0xffff0000));
+    EXPECT_EQ (painted.getPixelColor (15, 15), Color (0xff0000ff));
 }
